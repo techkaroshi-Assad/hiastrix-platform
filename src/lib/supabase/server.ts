@@ -1,11 +1,25 @@
+/**
+ * Supabase Server-Side Client
+ *
+ * SECURITY: These clients are ONLY used in server components, API routes,
+ * and middleware. They are NEVER imported in client components.
+ *
+ * No NEXT_PUBLIC_ variables are used here — Supabase credentials are
+ * server-side only and are never bundled into client-side JavaScript.
+ * Tenants never see any Supabase URL, key, or branding anywhere.
+ */
+
 import { createServerClient } from "@supabase/ssr"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 
+/** Session-aware client — reads/writes auth cookies server-side */
 export async function createClient() {
   const cookieStore = await cookies()
+
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_URL!,       // NOT NEXT_PUBLIC_ — server only
+    process.env.SUPABASE_ANON_KEY!,  // NOT NEXT_PUBLIC_ — server only
     {
       cookies: {
         getAll() {
@@ -17,7 +31,7 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // Can be ignored in Server Components
+            // Safe to ignore in Server Components (read-only cookie store)
           }
         },
       },
@@ -25,11 +39,14 @@ export async function createClient() {
   )
 }
 
-/** Service role client — use only in server-side trusted contexts (webhooks, admin routes) */
+/**
+ * Service role client — bypasses RLS.
+ * Use ONLY in: webhook handlers, admin-initiated operations.
+ * NEVER expose this client or its responses to tenant-facing routes.
+ */
 export function createServiceClient() {
-  const { createClient } = require("@supabase/supabase-js")
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  return createSupabaseClient(
+    process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 }

@@ -1,12 +1,21 @@
+/**
+ * Auth Middleware
+ *
+ * SECURITY: Uses server-side Supabase only.
+ * No NEXT_PUBLIC_ Supabase variables — credentials never reach the browser.
+ * Tenants see only app.hiastrix.com URLs, never any vendor URLs.
+ */
+
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
+  // Server-side only — SUPABASE_URL and SUPABASE_ANON_KEY are NOT NEXT_PUBLIC_
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
@@ -28,25 +37,30 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const pathname = request.nextUrl.pathname
 
-  // ── Protect /admin routes ─────────────────────────────────────────────────
+  // ── Protect /admin routes ──────────────────────────────────────────────
   if (pathname.startsWith("/admin")) {
     if (!user) {
-      return NextResponse.redirect(new URL("/login?redirect=/admin", request.url))
+      return NextResponse.redirect(new URL("/login", request.url))
     }
-    // Role check handled in individual admin layouts/pages via server component
+    const role = user.user_metadata?.role as string | undefined
+    if (role !== "super_admin" && role !== "admin") {
+      // Tenant trying to access admin — redirect silently, no error shown
+      return NextResponse.redirect(new URL("/dashboard", request.url))
+    }
   }
 
-  // ── Protect /dashboard routes ─────────────────────────────────────────────
+  // ── Protect /dashboard routes ──────────────────────────────────────────
   if (pathname.startsWith("/dashboard")) {
     if (!user) {
       return NextResponse.redirect(new URL("/login", request.url))
     }
   }
 
-  // ── Redirect authenticated users away from auth pages ─────────────────────
+  // ── Redirect authenticated users away from login/signup ────────────────
   if ((pathname === "/login" || pathname === "/signup") && user) {
-    // Role-based redirect — resolved server-side in the page
-    return NextResponse.redirect(new URL("/dashboard", request.url))
+    const role = user.user_metadata?.role as string | undefined
+    const dest = (role === "super_admin" || role === "admin") ? "/admin" : "/dashboard"
+    return NextResponse.redirect(new URL(dest, request.url))
   }
 
   return supabaseResponse
@@ -54,6 +68,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Skip static files and unauthenticated routes (webhooks, auth callback)
+    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }
