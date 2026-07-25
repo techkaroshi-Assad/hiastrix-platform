@@ -1,0 +1,247 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── PACKAGES ────────────────────────────────────────────────────────────────
+
+model Package {
+  id                 String   @id @default(uuid())
+  name               String
+  minutesIncluded    Int
+  priceCents         Int      // USD cents
+  overageRateCents   Int      // per minute, USD cents (e.g. 35 = $0.35)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  tenants            Tenant[]
+
+  @@map("packages")
+}
+
+// ─── TENANTS ─────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id                 String       @id @default(uuid())
+  companyName        String
+  email              String       @unique
+  status             TenantStatus @default(PENDING)
+  stripeCustomerId   String?
+  packageId          String?
+  packageAssignedAt  DateTime?
+  minutesUsed        Int          @default(0)
+  creditBalanceCents Int          @default(0) // USD cents
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  package            Package?       @relation(fields: [packageId], references: [id])
+  users              TenantUser[]
+  agents             Agent[]
+  phoneNumbers       PhoneNumber[]
+  calls              Call[]
+  creditLedger       CreditLedger[]
+  payments           Payment[]
+
+  @@map("tenants")
+}
+
+enum TenantStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+// ─── TENANT USERS ─────────────────────────────────────────────────────────────
+
+model TenantUser {
+  id           String         @id @default(uuid())
+  tenantId     String
+  supabaseId   String         @unique  // auth.users id from Supabase Auth
+  email        String         @unique
+  name         String
+  type         TenantUserType
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_users")
+}
+
+enum TenantUserType {
+  OWNER
+  ACCOUNT_MANAGER
+}
+
+// ─── ADMIN USERS ─────────────────────────────────────────────────────────────
+
+model AdminUser {
+  id          String        @id @default(uuid())
+  supabaseId  String        @unique  // auth.users id from Supabase Auth
+  email       String        @unique
+  name        String
+  role        AdminRole
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+
+  @@map("admin_users")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+}
+
+// ─── AGENTS ──────────────────────────────────────────────────────────────────
+
+model Agent {
+  id                  String      @id @default(uuid())
+  tenantId            String
+  vapiAssistantId     String      @unique
+  name                String
+  status              AgentStatus @default(ACTIVE)
+  voice               String?
+  model               String?
+  systemPrompt        String?
+  firstMessage        String?
+  recordingEnabled    Boolean     @default(true)
+  transcriptionEnabled Boolean    @default(true)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  tenant              Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phoneNumbers        PhoneNumber[]
+  calls               Call[]
+
+  @@map("agents")
+}
+
+enum AgentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// ─── PHONE NUMBERS ────────────────────────────────────────────────────────────
+
+model PhoneNumber {
+  id                  String      @id @default(uuid())
+  tenantId            String?     // null = unallocated
+  agentId             String?     // null = unassigned to agent
+  vapiPhoneNumberId   String      @unique
+  phoneNumber         String
+  status              PhoneStatus @default(ACTIVE)
+  createdAt           DateTime    @default(now())
+
+  tenant              Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  agent               Agent?      @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  calls               Call[]
+
+  @@map("phone_numbers")
+}
+
+enum PhoneStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// ─── CALLS ───────────────────────────────────────────────────────────────────
+
+model Call {
+  id              String        @id @default(uuid())
+  tenantId        String
+  agentId         String?
+  phoneNumberId   String?
+  vapiCallId      String        @unique
+  direction       CallDirection
+  callerNumber    String?
+  durationSeconds Int           @default(0)
+  minutesBilled   Int           @default(0) // ceiling of duration
+  costCents       Int           @default(0) // USD cents
+  status          CallStatus
+  recordingUrl    String?
+  transcript      String?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime      @default(now())
+
+  tenant          Tenant        @relation(fields: [tenantId], references: [id])
+  agent           Agent?        @relation(fields: [agentId], references: [id])
+  phoneNumber     PhoneNumber?  @relation(fields: [phoneNumberId], references: [id])
+
+  @@map("calls")
+}
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+  WEB
+}
+
+enum CallStatus {
+  COMPLETED
+  FAILED
+  NO_ANSWER
+  BUSY
+  IN_PROGRESS
+}
+
+// ─── CREDIT LEDGER ────────────────────────────────────────────────────────────
+
+model CreditLedger {
+  id           String          @id @default(uuid())
+  tenantId     String
+  type         LedgerEntryType
+  amountCents  Int             // positive = credit, negative = debit
+  description  String?
+  referenceId  String?         // call id or payment id
+  createdAt    DateTime        @default(now())
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id])
+
+  @@map("credit_ledger")
+}
+
+enum LedgerEntryType {
+  PACKAGE_PURCHASE
+  TOP_UP
+  CALL_DEDUCTION
+  OVERAGE_CHARGE
+  MANUAL_CREDIT
+  MANUAL_DEDUCTION
+}
+
+// ─── PAYMENTS ────────────────────────────────────────────────────────────────
+
+model Payment {
+  id                       String        @id @default(uuid())
+  tenantId                 String
+  stripePaymentIntentId    String        @unique
+  amountCents              Int           // USD cents
+  type                     PaymentType
+  status                   PaymentStatus @default(PENDING)
+  createdAt                DateTime      @default(now())
+
+  tenant                   Tenant        @relation(fields: [tenantId], references: [id])
+
+  @@map("payments")
+}
+
+enum PaymentType {
+  PACKAGE_PURCHASE
+  TOP_UP
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
