@@ -164,15 +164,13 @@ export function TestCallPanel({
           >
             Call my phone
           </SecondaryButton>
-          {browserCallEnabled && (
-            <SecondaryButton
-              type="button"
-              onClick={() => { setMode("browser"); reset() }}
-              className={cn(mode === "browser" && "border-brand-500/60 bg-brand-500/12 text-brand-200")}
-            >
-              Talk in browser
-            </SecondaryButton>
-          )}
+          <SecondaryButton
+            type="button"
+            onClick={() => { setMode("browser"); reset() }}
+            className={cn(mode === "browser" && "border-brand-500/60 bg-brand-500/12 text-brand-200")}
+          >
+            Talk in browser
+          </SecondaryButton>
         </div>
 
         {mode === "phone" ? (
@@ -194,6 +192,19 @@ export function TestCallPanel({
             >
               Call me now
             </SubmitButton>
+          </div>
+        ) : !browserCallEnabled ? (
+          /* Say why rather than hiding the option — a missing tab reads as a
+             broken product, whereas a stated reason reads as a setting. */
+          <div className="space-y-3">
+            <p className="text-[13px] leading-relaxed text-muted">
+              Talking to your agent directly in the browser isn&rsquo;t switched on for
+              this workspace yet.
+            </p>
+            <p className="text-[13px] leading-relaxed text-subtle">
+              You can still test the agent right now by having it call your phone —
+              switch to “Call my phone” above.
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
