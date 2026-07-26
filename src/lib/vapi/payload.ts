@@ -105,10 +105,6 @@ export function buildAssistantPayload(
         : {}),
     },
 
-    compliancePlan: {
-      hipaaEnabled: config.hipaaEnabled,
-      pciEnabled:   config.pciEnabled,
-    },
 
     // Which events reach our webhook. Billing depends on end-of-call-report.
     serverMessages: [
@@ -146,6 +142,13 @@ export function buildAssistantPayload(
       enabled: true,
       timeoutSeconds: config.keypadTimeoutSeconds,
     }
+  }
+
+  // Only sent when actually switched on. HIPAA is never sent — it requires a
+  // signed BAA and an Enterprise plan, which is a contract decision, not a
+  // per-agent toggle.
+  if (config.pciEnabled) {
+    payload.compliancePlan = { pciEnabled: true }
   }
 
   const server = serverBlock()

@@ -135,9 +135,19 @@ export const AgentConfigSchema = z.object({
   keypadInputEnabled:  z.boolean().default(false),
   keypadTimeoutSeconds: z.number().int().min(1).max(30).default(2),
 
-  /* Compliance */
-  hipaaEnabled: z.boolean().default(false),
-  pciEnabled:   z.boolean().default(false),
+  /**
+   * Compliance
+   *
+   * HIPAA is deliberately absent. Vapi gates it behind an Enterprise plan or a
+   * paid add-on *and* a signed BAA, so offering the switch to tenants would
+   * only produce failures. Add it back alongside the contract, not before.
+   *
+   * PCI is available on standard accounts, but it is destructive without
+   * PCI-compliant external storage: recordings and transcripts are deleted
+   * rather than retained, and platform access to call artefacts is restricted.
+   * The UI says so at the point of use.
+   */
+  pciEnabled: z.boolean().default(false),
 
   /* Tools */
   toolsJson: ToolsJsonSchema.default(""),

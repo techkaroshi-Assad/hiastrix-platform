@@ -598,19 +598,19 @@ export function AgentsClient({
           </Section>
 
           {/* ── Compliance ─────────────────────────────────────────── */}
-          <Section title="Compliance" description="Data handling modes for regulated work.">
-            <Toggle
-              label="HIPAA mode"
-              description="Suppresses storage of call artefacts subject to HIPAA."
-              checked={c.hipaaEnabled}
-              onChange={v => setConfig({ hipaaEnabled: v })}
-            />
+          <Section title="Compliance" description="Data handling for card payments.">
             <Toggle
               label="PCI mode"
-              description="Applies payment-card handling restrictions."
+              description="For agents that take card details. Turning this on stops recordings and transcripts being kept — this agent's calls will have no audio and no transcript in your call log, and past ones become unavailable. Only enable it if you genuinely handle card numbers."
               checked={c.pciEnabled}
               onChange={v => setConfig({ pciEnabled: v })}
             />
+            {c.pciEnabled && (
+              <ErrorNote>
+                With PCI mode on, this agent&rsquo;s calls will not have a recording or
+                transcript. Everything else — duration, cost, summary — still works.
+              </ErrorNote>
+            )}
           </Section>
         </form>
       </Panel>
