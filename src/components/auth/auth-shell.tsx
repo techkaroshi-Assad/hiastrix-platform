@@ -1,0 +1,201 @@
+"use client"
+
+/**
+ * Auth layouts.
+ *
+ * AuthShell — centred glass card, Neural Mesh canvas backdrop.
+ *             Used on: forgot-password, update-password.
+ *
+ * AuthSplit — Magnetic Field left panel + Neural Mesh right panel.
+ *             Used on: sign-in, sign-up.
+ *
+ * Vendor-free: no Supabase, no Prisma, no internal service names
+ * appear anywhere in this file or its children.
+ */
+
+import Link from "next/link"
+import { Logo } from "@/components/brand/logo"
+import { NeuralMeshCanvas, MagneticFieldCanvas } from "@/components/ui/auth-canvas"
+
+/* ── Centred card ─────────────────────────────────────────── */
+
+export function AuthShell({
+  title,
+  subtitle,
+  children,
+  footer,
+}: {
+  title: string
+  subtitle?: string
+  children: React.ReactNode
+  footer?: React.ReactNode
+}) {
+  return (
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-ink px-5 py-12">
+
+      {/* Full-bleed canvas background */}
+      <NeuralMeshCanvas />
+
+      {/* Radial vignette — keeps card readable over the canvas */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(58% 52% at 50% 50%, rgba(7,7,10,.58), rgba(7,7,10,.18) 70%, transparent)",
+        }}
+      />
+
+      <div className="relative w-full max-w-[400px] animate-rise-in">
+
+        <div className="glass rounded-card px-8 py-9">
+          <div className="mb-7 flex justify-center">
+            <Logo size={30} />
+          </div>
+
+          <h1 className="text-center text-[21px] font-semibold tracking-[-0.025em]">
+            {title}
+          </h1>
+
+          {subtitle && (
+            <p className="mt-1.5 text-center text-[13px] font-light text-muted">
+              {subtitle}
+            </p>
+          )}
+
+          <div className="mt-7">{children}</div>
+        </div>
+
+        {footer && (
+          <div className="mt-5 text-center text-[13px] text-subtle">{footer}</div>
+        )}
+
+        <p className="mt-8 text-center text-[11px] text-subtle opacity-70">
+          © {new Date().getFullYear()} Hi-Astrix. All rights reserved.
+        </p>
+      </div>
+    </main>
+  )
+}
+
+/* ── Split layout ─────────────────────────────────────────── */
+
+const STATS = [
+  { value: "99.9%",  label: "uptime" },
+  { value: "<400ms", label: "response" },
+  { value: "40+",    label: "languages" },
+]
+
+export function AuthSplit({
+  title,
+  subtitle,
+  children,
+  footer,
+}: {
+  title: string
+  subtitle?: string
+  children: React.ReactNode
+  footer?: React.ReactNode
+}) {
+  return (
+    <main className="grid min-h-screen bg-ink lg:grid-cols-[1.05fr_0.95fr]">
+
+      {/* ── Left — brand panel ──────────────────────────────── */}
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-white/[0.065] p-12 lg:flex">
+
+        {/* Magnetic field canvas */}
+        <MagneticFieldCanvas />
+
+        {/* Darken overlay so text stays legible */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(140deg, rgba(7,7,10,0.78) 0%, rgba(18,10,38,0.52) 55%, rgba(7,7,10,0.60) 100%)",
+          }}
+        />
+
+        {/* Logo */}
+        <Link href="/" className="relative z-10 w-fit">
+          <Logo size={28} />
+        </Link>
+
+        {/* Headline */}
+        <div className="relative z-10">
+          <p className="max-w-[390px] text-[28px] font-light leading-[1.32] tracking-[-0.022em]">
+            Voice agents that{" "}
+            <span className="text-gradient-brand font-semibold">sound human</span>,
+            deployed under your own brand.
+          </p>
+          <p className="mt-5 max-w-[360px] text-[13.5px] font-light leading-relaxed text-muted">
+            Launch, monitor and bill AI calling agents from one workspace — with
+            your logo on every screen your customers ever see.
+          </p>
+        </div>
+
+        {/* Stats */}
+        <div className="relative z-10 flex gap-8">
+          {STATS.map(s => (
+            <div key={s.label}>
+              <div className="text-[22px] font-semibold tracking-[-0.022em]">{s.value}</div>
+              <div className="mt-0.5 text-[11px] uppercase tracking-widest text-subtle">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {/* ── Right — form ────────────────────────────────────── */}
+      <section className="relative flex items-center justify-center overflow-hidden px-5 py-12">
+
+        {/* Mobile background (Neural Mesh, hidden on lg+) */}
+        <div className="pointer-events-none absolute inset-0 lg:hidden">
+          <NeuralMeshCanvas />
+        </div>
+
+        {/* Subtle violet bloom on the form side */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 hidden lg:block"
+          style={{
+            background:
+              "radial-gradient(62% 48% at 52% 40%, rgba(124,58,237,.07), transparent 72%)",
+          }}
+        />
+
+        <div className="relative w-full max-w-[340px] animate-rise-in">
+
+          {/* Logo visible only on mobile */}
+          <div className="mb-8 flex justify-center lg:hidden">
+            <Logo size={30} />
+          </div>
+
+          <h1 className="text-[22px] font-semibold tracking-[-0.025em]">{title}</h1>
+
+          {subtitle && (
+            <p className="mt-1.5 text-[13px] font-light text-muted">{subtitle}</p>
+          )}
+
+          <div className="mt-7">{children}</div>
+
+          {footer && (
+            <div className="mt-6 text-center text-[13px] text-subtle">{footer}</div>
+          )}
+        </div>
+      </section>
+    </main>
+  )
+}
+
+/* ── Shared link ──────────────────────────────────────────── */
+
+export function AuthLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="text-muted underline-offset-4 transition-colors duration-200 hover:text-fg hover:underline"
+    >
+      {children}
+    </Link>
+  )
+}

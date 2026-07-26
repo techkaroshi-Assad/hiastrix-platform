@@ -1,26 +1,227 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────
+   Hi-Astrix  ·  Design Token System  v1.0
+   ───────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces */
+  --bg:        #07070A;
+  --surface:   #0D0D14;
+  --panel:     #111118;
+  --card:      #16161F;
+  --raised:    #1C1C29;
+
+  /* Borders */
+  --border:    rgba(255,255,255,0.065);
+  --border-hi: rgba(255,255,255,0.115);
+
+  /* Text */
+  --fg:        #F0EEFF;
+  --fg-2:      #9B97C0;
+  --fg-3:      #555278;
+
+  /* Brand violet (full scale) */
+  --brand-200: #DDD6FE;
+  --brand-300: #A78BFA;
+  --brand-400: #8B5CF6;
+  --brand-500: #7C3AED;
+  --brand-600: #6D28D9;
+  --brand-700: #5B21B6;
+  --brand:     #7C3AED;
+  --brand-mid: #8B5CF6;
+  --brand-hi:  #A78BFA;
+  --brand-dim: rgba(124,58,237,0.15);
+
+  /* Status */
+  --danger:   #EF4444;
+  --warning:  #F59E0B;
+  --success:  #22C55E;
+
+  /* Aliases */
+  --ink:    var(--bg);
+  --muted:  var(--fg-2);
+  --subtle: var(--fg-3);
 }
 
+/* Tailwind custom properties */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-ink:        var(--bg);
+  --color-surface:    var(--surface);
+  --color-panel:      var(--panel);
+  --color-card:       var(--card);
+  --color-raised:     var(--raised);
+  --color-muted:      var(--muted);
+  --color-subtle:     var(--subtle);
+  --color-fg:         var(--fg);
+  --color-brand-500:  var(--brand);
+  --color-brand-400:  var(--brand-mid);
+  --color-brand-300:  var(--brand-hi);
+  --color-danger:     var(--danger);
+  --color-warning:    var(--warning);
+  --color-success:    var(--success);
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+
+  --radius-card:  16px;
+  --radius-sm:     8px;
+  --radius-xs:     5px;
+  --radius-field:  9px;
+
+  /* Extended color map */
+  --color-brand-200:  var(--brand-200);
+  --color-brand-300:  var(--brand-hi);
+  --color-brand-400:  var(--brand-mid);
+  --color-brand-500:  var(--brand);
+  --color-brand-600:  var(--brand-600);
+  --color-brand-700:  var(--brand-700);
+
+  /* Ink tints */
+  --ink-2: #0D0D14;
+  --color-ink-2: var(--ink-2);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ── Reset ────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans, "Inter", system-ui), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Glass card ───────────────────────────────────────────── */
+.glass {
+  background: rgba(13,13,20,0.70);
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
+  border: 1px solid var(--border);
+}
+
+/* ── Radius ───────────────────────────────────────────────── */
+.rounded-card    { border-radius: var(--radius-card); }
+.rounded-sm-card { border-radius: var(--radius-sm); }
+.rounded-field   { border-radius: var(--radius-field); }
+
+/* ── Brand gradient text ──────────────────────────────────── */
+.text-gradient-brand {
+  background: linear-gradient(135deg, #C4B5FD 0%, #A78BFA 30%, #7C3AED 65%, #5B21B6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Color utilities ──────────────────────────────────────── */
+.bg-ink           { background: var(--ink); }
+.bg-surface       { background: var(--surface); }
+.bg-card          { background: var(--card); }
+.text-fg          { color: var(--fg); }
+.text-muted       { color: var(--muted); }
+.text-subtle      { color: var(--subtle); }
+
+.bg-brand-500\/12 { background: rgba(124,58,237,0.12); }
+.bg-brand-500\/8  { background: rgba(124,58,237,0.08); }
+.text-brand-300   { color: var(--brand-hi); }
+.text-brand-400   { color: var(--brand-mid); }
+
+.bg-danger  { background: var(--danger); }
+.bg-warning { background: var(--warning); }
+.bg-success { background: var(--success); }
+
+/* ── Grain overlay ────────────────────────────────────────── */
+.grain {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 200px;
+}
+
+/* ── Keyframes ────────────────────────────────────────────── */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes silk-a {
+  0%,100% { transform: translate(0,0) rotate(0deg); }
+  33%     { transform: translate(4%,-3%) rotate(8deg); }
+  66%     { transform: translate(-3%,5%) rotate(-5deg); }
+}
+@keyframes silk-b {
+  0%,100% { transform: translate(0,0) rotate(0deg); }
+  40%     { transform: translate(-5%,4%) rotate(-9deg); }
+  70%     { transform: translate(3%,-3%) rotate(7deg); }
+}
+@keyframes silk-c {
+  0%,100% { transform: translate(0,0) rotate(0deg); }
+  50%     { transform: translate(5%,5%) rotate(12deg); }
+}
+@keyframes orbit     { to { transform: rotate(360deg); } }
+@keyframes orbit-rev { to { transform: rotate(-360deg); } }
+@keyframes eq {
+  0%,100% { transform: scaleY(1); }
+  50%     { transform: scaleY(0.55); }
+}
+@keyframes aurora-a {
+  0%,100% { transform: scale(1) translate(0,0); }
+  35%     { transform: scale(1.07) translate(8%,6%); }
+  70%     { transform: scale(0.95) translate(-4%,10%); }
+}
+@keyframes aurora-b {
+  0%,100% { transform: scale(1) translate(0,0); }
+  40%     { transform: scale(1.05) translate(-6%,-8%); }
+  75%     { transform: scale(0.97) translate(9%,-3%); }
+}
+@keyframes slow-spin   { to { transform: rotate(360deg); } }
+@keyframes glow-path {
+  0%,100% { top: 10%; left: 15%; }
+  33%     { top: 55%; left: 70%; }
+  66%     { top: 70%; left: 30%; }
+}
+@keyframes star-rise      { to { background-position: 360px -200px; } }
+@keyframes star-rise-slow { to { background-position: 300px -220px; } }
+@keyframes pulse-dot {
+  0%,100% { transform: scale(1); opacity: 0.9; }
+  50%     { transform: scale(1.35); opacity: 0.5; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes sheen {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* ── Animation utilities ──────────────────────────────────── */
+.animate-rise-in        { animation: rise-in 0.48s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-fade-in        { animation: fade-in 0.4s ease both; }
+.animate-silk-a         { animation: silk-a 18s ease-in-out infinite; }
+.animate-silk-b         { animation: silk-b 22s ease-in-out infinite; }
+.animate-silk-c         { animation: silk-c 14s ease-in-out infinite; }
+.animate-orbit          { animation: orbit 12s linear infinite; }
+.animate-orbit-rev      { animation: orbit-rev 18s linear infinite; }
+.animate-eq             { animation: eq 1.2s ease-in-out infinite; }
+.animate-aurora-a       { animation: aurora-a 22s ease-in-out infinite; }
+.animate-aurora-b       { animation: aurora-b 18s ease-in-out infinite; }
+.animate-slow-spin      { animation: slow-spin 34s linear infinite; }
+.animate-glow-path      { animation: glow-path 14s ease-in-out infinite; }
+.animate-star-rise      { animation: star-rise 40s linear infinite; }
+.animate-star-rise-slow { animation: star-rise-slow 60s linear infinite; }
+.animate-pulse-dot      { animation: pulse-dot 2s ease-in-out infinite; }
+.animate-spin           { animation: spin 0.9s linear infinite; }
+.animate-sheen          { animation: sheen 2.4s ease infinite; }
+
+/* ── Reduced motion ───────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:       0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration:      0.01ms !important;
+  }
 }
