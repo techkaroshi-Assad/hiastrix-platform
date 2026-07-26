@@ -3,13 +3,17 @@
  *
  * Registers a new tenant owner.
  *
+ * Uses a Prisma nested write (tenant → users) instead of an interactive
+ * transaction so it works with Supabase's transaction-mode pooler (port 6543).
+ * The nested write is still atomic at the DB level.
+ *
  * Supabase is called server-side only — no vendor URL, key, or error string
- * ever reaches the browser. Every failure path returns a message from ERRORS.
+ * ever reaches the browser. Every failure path returns a generic message.
  */
 
 import { NextRequest } from "next/server"
 import { createClient, createServiceClient } from "@/lib/supabase/server"
-import { prisma, type TransactionClient } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 import { z } from "zod"
 
@@ -22,7 +26,7 @@ const SignupSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body   = await request.json()
     const parsed = SignupSchema.safeParse(body)
 
     if (!parsed.success) {
@@ -32,8 +36,8 @@ export async function POST(request: NextRequest) {
     const { email, password, companyName, name } = parsed.data
     const appUrl = process.env.APP_URL ?? "https://app.hiastrix.com"
 
-    // signUp (not admin.createUser) is what actually dispatches the
-    // confirmation email. Runs on the anon key, server-side.
+    // signUp (not admin.createUser) dispatches the confirmation email.
+    // Runs on the anon key, server-side only.
     const supabase = await createClient()
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -58,28 +62,25 @@ export async function POST(request: NextRequest) {
     const supabaseId = authData.user.id
 
     try {
-      await prisma.$transaction(async (tx: TransactionClient) => {
-        const tenant = await tx.tenant.create({
-          data: {
-            companyName,
-            email,
-            status: "PENDING",
+      // Nested write — creates Tenant + TenantUser atomically without needing
+      // an interactive transaction (compatible with pgbouncer transaction mode).
+      await prisma.tenant.create({
+        data: {
+          companyName,
+          email,
+          status: "PENDING",
+          users: {
+            create: {
+              supabaseId,
+              email,
+              name,
+              type: "OWNER",
+            },
           },
-        })
-
-        await tx.tenantUser.create({
-          data: {
-            tenantId: tenant.id,
-            supabaseId,
-            email,
-            name,
-            type: "OWNER",
-          },
-        })
+        },
       })
     } catch (dbError) {
-      // Roll the auth user back so the address can be reused on retry —
-      // otherwise the account exists with no workspace behind it.
+      // Roll back the auth user so the address can be reused on retry.
       try {
         await createServiceClient().auth.admin.deleteUser(supabaseId)
       } catch (cleanupError) {
