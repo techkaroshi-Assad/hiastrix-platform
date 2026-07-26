@@ -68,9 +68,21 @@ export const AgentJsonSchema = AgentCoreSchema.extend({
 export type AgentJson = z.infer<typeof AgentJsonSchema>
 
 /** First problem, rendered as "path — message" for a single-line error slot. */
+/**
+ * The first problem, worded for whoever has to fix it.
+ *
+ * Cross-field rules already carry a written-out message — "Choose a pipeline for
+ * Open a deal" — and those are shown as-is. Everything else falls back to naming
+ * the field, but never the path into our config object: `config.tools.7.pipelineId`
+ * tells a tenant nothing and leaks our internals into their UI.
+ */
 export function firstIssue(error: z.ZodError): string {
   const issue = error.issues[0]
   if (!issue) return "That doesn't look valid."
-  const path = issue.path.join(".")
-  return path ? `${path} — ${issue.message}` : issue.message
+
+  // A custom issue is one of ours, already written for a human.
+  if (issue.code === "custom") return issue.message
+
+  const field = [...issue.path].reverse().find(p => typeof p === "string")
+  return field ? `${String(field)} — ${issue.message}` : issue.message
 }

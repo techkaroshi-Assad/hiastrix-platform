@@ -68,7 +68,16 @@ export const FunctionToolSchema = z.object({
 
 /* ── CRM actions ───────────────────────────────────────────────────────── */
 
-const ID     = z.string().min(1).max(120)
+/**
+ * An id chosen from a dropdown.
+ *
+ * Deliberately allows the empty string. Requiring it here would mean a tenant
+ * who switches an action on and has not yet picked a pipeline gets a raw schema
+ * error naming an internal path — `config.tools.7.pipelineId` — at save time.
+ * Emptiness is a cross-field concern instead, reported by `toolIssues` in plain
+ * English against the action it belongs to, live in the form.
+ */
+const ID     = z.string().max(120).default("")
 const LABELS = z.array(z.string().min(1).max(100)).max(50).default([])
 
 /** No configuration — the endpoint knows the tenant, and the model supplies the
@@ -129,7 +138,7 @@ export const CrmAvailabilitySchema = z.object({
   type: z.literal("crm.appointment.availability"),
   ...identity,
   calendarId: ID,
-  timeZone:   z.string().min(1).max(64),
+  timeZone:   z.string().max(64).default("UTC"),
 })
 
 export const CrmBookSchema = z.object({
@@ -383,6 +392,29 @@ export function toolIssues(tools: AgentTool[]): ToolIssue[] {
   if (needsLookup !== -1 && !has("crm.contact.find")) {
     issues.push({ path: [needsLookup], message: LOOKUP_REQUIRED_MESSAGE })
   }
+
+  /*
+   * A dropdown left unchosen. Caught here rather than by the field schema so the
+   * tenant reads "Choose a pipeline for Open a deal" instead of a path into our
+   * config object — and reads it while editing, not after pressing save.
+   */
+  tools.forEach((t, i) => {
+    const spec = CRM_TOOLS.find(s => s.type === t.type)
+    if (!spec) return
+
+    if (spec.needsCalendar && !(t as { calendarId?: string }).calendarId) {
+      issues.push({
+        path: [i, "calendarId"],
+        message: `Choose a calendar for “${spec.label}”.`,
+      })
+    }
+    if (spec.needsPipeline && !(t as { pipelineId?: string }).pipelineId) {
+      issues.push({
+        path: [i, "pipelineId"],
+        message: `Choose a pipeline for “${spec.label}”.`,
+      })
+    }
+  })
 
   const bookingIndex = tools.findIndex(t => t.type === "crm.appointment.book")
   if (bookingIndex !== -1 && !BOOKING_PREREQUISITES.every(has)) {
