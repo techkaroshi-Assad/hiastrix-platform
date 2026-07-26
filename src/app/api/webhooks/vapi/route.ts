@@ -14,27 +14,12 @@
  */
 
 import { NextRequest } from "next/server"
-import { timingSafeEqual } from "node:crypto"
 import type { InputJsonValue } from "@prisma/client/runtime/client"
 import { prisma } from "@/lib/prisma"
 import { processCallEnded } from "@/lib/billing/cap-enforcement"
+import { authorisedByVapiSecret as authorised } from "@/lib/vapi/webhook-auth"
 
 export const dynamic = "force-dynamic"
-
-function authorised(request: NextRequest) {
-  const expected = process.env.VAPI_WEBHOOK_SECRET
-  if (!expected) return false
-
-  const header =
-    request.headers.get("x-vapi-secret") ??
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    ""
-
-  const a = Buffer.from(header)
-  const b = Buffer.from(expected)
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
-}
 
 /** Vapi's endedReason vocabulary → our CallStatus enum. */
 function mapStatus(endedReason?: string): "COMPLETED" | "FAILED" | "NO_ANSWER" | "BUSY" {

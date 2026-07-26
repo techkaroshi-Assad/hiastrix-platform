@@ -1,37 +1,80 @@
 "use client"
 
 /**
- * Tools editor — CRM integrations and custom functions.
+ * Tools editor — CRM actions and custom functions.
  *
- * Two blocks, because they behave differently. Integrations are singletons the
+ * Two blocks, because they behave differently. CRM actions are singletons the
  * tenant switches on and off; custom functions are a list they build.
  *
- * The CRM credential is connected once by Hi-Astrix upstream, not per tenant,
- * so there is deliberately no credential field here — only which actions this
- * agent is allowed to take.
+ * Every id field here is a dropdown fed from the tenant's own sub-account —
+ * their calendars, their pipelines, their tags, their custom fields. Nobody
+ * should be asked to paste an identifier they would have to go and find, and a
+ * picker also means a typo cannot reach the model as a silently broken tool.
+ *
+ * The connection itself is set up once by Hi-Astrix. There is deliberately no
+ * credential field here — only which actions this agent is allowed to take.
  */
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Field, ErrorNote, InfoNote } from "@/components/ui/field"
 import { TextArea, Select, Toggle, SecondaryButton, DangerButton } from "@/components/ui/form"
 import {
-  GHL_TOOLS,
+  CRM_GROUPS,
+  CRM_TOOLS,
   TIME_ZONES,
   TOOL_PARAM_TYPES,
   BOOKING_PREREQUISITES,
   BOOKING_PREREQ_MESSAGE,
   blankFunctionTool,
-  defaultGhlTool,
+  defaultCrmTool,
   findTool,
   removeToolType,
   toolIssues,
   upsertTool,
   type AgentTool,
   type AgentToolType,
-  type GhlToolSpec,
+  type CrmToolSpec,
   type ToolParameter,
 } from "@/lib/vapi/tools"
 import { cn } from "@/lib/utils"
+
+/* ── What the tenant's own sub-account contains ────────────────────────── */
+
+type CrmOptions = {
+  linked: boolean
+  calendars: { id: string; name: string }[]
+  pipelines: { id: string; name: string; stages: { id: string; name: string }[] }[]
+  tags: string[]
+  fields: { id: string; name: string }[]
+}
+
+const NO_OPTIONS: CrmOptions = {
+  linked: false, calendars: [], pipelines: [], tags: [], fields: [],
+}
+
+function useCrmOptions() {
+  const [options, setOptions] = useState<CrmOptions>(NO_OPTIONS)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let live = true
+    fetch("/api/crm/options")
+      .then(r => (r.ok ? r.json() : NO_OPTIONS))
+      .then(data => { if (live) setOptions(data as CrmOptions) })
+      .catch(() => { if (live) setOptions(NO_OPTIONS) })
+      .finally(() => { if (live) setLoading(false) })
+    return () => { live = false }
+  }, [])
+
+  return { options, loading }
+}
+
+/** Stage and tag names routinely carry emoji. Fine in a dropdown, noise in a
+ *  label — and the model never sees these at all, only their resolved ids. */
+const clean = (s: string) =>
+  s.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, "").trim() || s
+
+/* ── Editor ────────────────────────────────────────────────────────────── */
 
 export function ToolsEditor({
   value,
@@ -41,27 +84,41 @@ export function ToolsEditor({
   onChange: (next: AgentTool[]) => void
 }) {
   const [note, setNote] = useState<string | null>(null)
+  const { options, loading } = useCrmOptions()
 
   const issues = toolIssues(value)
   const functions = value.filter(t => t.type === "function")
 
-  /* ── Integrations ────────────────────────────────────────────────── */
+  /* ── CRM actions ─────────────────────────────────────────────────── */
 
-  function toggleGhl(spec: GhlToolSpec, on: boolean) {
+  function toggleCrm(spec: CrmToolSpec, on: boolean) {
     setNote(null)
 
     if (on) {
-      let next = upsertTool(value, defaultGhlTool(spec))
+      let next = upsertTool(value, seed(spec, options))
 
       // Booking is meaningless without a contact to book for, so switch the
       // prerequisites on rather than letting the tenant hit a rejection.
-      if (spec.type === "gohighlevel.calendar.event.create") {
+      if (spec.type === "crm.appointment.book") {
         const missing = BOOKING_PREREQUISITES.filter(t => !findTool(next, t))
         for (const type of missing) {
-          const prereq = GHL_TOOLS.find(g => g.type === type)
-          if (prereq) next = upsertTool(next, defaultGhlTool(prereq))
+          const prereq = CRM_TOOLS.find(g => g.type === type)
+          if (prereq) next = upsertTool(next, seed(prereq, options))
         }
         if (missing.length) setNote(BOOKING_PREREQ_MESSAGE)
+      }
+
+      // Everything that acts on a contact needs one found first.
+      if (spec.type !== "crm.contact.find" && spec.type !== "crm.appointment.availability") {
+        if (!findTool(next, "crm.contact.find")) {
+          const lookup = CRM_TOOLS.find(g => g.type === "crm.contact.find")
+          if (lookup) {
+            next = upsertTool(next, seed(lookup, options))
+            setNote(
+              "“Look up a contact” was switched on too — every other CRM action needs a contact to act on."
+            )
+          }
+        }
       }
 
       onChange(next)
@@ -69,18 +126,26 @@ export function ToolsEditor({
     }
 
     // Blocked rather than silently allowed — the server would reject it anyway.
-    if (
-      BOOKING_PREREQUISITES.includes(spec.type) &&
-      findTool(value, "gohighlevel.calendar.event.create")
-    ) {
+    if (BOOKING_PREREQUISITES.includes(spec.type) && findTool(value, "crm.appointment.book")) {
       setNote(BOOKING_PREREQ_MESSAGE)
       return
+    }
+    if (spec.type === "crm.contact.find") {
+      const dependants = value.filter(
+        t => t.type.startsWith("crm.") &&
+             t.type !== "crm.contact.find" &&
+             t.type !== "crm.appointment.availability"
+      )
+      if (dependants.length) {
+        setNote("Turn the other CRM actions off first — they all need a contact to act on.")
+        return
+      }
     }
 
     onChange(removeToolType(value, spec.type))
   }
 
-  function patchGhl(type: AgentToolType, patch: Record<string, string>) {
+  function patchCrm(type: AgentToolType, patch: Record<string, unknown>) {
     const existing = findTool(value, type)
     if (!existing) return
     onChange(upsertTool(value, { ...existing, ...patch } as AgentTool))
@@ -118,53 +183,57 @@ export function ToolsEditor({
       ))}
 
       {/* ── CRM ──────────────────────────────────────────────────── */}
-      <div className="space-y-3">
+      <div className="space-y-5">
         <div>
           <h4 className="text-[13px] font-semibold">CRM actions</h4>
           <p className="mt-1 text-xs leading-relaxed text-subtle">
-            Let this agent read and write your CRM mid-call. The connection itself is
-            set up once by Hi-Astrix — you only choose what this agent may do.
+            Let this agent read and write your CRM mid-call. The connection is set up
+            once by Hi-Astrix — you only choose what this agent may do.
           </p>
         </div>
 
-        {GHL_TOOLS.map(spec => {
-          const tool = findTool(value, spec.type)
-          const on = Boolean(tool)
+        {!loading && !options.linked ? (
+          <InfoNote>
+            This workspace isn&rsquo;t linked to a CRM yet, so these actions are
+            unavailable. Ask the Hi-Astrix team to connect it and they&rsquo;ll appear
+            here.
+          </InfoNote>
+        ) : (
+          CRM_GROUPS.map(group => (
+            <div key={group.key} className="space-y-2.5">
+              <div>
+                <h5 className="text-[12.5px] font-semibold text-muted">{group.title}</h5>
+                <p className="mt-0.5 text-xs leading-relaxed text-subtle">{group.blurb}</p>
+              </div>
 
-          return (
-            <div key={spec.type} className="space-y-2.5">
-              <Toggle
-                label={spec.label}
-                description={spec.blurb}
-                checked={on}
-                onChange={next => toggleGhl(spec, next)}
-              />
+              {CRM_TOOLS.filter(spec => spec.group === group.key).map(spec => {
+                const tool = findTool(value, spec.type)
+                const on = Boolean(tool)
 
-              {on && (spec.needsCalendar || spec.needsTimeZone) && (
-                <div className="ml-1 space-y-3 border-l border-line pl-4">
-                  {spec.needsCalendar && (
-                    <Field
-                      label="Calendar ID"
-                      value={(tool as { calendarId?: string }).calendarId ?? ""}
-                      onChange={e => patchGhl(spec.type, { calendarId: e.target.value })}
-                      placeholder="The calendar this agent books into"
-                      hint="Found in your CRM's calendar settings."
+                return (
+                  <div key={spec.type} className="space-y-2.5">
+                    <Toggle
+                      label={spec.label}
+                      description={spec.blurb}
+                      checked={on}
+                      disabled={loading}
+                      onChange={next => toggleCrm(spec, next)}
                     />
-                  )}
-                  {spec.needsTimeZone && (
-                    <Select
-                      label="Time zone"
-                      value={(tool as { timeZone?: string }).timeZone ?? "UTC"}
-                      onChange={e => patchGhl(spec.type, { timeZone: e.target.value })}
-                      options={TIME_ZONES.map(tz => ({ value: tz, label: tz }))}
-                      hint="Slots are offered to callers in this zone."
-                    />
-                  )}
-                </div>
-              )}
+
+                    {on && tool && (
+                      <CrmToolSettings
+                        spec={spec}
+                        tool={tool}
+                        options={options}
+                        onPatch={patch => patchCrm(spec.type, patch)}
+                      />
+                    )}
+                  </div>
+                )
+              })}
             </div>
-          )
-        })}
+          ))
+        )}
       </div>
 
       {/* ── Custom ───────────────────────────────────────────────── */}
@@ -198,6 +267,183 @@ export function ToolsEditor({
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/**
+ * A newly switched-on action, pre-filled with the obvious choice.
+ *
+ * With exactly one calendar or one pipeline there is no decision to make, so
+ * making the tenant open a select to confirm it is pure friction — and a tool
+ * saved with an empty id is a tool that fails on its first call.
+ */
+function seed(spec: CrmToolSpec, options: CrmOptions): AgentTool {
+  const tool = defaultCrmTool(spec)
+
+  if (spec.needsCalendar && options.calendars.length === 1) {
+    return { ...tool, calendarId: options.calendars[0].id } as AgentTool
+  }
+  if (spec.needsPipeline && options.pipelines.length === 1) {
+    return { ...tool, pipelineId: options.pipelines[0].id } as AgentTool
+  }
+  return tool
+}
+
+/* ── Per-action settings ───────────────────────────────────────────── */
+
+function CrmToolSettings({
+  spec,
+  tool,
+  options,
+  onPatch,
+}: {
+  spec: CrmToolSpec
+  tool: AgentTool
+  options: CrmOptions
+  onPatch: (patch: Record<string, unknown>) => void
+}) {
+  const anything =
+    spec.needsCalendar || spec.needsTimeZone || spec.needsPipeline ||
+    spec.needsTags || spec.needsFields
+  if (!anything) return null
+
+  const t = tool as Record<string, unknown>
+  const pipeline = options.pipelines.find(p => p.id === t.pipelineId)
+
+  return (
+    <div className="ml-1 space-y-3 border-l border-line pl-4">
+      {spec.needsCalendar && (
+        <Select
+          label="Calendar"
+          value={String(t.calendarId ?? "")}
+          onChange={e => onPatch({ calendarId: e.target.value })}
+          options={options.calendars.map(c => ({ value: c.id, label: clean(c.name) }))}
+          placeholder={
+            options.calendars.length ? "Choose a calendar" : "No calendars in your CRM yet"
+          }
+          hint="Only this calendar is read from and booked into."
+        />
+      )}
+
+      {spec.needsTimeZone && (
+        <Select
+          label="Time zone"
+          value={String(t.timeZone ?? "UTC")}
+          onChange={e => onPatch({ timeZone: e.target.value })}
+          options={TIME_ZONES.map(tz => ({ value: tz, label: tz }))}
+          hint="Slots are offered to callers in this zone."
+        />
+      )}
+
+      {spec.needsPipeline && (
+        <>
+          <Select
+            label="Pipeline"
+            value={String(t.pipelineId ?? "")}
+            onChange={e => onPatch({ pipelineId: e.target.value })}
+            options={options.pipelines.map(p => ({ value: p.id, label: clean(p.name) }))}
+            placeholder={
+              options.pipelines.length ? "Choose a pipeline" : "No pipelines in your CRM yet"
+            }
+          />
+          {pipeline && (
+            <p className="text-xs leading-relaxed text-subtle">
+              The agent can move deals between{" "}
+              <span className="text-muted">
+                {pipeline.stages.map(s => clean(s.name)).join(", ")}
+              </span>
+              .
+            </p>
+          )}
+        </>
+      )}
+
+      {spec.needsTags && (
+        <CheckList
+          label="Tags this agent may use"
+          hint="Leaving all of these unticked lets the agent use any tag, which is rarely what you want — pick the ones your workflows listen for."
+          empty="No tags in your CRM yet."
+          options={options.tags.map(name => ({ value: name, label: clean(name) }))}
+          selected={(t.tags as string[]) ?? []}
+          onChange={next => onPatch({ tags: next })}
+        />
+      )}
+
+      {spec.needsFields && (
+        <CheckList
+          label="Fields this agent may fill in"
+          hint="The agent is offered these by name and can write nothing else."
+          empty="No custom contact fields in your CRM yet."
+          options={options.fields.map(f => ({ value: f.id, label: f.name }))}
+          selected={((t.fields as { id: string }[]) ?? []).map(f => f.id)}
+          onChange={next =>
+            onPatch({
+              fields: next.map(id => ({
+                id,
+                name: options.fields.find(f => f.id === id)?.name ?? id,
+              })),
+            })
+          }
+        />
+      )}
+    </div>
+  )
+}
+
+/** A short multi-select. A native multiple-select is unusable with a trackpad,
+ *  and these lists are small enough to show in full. */
+function CheckList({
+  label,
+  hint,
+  empty,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string
+  hint: string
+  empty: string
+  options: { value: string; label: string }[]
+  selected: string[]
+  onChange: (next: string[]) => void
+}) {
+  const toggle = (value: string) =>
+    onChange(
+      selected.includes(value) ? selected.filter(v => v !== value) : [...selected, value]
+    )
+
+  return (
+    <div className="space-y-2">
+      <span className="block text-xs font-medium text-muted">{label}</span>
+
+      {options.length === 0 ? (
+        <p className="text-xs text-subtle">{empty}</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {options.map(o => {
+            const on = selected.includes(o.value)
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => toggle(o.value)}
+                aria-pressed={on}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-[12px] transition-colors",
+                  on
+                    ? "border-brand-500/60 bg-brand-500/12 text-brand-200"
+                    : "border-line text-subtle hover:border-line-strong hover:text-fg"
+                )}
+              >
+                {o.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      <p className="text-xs leading-relaxed text-subtle">{hint}</p>
     </div>
   )
 }

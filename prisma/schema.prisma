@@ -44,6 +44,10 @@ model Tenant {
   packageAssignedAt  DateTime?    @map("package_assigned_at") @db.Timestamptz(6)
   minutesUsed        Int          @default(0) @map("minutes_used")
   creditBalanceCents Int          @default(0) @map("credit_balance_cents") // USD cents
+  /// Which CRM sub-account this tenant's agents act on. Null until an operator
+  /// maps one, which is also the signal the agent builder uses to hide the CRM
+  /// tools rather than show dropdowns with nothing in them.
+  crmLocationId      String?      @map("crm_location_id")
   createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -316,6 +320,24 @@ enum PaymentStatus {
 
 // ─── PLATFORM SETTINGS ────────────────────────────────────────────────────────
 // Exactly one row, guarded by a boolean primary key with a CHECK constraint.
+
+/// The one agency-wide CRM connection.
+///
+/// Single row, same trick as PlatformSettings: a boolean primary key that can
+/// only ever be true. Unlike every other vendor credential in this codebase these
+/// tokens rotate at runtime, so they cannot live in the environment — this table
+/// is the one place the platform stores a live secret.
+model CrmConnection {
+  id           Boolean  @id @default(true)
+  companyId    String   @map("company_id")
+  accessToken  String   @map("access_token")
+  refreshToken String   @map("refresh_token")
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+  connectedBy  String?  @map("connected_by")
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("crm_connection")
+}
 
 model PlatformSettings {
   id               Boolean  @id @default(true)

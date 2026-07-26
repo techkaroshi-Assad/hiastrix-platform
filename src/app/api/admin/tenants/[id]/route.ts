@@ -2,7 +2,8 @@
  * PATCH /api/admin/tenants/[id]
  *
  * One endpoint covering the operational levers Astrix needs on a tenant:
- * status, package assignment, and manual credit adjustment.
+ * status, package assignment, manual credit adjustment, and which CRM
+ * sub-account the tenant's agents act on.
  *
  * A credit adjustment always writes a CreditLedger entry with the operator's
  * note, so the balance is never changed without an audit trail. Crossing zero
@@ -19,11 +20,18 @@ import {
   sendWorkspaceActivated,
   billingRecipients,
 } from "@/lib/email"
+import { forgetLocation } from "@/lib/crm/client"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
 const BodySchema = z.object({
   status:    z.enum(["PENDING", "ACTIVE", "INACTIVE", "BLOCKED"]).optional(),
   packageId: z.string().uuid().nullable().optional(),
+  /**
+   * Which CRM sub-account this tenant's agents read and write. Null unmaps them,
+   * which is the safe direction — their agents then decline CRM actions rather
+   * than writing into whatever was there before.
+   */
+  crmLocationId: z.string().max(120).nullable().optional(),
   credit: z
     .object({
       amountCents: z.number().int().refine(n => n !== 0, "Amount cannot be zero"),
@@ -49,18 +57,33 @@ export async function PATCH(
 
     const tenant = await prisma.tenant.findUnique({
       where:  { id },
-      select: { id: true, creditBalanceCents: true, status: true, companyName: true },
+      select: {
+        id: true, creditBalanceCents: true, status: true,
+        companyName: true, crmLocationId: true,
+      },
     })
     if (!tenant) return apiError(ERRORS.NOT_FOUND, 404)
 
     const parsed = BodySchema.safeParse(await request.json())
     if (!parsed.success) return apiError("Please check the values and try again.")
 
-    const { status, packageId, credit } = parsed.data
+    const { status, packageId, credit, crmLocationId } = parsed.data
+
+    // Two tenants pointing at one sub-account would silently merge their
+    // callers' records, so it is refused rather than warned about.
+    if (crmLocationId) {
+      const clash = await prisma.tenant.findFirst({
+        where:  { crmLocationId, id: { not: id } },
+        select: { companyName: true },
+      })
+      if (clash) {
+        return apiError(`That CRM sub-account is already assigned to ${clash.companyName}.`)
+      }
+    }
     const wasEmpty = tenant.creditBalanceCents <= 0
 
     // ── Status / package ────────────────────────────────────────────────
-    if (status !== undefined || packageId !== undefined) {
+    if (status !== undefined || packageId !== undefined || crmLocationId !== undefined) {
       await prisma.tenant.update({
         where: { id },
         data: {
@@ -68,8 +91,15 @@ export async function PATCH(
           ...(packageId !== undefined
             ? { packageId, packageAssignedAt: packageId ? new Date() : null }
             : {}),
+          ...(crmLocationId !== undefined ? { crmLocationId } : {}),
         },
       })
+
+      // Drop the cached token for whichever sub-account they are leaving, so an
+      // in-flight call cannot keep writing to it after the remap.
+      if (crmLocationId !== undefined && tenant.crmLocationId) {
+        forgetLocation(tenant.crmLocationId)
+      }
     }
 
     // ── Manual credit adjustment ────────────────────────────────────────

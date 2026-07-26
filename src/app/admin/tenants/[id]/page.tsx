@@ -208,6 +208,7 @@ export default async function AdminTenantDetailPage({
             packageId={tenant.packageId}
             packages={packages}
             balanceCents={tenant.creditBalanceCents}
+            crmLocationId={tenant.crmLocationId}
           />
         </Card>
       </div>

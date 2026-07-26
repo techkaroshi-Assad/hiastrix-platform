@@ -7,6 +7,7 @@ import { Card, Table, TH, TD, Pill } from "@/components/app/table"
 import { dateOnly, titleCase } from "@/lib/format"
 import { stripeConfigured } from "@/lib/stripe"
 import { emailConfigured } from "@/lib/email"
+import { crmConfigured } from "@/lib/crm/client"
 import { PlatformSettingsForm } from "./settings-client"
 
 export const metadata: Metadata = { title: "Settings" }
@@ -30,6 +31,14 @@ export default async function AdminSettingsPage() {
     prisma.adminUser.findMany({ orderBy: { createdAt: "asc" } }),
   ])
 
+  // The CRM is the one integration that is not purely an environment variable:
+  // the client credentials are, but the agency token is granted at runtime and
+  // stored, so "configured" and "connected" are genuinely different states.
+  const crmConnection = await prisma.crmConnection.findUnique({
+    where:  { id: true },
+    select: { companyId: true, connectedBy: true, updatedAt: true },
+  })
+
   const integrations: [string, boolean, string][] = [
     ["Voice platform", Boolean(process.env.VAPI_API_KEY), "VAPI_API_KEY"],
     ["Call webhooks",  Boolean(process.env.VAPI_WEBHOOK_SECRET), "VAPI_WEBHOOK_SECRET"],
@@ -37,6 +46,7 @@ export default async function AdminSettingsPage() {
     ["Payments",       stripeConfigured(), "STRIPE_SECRET_KEY"],
     ["Payment webhooks", Boolean(process.env.STRIPE_WEBHOOK_SECRET), "STRIPE_WEBHOOK_SECRET"],
     ["Email",          emailConfigured(), "RESEND_API_KEY"],
+    ["CRM",            crmConfigured(), "CRM_CLIENT_ID"],
   ]
 
   return (
@@ -73,6 +83,32 @@ export default async function AdminSettingsPage() {
               </div>
             ))}
           </div>
+          {/* The CRM connection, which is state rather than configuration. */}
+          <div className="border-t border-line px-5 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-[13px]">CRM connection</div>
+                <div className="mt-0.5 text-[12px] text-subtle">
+                  {crmConnection
+                    ? `Connected by ${crmConnection.connectedBy ?? "an operator"} on ${dateOnly(crmConnection.updatedAt)}`
+                    : "Not connected — tenants cannot be linked to a sub-account yet."}
+                </div>
+              </div>
+              <Pill tone={crmConnection ? "success" : "neutral"}>
+                {crmConnection ? "Connected" : "Not connected"}
+              </Pill>
+            </div>
+
+            {admin.role === "SUPER_ADMIN" && crmConfigured() && (
+              <a
+                href="/api/admin/crm/connect"
+                className="mt-3 inline-flex h-9 items-center rounded-field border border-line px-4 text-[13px] text-muted transition-colors hover:border-line-strong hover:text-fg"
+              >
+                {crmConnection ? "Reconnect" : "Connect"}
+              </a>
+            )}
+          </div>
+
           <p className="border-t border-line px-5 py-4 text-[12.5px] leading-relaxed text-subtle">
             Keys live in the hosting environment and are never shown here. Anything
             marked “Not set” means that capability is simply hidden from tenants

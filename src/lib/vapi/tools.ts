@@ -6,12 +6,15 @@
  * routes. Two definitions would drift, and the drift would only surface as a
  * provider rejection after the tenant had already hit save.
  *
- * The discriminator `type` uses the provider's exact wire strings so someone
- * reading the JSON can match it against the upstream docs. Note that the inner
- * shape is NOT wire-identical: `parameters` here is a typed list, which we
- * expand into JSON Schema when building the payload. Pasting a provider tool
- * definition in verbatim will therefore be rejected — by design, since a silent
- * partial accept is worse than a clear error.
+ * Every CRM action is a `crm.*` type of our own. They used to be the voice
+ * provider's native CRM tool types, which bound to one credential connected at
+ * the *organisation* level — so every tenant's agent wrote into the same CRM
+ * account. These run against our own endpoint instead, which resolves the tenant
+ * from the assistant that placed the call and acts only on that tenant's
+ * sub-account.
+ *
+ * The names are also deliberately vendor-free. A tenant can open the JSON editor
+ * and read this config; nothing in it should tell them what we run underneath.
  */
 
 import { z } from "zod"
@@ -63,106 +66,298 @@ export const FunctionToolSchema = z.object({
   waitingMessage: z.string().max(200).default(""),
 })
 
-/* ── GoHighLevel ───────────────────────────────────────────────────────── */
+/* ── CRM actions ───────────────────────────────────────────────────────── */
 
-export const GhlContactGetSchema = z.object({
-  type: z.literal("gohighlevel.contact.get"),
+const ID     = z.string().min(1).max(120)
+const LABELS = z.array(z.string().min(1).max(100)).max(50).default([])
+
+/** No configuration — the endpoint knows the tenant, and the model supplies the
+ *  rest as arguments. */
+const plain = <T extends string>(type: T) => z.object({ type: z.literal(type), ...identity })
+
+export const CrmContactFindSchema   = plain("crm.contact.find")
+export const CrmContactCreateSchema = plain("crm.contact.create")
+export const CrmContactUpdateSchema = plain("crm.contact.update")
+export const CrmNoteAddSchema       = plain("crm.note.add")
+
+/**
+ * Restricted to the fields the workspace chose.
+ *
+ * Both halves are stored because they serve different readers: the model is
+ * offered the human `name`, since asking it to pick an opaque id invites
+ * hallucination, and the handler resolves that back to the `id` the CRM wants.
+ */
+export const CrmFieldSetSchema = z.object({
+  type: z.literal("crm.contact.field.set"),
   ...identity,
+  fields: z.array(z.object({
+    id:   z.string().min(1).max(120),
+    name: z.string().min(1).max(120),
+  })).max(30).default([]),
 })
 
-export const GhlContactCreateSchema = z.object({
-  type: z.literal("gohighlevel.contact.create"),
+/**
+ * Tags are the lever into workflows the operator built by hand, so the allowed
+ * list is a real safety boundary: whatever is named here is what the agent can
+ * trigger. An empty list means any tag, which is rarely what anyone wants.
+ */
+export const CrmTagAddSchema = z.object({
+  type: z.literal("crm.tag.add"),
   ...identity,
+  tags: LABELS,
 })
 
-export const GhlAvailabilitySchema = z.object({
-  type: z.literal("gohighlevel.calendar.availability.check"),
+export const CrmTagRemoveSchema = z.object({
+  type: z.literal("crm.tag.remove"),
   ...identity,
-  calendarId: z.string().min(1).max(120),
-  // Capital Z: that is the metadata key the provider expects.
+  tags: LABELS,
+})
+
+export const CrmOpportunityCreateSchema = z.object({
+  type: z.literal("crm.opportunity.create"),
+  ...identity,
+  pipelineId: ID,
+})
+
+export const CrmOpportunityStageSchema = z.object({
+  type: z.literal("crm.opportunity.stage"),
+  ...identity,
+  pipelineId: ID,
+})
+
+export const CrmAvailabilitySchema = z.object({
+  type: z.literal("crm.appointment.availability"),
+  ...identity,
+  calendarId: ID,
   timeZone:   z.string().min(1).max(64),
 })
 
-export const GhlEventCreateSchema = z.object({
-  type: z.literal("gohighlevel.calendar.event.create"),
+export const CrmBookSchema = z.object({
+  type: z.literal("crm.appointment.book"),
   ...identity,
-  calendarId: z.string().min(1).max(120),
+  calendarId: ID,
 })
 
 export const AgentToolSchema = z.discriminatedUnion("type", [
   FunctionToolSchema,
-  GhlContactGetSchema,
-  GhlContactCreateSchema,
-  GhlAvailabilitySchema,
-  GhlEventCreateSchema,
+  CrmContactFindSchema,
+  CrmContactCreateSchema,
+  CrmContactUpdateSchema,
+  CrmFieldSetSchema,
+  CrmNoteAddSchema,
+  CrmTagAddSchema,
+  CrmTagRemoveSchema,
+  CrmOpportunityCreateSchema,
+  CrmOpportunityStageSchema,
+  CrmAvailabilitySchema,
+  CrmBookSchema,
 ])
 
 export type AgentTool     = z.infer<typeof AgentToolSchema>
 export type AgentToolType = AgentTool["type"]
 
+export const isCrmTool = (t: AgentTool): boolean => t.type.startsWith("crm.")
+
+/* ── Reading what is already stored ────────────────────────────────────── */
+
+/**
+ * The four provider-native CRM types this replaced.
+ *
+ * Kept as a translation table rather than as union members, so the schema stays
+ * clean while stored rows still convert. An agent carrying one of these picks up
+ * its replacement on the next read and persists it on the next save, with
+ * nothing visible happening to the tenant.
+ */
+const LEGACY_TYPES: Record<string, AgentToolType> = {
+  "gohighlevel.contact.get":                  "crm.contact.find",
+  "gohighlevel.contact.create":               "crm.contact.create",
+  "gohighlevel.calendar.availability.check":  "crm.appointment.availability",
+  "gohighlevel.calendar.event.create":        "crm.appointment.book",
+}
+
+/**
+ * Parse a stored tool list, element-wise.
+ *
+ * Element-wise matters more than it looks. `readConfig` falls back to defaults
+ * for the *whole* config when a parse fails, so one unrecognised tool would
+ * otherwise reset temperature, prompts and twenty-odd unrelated fields on the
+ * next render — and persist that on the next save. Dropping the single bad
+ * entry keeps the blast radius to the thing that is actually wrong.
+ */
+export function normaliseTools(raw: unknown): AgentTool[] {
+  if (!Array.isArray(raw)) return []
+
+  const out: AgentTool[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+
+    const record = entry as Record<string, unknown>
+    const legacy = typeof record.type === "string" ? LEGACY_TYPES[record.type] : undefined
+    const candidate = legacy ? { ...record, type: legacy } : record
+
+    const parsed = AgentToolSchema.safeParse(candidate)
+    if (parsed.success) out.push(parsed.data)
+  }
+  return out
+}
+
 /* ── Catalogue for the builder UI ──────────────────────────────────────── */
 
-export type GhlToolSpec = {
+export type CrmToolGroup = "contacts" | "pipeline" | "appointments"
+
+export type CrmToolSpec = {
   type: Exclude<AgentToolType, "function">
+  group: CrmToolGroup
   label: string
   blurb: string
   defaultName: string
   defaultDescription: string
-  needsCalendar: boolean
-  needsTimeZone: boolean
+  needsCalendar?: boolean
+  needsTimeZone?: boolean
+  needsPipeline?: boolean
+  needsTags?: boolean
+  needsFields?: boolean
 }
 
-export const GHL_TOOLS: GhlToolSpec[] = [
+export const CRM_GROUPS: { key: CrmToolGroup; title: string; blurb: string }[] = [
   {
-    type: "gohighlevel.contact.get",
+    key: "contacts",
+    title: "Contacts",
+    blurb: "Finding the caller, recording what they said, and tagging them so your automations pick it up.",
+  },
+  {
+    key: "pipeline",
+    title: "Pipeline",
+    blurb: "Opening a deal and moving it along the stages you have already built.",
+  },
+  {
+    key: "appointments",
+    title: "Appointments",
+    blurb: "Reading real availability and booking on a calendar.",
+  },
+]
+
+export const CRM_TOOLS: CrmToolSpec[] = [
+  {
+    type: "crm.contact.find",
+    group: "contacts",
     label: "Look up a contact",
-    blurb: "Find someone already in the CRM by phone or email.",
-    defaultName: "get_crm_contact",
+    blurb: "Find whether the caller is already in the CRM, by phone, email or name.",
+    defaultName: "find_contact",
     defaultDescription:
-      "Look up an existing contact in the CRM using their phone number or email address.",
-    needsCalendar: false,
-    needsTimeZone: false,
+      "Look up an existing contact in the CRM by phone number, email address or name. Use this first, before creating anyone new. Give the phone number or email when you have one — a name is a fuzzy match.",
   },
   {
-    type: "gohighlevel.contact.create",
+    type: "crm.contact.create",
+    group: "contacts",
     label: "Create a contact",
-    blurb: "Add a new person to the CRM during the call.",
-    defaultName: "create_crm_contact",
+    blurb: "Add a new lead during the call.",
+    defaultName: "create_contact",
     defaultDescription:
-      "Create a new contact in the CRM with the caller's name and contact details.",
-    needsCalendar: false,
-    needsTimeZone: false,
+      "Create a new contact in the CRM with the caller's name and contact details, once you have confirmed they are not already there. Remember the contact id it returns and use that for the rest of the call — do not look them up again.",
   },
   {
-    type: "gohighlevel.calendar.availability.check",
-    label: "Check availability",
-    blurb: "Read open slots from a calendar before offering times.",
-    defaultName: "check_calendar_availability",
+    type: "crm.contact.update",
+    group: "contacts",
+    label: "Update contact details",
+    blurb: "Correct a name, email or phone number the caller confirms.",
+    defaultName: "update_contact",
     defaultDescription:
-      "Check which appointment slots are available on the calendar for a given date range.",
+      "Update an existing contact's name, email address or phone number after the caller has confirmed the correct value.",
+  },
+  {
+    type: "crm.contact.field.set",
+    group: "contacts",
+    label: "Fill in a custom field",
+    blurb: "Record an answer against one of your own fields.",
+    defaultName: "set_contact_field",
+    defaultDescription:
+      "Record an answer against one of the workspace's custom contact fields.",
+    needsFields: true,
+  },
+  {
+    type: "crm.note.add",
+    group: "contacts",
+    label: "Add a note",
+    blurb: "Write what happened on the call onto the contact.",
+    defaultName: "add_note",
+    defaultDescription:
+      "Add a note to the contact summarising what was discussed and agreed on this call.",
+  },
+  {
+    type: "crm.tag.add",
+    group: "contacts",
+    label: "Apply a tag",
+    blurb: "Tag the contact so your existing workflows take over.",
+    defaultName: "add_tag",
+    defaultDescription:
+      "Apply a tag to the contact to record the outcome of the call. Only the tags listed for this agent are allowed.",
+    needsTags: true,
+  },
+  {
+    type: "crm.tag.remove",
+    group: "contacts",
+    label: "Remove a tag",
+    blurb: "Clear a tag that no longer applies.",
+    defaultName: "remove_tag",
+    defaultDescription:
+      "Remove a tag from the contact when it no longer describes them.",
+    needsTags: true,
+  },
+  {
+    type: "crm.opportunity.create",
+    group: "pipeline",
+    label: "Open a deal",
+    blurb: "Create an opportunity in a pipeline you have built.",
+    defaultName: "create_opportunity",
+    defaultDescription:
+      "Create a new opportunity for this contact in the pipeline, when the caller shows genuine interest.",
+    needsPipeline: true,
+  },
+  {
+    type: "crm.opportunity.stage",
+    group: "pipeline",
+    label: "Move a deal's stage",
+    blurb: "Advance an existing deal to a different stage.",
+    defaultName: "move_opportunity_stage",
+    defaultDescription:
+      "Move the contact's existing opportunity to a different stage of the pipeline based on how the call went.",
+    needsPipeline: true,
+  },
+  {
+    type: "crm.appointment.availability",
+    group: "appointments",
+    label: "Check availability",
+    blurb: "Read genuinely open slots before offering any times.",
+    defaultName: "check_availability",
+    defaultDescription:
+      "Check which appointment slots are actually free on the calendar for a given date range, before offering the caller any times.",
     needsCalendar: true,
     needsTimeZone: true,
   },
   {
-    type: "gohighlevel.calendar.event.create",
+    type: "crm.appointment.book",
+    group: "appointments",
     label: "Book an appointment",
-    blurb: "Place a booking on the calendar for a known contact.",
+    blurb: "Place a booking for a contact at an agreed time.",
     defaultName: "book_appointment",
     defaultDescription:
-      "Book an appointment on the calendar for the caller at an agreed time.",
+      "Book an appointment on the calendar for this contact at a time you have already confirmed is available.",
     needsCalendar: true,
-    needsTimeZone: false,
   },
 ]
 
-/** Booking needs a contactId, so it cannot stand alone. */
+/** Booking needs a contact to book for, so it cannot stand alone. */
 export const BOOKING_PREREQUISITES: AgentToolType[] = [
-  "gohighlevel.contact.get",
-  "gohighlevel.contact.create",
+  "crm.contact.find",
+  "crm.contact.create",
 ]
 
 export const BOOKING_PREREQ_MESSAGE =
   "Booking needs to find or create the caller's contact first, so “Look up a contact” and “Create a contact” have to be on as well."
+
+const LOOKUP_REQUIRED_MESSAGE =
+  "Every CRM action needs a contact to act on, so “Look up a contact” has to be on as well."
 
 /* ── Validation shared by the schema and the live form ─────────────────── */
 
@@ -176,9 +371,20 @@ export function toolIssues(tools: AgentTool[]): ToolIssue[] {
   const issues: ToolIssue[] = []
   const has = (t: AgentToolType) => tools.some(x => x.type === t)
 
-  const bookingIndex = tools.findIndex(
-    t => t.type === "gohighlevel.calendar.event.create"
+  /*
+   * Availability is the one CRM action that reads the calendar rather than a
+   * contact, so it is the only one that can stand on its own.
+   */
+  const needsLookup = tools.findIndex(
+    t => isCrmTool(t) &&
+         t.type !== "crm.contact.find" &&
+         t.type !== "crm.appointment.availability"
   )
+  if (needsLookup !== -1 && !has("crm.contact.find")) {
+    issues.push({ path: [needsLookup], message: LOOKUP_REQUIRED_MESSAGE })
+  }
+
+  const bookingIndex = tools.findIndex(t => t.type === "crm.appointment.book")
   if (bookingIndex !== -1 && !BOOKING_PREREQUISITES.every(has)) {
     issues.push({ path: [bookingIndex], message: BOOKING_PREREQ_MESSAGE })
   }
@@ -198,7 +404,7 @@ export function toolIssues(tools: AgentTool[]): ToolIssue[] {
     // Integrations are singletons; only custom functions can repeat.
     if (tool.type !== "function") {
       if (seenType.has(tool.type)) {
-        issues.push({ path: [i, "type"], message: "That integration is already added." })
+        issues.push({ path: [i, "type"], message: "That action is already added." })
       }
       seenType.add(tool.type)
     }
@@ -209,14 +415,22 @@ export function toolIssues(tools: AgentTool[]): ToolIssue[] {
 
 /* ── Helpers for the builder ───────────────────────────────────────────── */
 
-export function defaultGhlTool(spec: GhlToolSpec): AgentTool {
+export function defaultCrmTool(spec: CrmToolSpec): AgentTool {
   const base = { name: spec.defaultName, description: spec.defaultDescription }
 
   switch (spec.type) {
-    case "gohighlevel.calendar.availability.check":
+    case "crm.appointment.availability":
       return { type: spec.type, ...base, calendarId: "", timeZone: "America/New_York" }
-    case "gohighlevel.calendar.event.create":
+    case "crm.appointment.book":
       return { type: spec.type, ...base, calendarId: "" }
+    case "crm.opportunity.create":
+    case "crm.opportunity.stage":
+      return { type: spec.type, ...base, pipelineId: "" }
+    case "crm.tag.add":
+    case "crm.tag.remove":
+      return { type: spec.type, ...base, tags: [] }
+    case "crm.contact.field.set":
+      return { type: spec.type, ...base, fields: [] }
     default:
       return { type: spec.type, ...base }
   }

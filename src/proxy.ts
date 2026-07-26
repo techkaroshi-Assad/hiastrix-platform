@@ -82,7 +82,12 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip static files and unauthenticated routes (webhooks, auth callback)
-    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Skip static files and machine-to-machine routes.
+    //
+    // api/tools is the CRM tool endpoint the voice provider calls mid-call. It
+    // carries no session, so proxying it would redirect the provider to the sign-in
+    // page and the caller would hear silence where an answer should be. It
+    // authenticates on the shared secret instead, in the route itself.
+    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|api/tools|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }

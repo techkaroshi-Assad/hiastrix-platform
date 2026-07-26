@@ -14,7 +14,7 @@
  */
 
 import { z } from "zod"
-import { AgentToolSchema, toolIssues, type AgentTool } from "./tools"
+import { AgentToolSchema, toolIssues, normaliseTools, type AgentTool } from "./tools"
 
 export type { AgentTool }
 
@@ -194,8 +194,24 @@ export const AgentConfigInputSchema = AgentConfigSchema.superRefine((cfg, ctx) =
 /** Partial patch — keeps "omitted" distinct from "explicitly default". */
 export const ConfigPatchSchema = AgentConfigSchema.partial()
 
-/** Parse whatever is in the DB column, falling back to defaults per field. */
+/**
+ * Parse whatever is in the DB column.
+ *
+ * Tools are normalised *before* the object is parsed, and that ordering is the
+ * whole point. A stored tool whose type we no longer recognise would otherwise
+ * fail the parse and send the entire config back to defaults — resetting the
+ * prompt, temperature, transcriber and twenty other unrelated fields on the next
+ * render, and persisting that loss on the next save. `normaliseTools` translates
+ * what it can and drops only the entry that is actually stale.
+ */
 export function readConfig(raw: unknown): AgentConfig {
-  const parsed = AgentConfigSchema.safeParse(raw ?? {})
+  const source: Record<string, unknown> =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? { ...(raw as Record<string, unknown>) }
+      : {}
+
+  if ("tools" in source) source.tools = normaliseTools(source.tools)
+
+  const parsed = AgentConfigSchema.safeParse(source)
   return parsed.success ? parsed.data : DEFAULT_CONFIG
 }

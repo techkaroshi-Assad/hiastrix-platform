@@ -13,16 +13,60 @@
 
 import { splitOption } from "./options"
 import { transcriberPayload } from "./catalog"
+import { crmToolParameters } from "@/lib/crm/tool-schema"
 import type { AgentConfig } from "./config"
 import type { AgentTool } from "./tools"
 
 /* ── Tools ─────────────────────────────────────────────────────────────── */
 
-/** One of our tools → one provider tool object. */
-function toolPayload(tool: AgentTool): Record<string, unknown> {
+const appUrl = () => process.env.APP_URL ?? "https://app.hiastrix.com"
+
+/**
+ * Where a CRM tool call is delivered, and the secret it must present.
+ *
+ * Every CRM tool points at the same endpoint; which action to run comes from the
+ * tool's name, and which tenant to run it for is resolved from the assistant —
+ * never from anything in the request body. Returns null when the secret is
+ * unset, in which case the tool is omitted rather than registered pointing at an
+ * endpoint that would reject it mid-call.
+ */
+function toolServer(): Record<string, unknown> | null {
+  const secret = process.env.VAPI_WEBHOOK_SECRET
+  if (!secret) return null
+  return {
+    url: `${appUrl()}/api/tools/crm`,
+    headers: { "x-vapi-secret": secret },
+  }
+}
+
+/**
+ * One of our tools → one provider tool object, or null when it cannot be
+ * registered safely.
+ */
+function toolPayload(tool: AgentTool): Record<string, unknown> | null {
   const fn: Record<string, unknown> = {
     name: tool.name,
     description: tool.description,
+  }
+
+  /*
+   * Every CRM action is an ordinary function tool pointing at our endpoint.
+   *
+   * It used to be the provider's own CRM tool type, which executed against a
+   * credential connected once at the organisation level — so every tenant's
+   * agent wrote into the same CRM account. Routing through our own endpoint is
+   * what makes the action tenant-scoped, because only we know which sub-account
+   * this assistant belongs to.
+   */
+  if (tool.type.startsWith("crm.")) {
+    const server = toolServer()
+    if (!server) return null
+
+    return {
+      type: "function",
+      function: { ...fn, parameters: crmToolParameters(tool) },
+      server,
+    }
   }
 
   switch (tool.type) {
@@ -65,23 +109,11 @@ function toolPayload(tool: AgentTool): Record<string, unknown> {
       }
     }
 
-    case "gohighlevel.contact.get":
-    case "gohighlevel.contact.create":
-      return { type: tool.type, function: fn }
-
-    case "gohighlevel.calendar.availability.check":
-      return {
-        type: tool.type,
-        function: fn,
-        metadata: { calendarId: tool.calendarId, timeZone: tool.timeZone },
-      }
-
-    case "gohighlevel.calendar.event.create":
-      return {
-        type: tool.type,
-        function: fn,
-        metadata: { calendarId: tool.calendarId },
-      }
+    // Every crm.* type is handled above; this arm is unreachable but keeps the
+    // switch exhaustive, so adding a tool type without a payload is a compile
+    // error rather than a tool that silently never registers.
+    default:
+      return null
   }
 }
 
@@ -96,7 +128,10 @@ const toolName = (t: Record<string, unknown>) =>
  * re-syncing upstream.
  */
 function toolsPayload(config: AgentConfig): Record<string, unknown>[] {
-  const structured = config.tools.map(toolPayload)
+  const structured = config.tools
+    .map(toolPayload)
+    .filter((t): t is Record<string, unknown> => t !== null)
+
   if (!config.toolsJson.trim()) return structured
 
   const taken = new Set(structured.map(toolName))
@@ -131,12 +166,11 @@ export type AgentCore = {
  * an assistant that posts to "undefined".
  */
 function serverBlock(): Record<string, unknown> | null {
-  const appUrl = process.env.APP_URL ?? "https://app.hiastrix.com"
   const secret = process.env.VAPI_WEBHOOK_SECRET
   if (!secret) return null
 
   return {
-    url: `${appUrl}/api/webhooks/vapi`,
+    url: `${appUrl()}/api/webhooks/vapi`,
     headers: { "x-vapi-secret": secret },
   }
 }

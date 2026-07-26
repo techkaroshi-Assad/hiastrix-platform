@@ -1,11 +1,13 @@
 "use client"
 
 /**
- * Operator controls for a single tenant: status, package, manual credit.
+ * Operator controls for a single tenant: status, package, manual credit, and
+ * which CRM sub-account their agents act on.
+ *
  * Every credit change requires a reason, which is written to the ledger.
  */
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Field, SubmitButton, ErrorNote, InfoNote } from "@/components/ui/field"
 import { Select, Toggle } from "@/components/ui/form"
@@ -29,18 +31,26 @@ const LABEL_PRESETS = [
   CUSTOM,
 ]
 
+type SubAccount = {
+  id: string
+  name: string
+  takenBy: { id: string; name: string } | null
+}
+
 export function TenantControls({
   tenantId,
   status,
   packageId,
   packages,
   balanceCents,
+  crmLocationId,
 }: {
   tenantId: string
   status: string
   packageId: string | null
   packages: Pkg[]
   balanceCents: number
+  crmLocationId: string | null
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -55,6 +65,18 @@ export function TenantControls({
   const [preset, setPreset] = useState(LABEL_PRESETS[0])
   const [label, setLabel] = useState(LABEL_PRESETS[0])
   const [activate, setActivate] = useState(false)
+
+  const [nextLocation, setNextLocation] = useState(crmLocationId ?? "")
+  const [crm, setCrm] = useState<{ connected: boolean; locations: SubAccount[] } | null>(null)
+
+  useEffect(() => {
+    let live = true
+    fetch("/api/admin/crm/locations")
+      .then(r => (r.ok ? r.json() : { connected: false, locations: [] }))
+      .then(data => { if (live) setCrm(data) })
+      .catch(() => { if (live) setCrm({ connected: false, locations: [] }) })
+    return () => { live = false }
+  }, [])
 
   async function send(payload: Record<string, unknown>, message: string) {
     setError(null)
@@ -139,6 +161,57 @@ export function TenantControls({
         >
           Apply changes
         </SubmitButton>
+      </div>
+
+      {/* CRM sub-account */}
+      <div className="space-y-4 border-t border-line pt-6">
+        <div>
+          <h4 className="text-[13px] font-semibold">CRM sub-account</h4>
+          <p className="mt-1 text-xs leading-relaxed text-subtle">
+            Which sub-account this tenant&rsquo;s agents read and write. Until one is
+            chosen, their agents decline every CRM action rather than guessing.
+          </p>
+        </div>
+
+        {crm && !crm.connected ? (
+          <p className="text-xs text-subtle">
+            No CRM is connected on this environment yet. Connect it from{" "}
+            <a href="/admin/settings" className="text-muted underline-offset-4 hover:text-fg hover:underline">
+              Settings
+            </a>
+            .
+          </p>
+        ) : (
+          <>
+            <Select
+              label="Sub-account"
+              value={nextLocation}
+              onChange={e => setNextLocation(e.target.value)}
+              placeholder={crm ? "Not linked" : "Loading…"}
+              disabled={!crm}
+              options={(crm?.locations ?? [])
+                .filter(l => !l.takenBy || l.id === crmLocationId)
+                .map(l => ({ value: l.id, label: l.name }))}
+              hint="Sub-accounts already assigned to another tenant are not listed."
+            />
+
+            <SubmitButton
+              type="button"
+              loading={busy}
+              disabled={nextLocation === (crmLocationId ?? "")}
+              sheen={false}
+              className="w-auto px-5"
+              onClick={() =>
+                send(
+                  { crmLocationId: nextLocation || null },
+                  nextLocation ? "CRM sub-account linked." : "CRM sub-account unlinked."
+                )
+              }
+            >
+              {nextLocation ? "Link sub-account" : "Unlink"}
+            </SubmitButton>
+          </>
+        )}
       </div>
 
       {/* Manual credit */}
