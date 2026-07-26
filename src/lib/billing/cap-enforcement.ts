@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma"
+import { prisma, type TransactionClient } from "@/lib/prisma"
 import { vapiAssistants } from "@/lib/vapi/client"
 
 /**
@@ -40,7 +40,7 @@ export async function processCallEnded(params: {
   }
 
   // Update tenant balance and usage in a transaction
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: TransactionClient) => {
     await tx.tenant.update({
       where: { id: tenantId },
       data: {

@@ -1,15 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
+import { AuthSplit, AuthLink } from "@/components/auth/auth-shell"
+import { Field, SubmitButton, ErrorNote } from "@/components/ui/field"
 
 export default function SignupPage() {
-  const [form, setForm] = useState({
-    name: "",
-    companyName: "",
-    email: "",
-    password: "",
-  })
+  const [form, setForm] = useState({ name: "", companyName: "", email: "", password: "" })
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [loading, setLoading] = useState(false)
@@ -21,7 +17,6 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
-    setSuccess("")
     setLoading(true)
 
     try {
@@ -37,7 +32,7 @@ export default function SignupPage() {
         return
       }
 
-      setSuccess(data.message)
+      setSuccess(data.message ?? "Check your inbox to confirm your email address.")
     } catch {
       setError("Something went wrong. Please try again.")
     } finally {
@@ -45,109 +40,96 @@ export default function SignupPage() {
     }
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-black px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-white">Hi-Astrix</h1>
-          <p className="mt-1 text-sm text-zinc-400">Create your account</p>
+  if (success) {
+    return (
+      <AuthSplit title="Check your inbox" subtitle={`We sent a confirmation link to ${form.email}`}>
+        <div className="rounded-card border border-white/[0.09] bg-white/[0.03] px-6 py-8 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-500/12 text-brand-300">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2.5" y="5" width="19" height="14" rx="3" />
+              <path d="m3 7 8.2 5.6a1.5 1.5 0 0 0 1.6 0L21 7" />
+            </svg>
+          </div>
+          <p className="mt-4 text-sm font-light leading-relaxed text-muted">{success}</p>
         </div>
 
-        {success ? (
-          <div className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-8 text-center">
-            <div className="mb-3 text-2xl">✉️</div>
-            <p className="text-sm text-zinc-300">{success}</p>
-            <Link
-              href="/login"
-              className="mt-5 block text-sm text-zinc-500 transition-colors hover:text-zinc-300"
-            >
-              Back to sign in
-            </Link>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm text-zinc-300">Full Name</label>
-              <input
-                type="text"
-                name="name"
-                required
-                minLength={2}
-                autoComplete="name"
-                value={form.name}
-                onChange={handleChange}
-                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-white placeholder-zinc-600 focus:border-zinc-600 focus:outline-none"
-                placeholder="John Smith"
-              />
-            </div>
+        <div className="mt-6 text-center text-[13px] text-subtle">
+          Already confirmed? <AuthLink href="/login">Sign in</AuthLink>
+        </div>
+      </AuthSplit>
+    )
+  }
 
-            <div>
-              <label className="mb-1.5 block text-sm text-zinc-300">Company Name</label>
-              <input
-                type="text"
-                name="companyName"
-                required
-                minLength={2}
-                autoComplete="organization"
-                value={form.companyName}
-                onChange={handleChange}
-                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-white placeholder-zinc-600 focus:border-zinc-600 focus:outline-none"
-                placeholder="Acme Corp"
-              />
-            </div>
+  return (
+    <AuthSplit
+      title="Create your account"
+      subtitle="Set up your workspace in under a minute"
+      footer={
+        <>
+          Already have an account? <AuthLink href="/login">Sign in</AuthLink>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field
+          label="Full name"
+          name="name"
+          required
+          minLength={2}
+          autoComplete="name"
+          placeholder="Jane Cooper"
+          value={form.name}
+          onChange={handleChange}
+        />
 
-            <div>
-              <label className="mb-1.5 block text-sm text-zinc-300">Work Email</label>
-              <input
-                type="email"
-                name="email"
-                required
-                autoComplete="email"
-                value={form.email}
-                onChange={handleChange}
-                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-white placeholder-zinc-600 focus:border-zinc-600 focus:outline-none"
-                placeholder="you@company.com"
-              />
-            </div>
+        <Field
+          label="Company"
+          name="companyName"
+          required
+          minLength={2}
+          autoComplete="organization"
+          placeholder="Acme Inc."
+          value={form.companyName}
+          onChange={handleChange}
+        />
 
-            <div>
-              <label className="mb-1.5 block text-sm text-zinc-300">Password</label>
-              <input
-                type="password"
-                name="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={form.password}
-                onChange={handleChange}
-                className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-white placeholder-zinc-600 focus:border-zinc-600 focus:outline-none"
-                placeholder="Min. 8 characters"
-              />
-            </div>
+        <Field
+          label="Work email"
+          name="email"
+          type="email"
+          required
+          autoComplete="email"
+          placeholder="jane@acme.com"
+          value={form.email}
+          onChange={handleChange}
+        />
 
-            {error && (
-              <p className="rounded-md bg-red-950 px-3 py-2 text-sm text-red-400">{error}</p>
-            )}
+        <Field
+          label="Password"
+          name="password"
+          type="password"
+          required
+          minLength={8}
+          autoComplete="new-password"
+          placeholder="At least 8 characters"
+          value={form.password}
+          onChange={handleChange}
+        />
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-md bg-white py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-100 disabled:opacity-50"
-            >
-              {loading ? "Creating account…" : "Create Account"}
-            </button>
-          </form>
-        )}
+        {error && <ErrorNote>{error}</ErrorNote>}
 
-        {!success && (
-          <p className="mt-6 text-center text-sm text-zinc-500">
-            Already have an account?{" "}
-            <Link href="/login" className="text-zinc-300 transition-colors hover:text-white">
-              Sign in
-            </Link>
-          </p>
-        )}
-      </div>
-    </div>
+        <div className="pt-1">
+          <SubmitButton type="submit" loading={loading}>
+            {loading ? "Creating account…" : "Create account"}
+          </SubmitButton>
+        </div>
+
+        <p className="pt-1 text-center text-[11.5px] font-light leading-relaxed text-subtle">
+          By creating an account you agree to our{" "}
+          <AuthLink href="/terms">Terms</AuthLink> and{" "}
+          <AuthLink href="/privacy">Privacy Policy</AuthLink>.
+        </p>
+      </form>
+    </AuthSplit>
   )
 }

@@ -39,3 +39,13 @@ export const prisma = new Proxy({} as PrismaClient, {
     return (getPrismaClient() as unknown as Record<string | symbol, unknown>)[prop]
   },
 })
+
+/**
+ * The client handed to an interactive `prisma.$transaction(async tx => …)`
+ * callback. Derived structurally rather than imported from the `Prisma`
+ * namespace, so it resolves whether or not `prisma generate` has run yet.
+ */
+export type TransactionClient = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>
