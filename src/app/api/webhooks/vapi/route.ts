@@ -15,6 +15,7 @@
 
 import { NextRequest } from "next/server"
 import { timingSafeEqual } from "node:crypto"
+import type { InputJsonValue } from "@prisma/client/runtime/client"
 import { prisma } from "@/lib/prisma"
 import { processCallEnded } from "@/lib/billing/cap-enforcement"
 
@@ -146,23 +147,26 @@ export async function POST(request: NextRequest) {
           (artifact.transcript as string | undefined) ??
           null
 
-        const messages =
-          (artifact.messages as unknown[] | undefined) ??
-          (message.messages as unknown[] | undefined) ??
-          null
+        // Typed as Prisma's own JSON input type. Anything looser (unknown[],
+        // Record<string, unknown>) is rejected by the generated client, since
+        // it cannot prove the value is JSON-serialisable.
+        const rawMessages = artifact.messages ?? message.messages
+        const messages: InputJsonValue | null = Array.isArray(rawMessages)
+          ? (rawMessages as InputJsonValue)
+          : null
 
         // Analysis is only present when the agent has analysisPlan enabled.
         const analysis = (message.analysis ?? {}) as Record<string, unknown>
         const summary = (analysis.summary as string | undefined) ?? null
         const endedReason = (message.endedReason as string | undefined) ?? null
 
-        const analysisPayload =
+        const analysisPayload: InputJsonValue | null =
           analysis.structuredData !== undefined ||
           analysis.successEvaluation !== undefined
-            ? {
-                structuredData:    analysis.structuredData ?? null,
-                successEvaluation: analysis.successEvaluation ?? null,
-              }
+            ? ({
+                structuredData:    (analysis.structuredData ?? null) as InputJsonValue | null,
+                successEvaluation: (analysis.successEvaluation ?? null) as InputJsonValue | null,
+              } as InputJsonValue)
             : null
 
         const status = mapStatus(endedReason ?? undefined)
