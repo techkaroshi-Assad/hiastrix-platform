@@ -34,10 +34,10 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
           id={fieldId}
           type={isPassword && reveal ? "text" : type}
           className={cn(
-            "h-11 w-full rounded-field bg-white/[0.035] px-3.5 text-sm text-fg",
-            "border border-white/10 placeholder:text-subtle",
+            "h-11 w-full rounded-field bg-field px-3.5 text-sm text-fg",
+            "border border-line-strong placeholder:text-subtle",
             "transition-[border-color,box-shadow] duration-200 outline-none",
-            "hover:border-white/[0.16]",
+            "hover:border-brand-400/45",
             "focus:border-brand-500/65 focus:shadow-[0_0_0_3.5px_rgba(124,92,255,0.16)]",
             "disabled:cursor-not-allowed disabled:opacity-50",
             isPassword && "pr-11",
@@ -105,7 +105,7 @@ export function SubmitButton({
       disabled={disabled || loading}
       className={cn(
         "relative flex h-11 w-full items-center justify-center gap-2 overflow-hidden",
-        "rounded-field text-[13.5px] font-semibold tracking-[-0.005em] text-white",
+        "rounded-field text-[13.5px] font-semibold tracking-[-0.005em] text-on-brand",
         "bg-linear-to-b from-brand-400 to-brand-600",
         "shadow-[0_1px_0_rgba(255,255,255,0.22)_inset,0_8px_22px_-6px_rgba(124,92,255,0.60)]",
         "transition-[transform,filter,opacity] duration-200",

@@ -21,12 +21,12 @@ export function Card({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]",
+        "overflow-hidden rounded-2xl border border-line bg-field-soft",
         className
       )}
     >
       {(title || action) && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
           {title && <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>}
           {action}
         </div>
@@ -55,7 +55,7 @@ export function TH({
     <th
       scope="col"
       className={cn(
-        "border-b border-white/[0.06] px-5 py-3 text-[11px] font-medium uppercase tracking-[0.1em] text-subtle",
+        "border-b border-line px-5 py-3 text-[11px] font-medium uppercase tracking-[0.1em] text-subtle",
         align === "right" && "text-right"
       )}
     >
@@ -78,7 +78,7 @@ export function TD({
   return (
     <td
       className={cn(
-        "border-b border-white/[0.04] px-5 py-3.5 text-[13px]",
+        "border-b border-line-soft px-5 py-3.5 text-[13px]",
         align === "right" && "text-right tabular-nums",
         muted && "text-muted",
         className
@@ -97,7 +97,7 @@ export function Pill({
   children: React.ReactNode
 }) {
   const tones = {
-    neutral: "bg-white/[0.06] text-subtle",
+    neutral: "bg-field-hover text-subtle",
     success: "bg-success/12 text-success",
     warning: "bg-warning/12 text-warning",
     danger:  "bg-danger/12 text-danger",

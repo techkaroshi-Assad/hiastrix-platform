@@ -10,7 +10,7 @@ import { useCallback } from "react"
 import { cn } from "@/lib/utils"
 
 const CONTROL =
-  "h-10 rounded-field border border-white/10 bg-white/[0.035] px-3 text-[13px] text-fg outline-none transition-colors hover:border-white/[0.16] focus:border-brand-500/65"
+  "h-10 rounded-field border border-line-strong bg-field px-3 text-[13px] text-fg outline-none transition-colors hover:border-line-strong focus:border-brand-500/65"
 
 export function CallFilters({
   agents,

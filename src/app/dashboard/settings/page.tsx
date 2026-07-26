@@ -5,26 +5,44 @@ import { tenantNav } from "@/lib/nav"
 import { AppShell } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill } from "@/components/app/table"
 import { dateOnly, titleCase } from "@/lib/format"
+import { emailConfigured } from "@/lib/email"
 import { CompanyForm, PasswordForm } from "./settings-client"
+import { InviteMember, InviteActions } from "./invite-member"
 
 export const metadata: Metadata = { title: "Settings" }
 export const dynamic = "force-dynamic"
 
+/** Structural subset — the generated row satisfies this. */
+type PendingInvite = {
+  id: string
+  name: string
+  email: string
+  createdAt: Date
+  expiresAt: Date
+}
+
 export default async function SettingsPage() {
   const { tenant, email, role } = await requireTenant()
 
-  const team = await prisma.tenantUser.findMany({
-    where: { tenantId: tenant.id },
-    orderBy: [{ type: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      type: true,
-      isActive: true,
-      createdAt: true,
-    },
-  })
+  const [team, invitations] = await Promise.all([
+    prisma.tenantUser.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: [{ type: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        type: true,
+        isActive: true,
+        createdAt: true,
+      },
+    }),
+    prisma.tenantInvitation.findMany({
+      where:   { tenantId: tenant.id, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+      select:  { id: true, email: true, name: true, expiresAt: true, createdAt: true },
+    }),
+  ])
 
   const statusTone =
     tenant.status === "ACTIVE"
@@ -67,7 +85,7 @@ export default async function SettingsPage() {
             </thead>
             <tbody>
               {team.map(member => (
-                <tr key={member.id} className="transition-colors hover:bg-white/[0.02]">
+                <tr key={member.id} className="transition-colors hover:bg-field-soft">
                   <TD className="font-medium">{member.name}</TD>
                   <TD muted>{member.email}</TD>
                   <TD muted>
@@ -85,12 +103,42 @@ export default async function SettingsPage() {
               ))}
             </tbody>
           </Table>
-          <p className="border-t border-white/[0.06] px-5 py-4 text-[12.5px] text-subtle">
-            Account managers are added by the Hi-Astrix team. Contact support if you
-            need someone added or removed.
-          </p>
+          {role === "OWNER" && <InviteMember />}
         </Card>
       </div>
+
+      {/* Only shown when there is something outstanding — an empty "pending"
+          table on every visit is noise. */}
+      {role === "OWNER" && invitations.length > 0 && (
+        <div className="mt-5">
+          <Card title={`${invitations.length} pending invitation${invitations.length === 1 ? "" : "s"}`}>
+            <Table>
+              <thead>
+                <tr>
+                  <TH>Name</TH>
+                  <TH>Email</TH>
+                  <TH>Invited</TH>
+                  <TH>Expires</TH>
+                  <TH align="right">Actions</TH>
+                </tr>
+              </thead>
+              <tbody>
+                {invitations.map((invite: PendingInvite) => (
+                  <tr key={invite.id} className="transition-colors hover:bg-field-soft">
+                    <TD className="font-medium">{invite.name}</TD>
+                    <TD muted>{invite.email}</TD>
+                    <TD muted>{dateOnly(invite.createdAt)}</TD>
+                    <TD muted>{dateOnly(invite.expiresAt)}</TD>
+                    <TD align="right">
+                      <InviteActions id={invite.id} canResend={emailConfigured()} />
+                    </TD>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </Card>
+        </div>
+      )}
     </AppShell>
   )
 }

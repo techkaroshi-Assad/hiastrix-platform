@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────
-   Hi-Astrix  ·  Design Token System  v1.1
+   Hi-Astrix  ·  Design Token System  v2.0
 
    CASCADE NOTE — read before editing.
 
@@ -16,41 +16,98 @@
 
    Therefore: everything below lives in an explicit layer. Never add a
    top-level rule to this file.
+
+   THEMING NOTE.
+
+   Raw values live in two blocks — dark and light — and are bound to Tailwind
+   once, in `@theme inline`, via var() indirection. Flipping `data-theme` on
+   <html> re-resolves every colour utility at runtime with no class swapping.
+
+   Every token MUST exist in BOTH blocks. A token defined in only one falls
+   through to *undefined* in the other, not to a sensible default, and the
+   element renders transparent or black.
    ───────────────────────────────────────────────────────────── */
 
-:root {
+/* ── Dark (default) ───────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
   /* Surfaces */
   --bg:        #07070A;
   --surface:   #0D0D14;
   --panel:     #111118;
   --card:      #16161F;
   --raised:    #1C1C29;
+  --ink-2:     #0D0D14;
 
-  /* Borders */
-  --border:    rgba(255,255,255,0.065);
-  --border-hi: rgba(255,255,255,0.115);
+  /* Hairlines and control fills.
+     These replace the bg-white/[0.0x] and border-white/[0.0x] utilities that
+     used to be written directly into components — those bake in a white
+     overlay, which on a light background is invisible. */
+  --line-soft:   rgba(255,255,255,0.04);
+  --line:        rgba(255,255,255,0.07);
+  --line-strong: rgba(255,255,255,0.16);
+  --field-soft:  rgba(255,255,255,0.02);
+  --field:       rgba(255,255,255,0.04);
+  --field-hover: rgba(255,255,255,0.07);
+  --scrim:       rgba(0,0,0,0.60);
 
-  /* Text */
+  /* Switch. The off-track has to clear 3:1 against the page on its own —
+     WCAG 1.4.11 treats a control's boundary as non-text contrast, and a
+     toggle nobody can see is a toggle nobody flips. */
+  --toggle-off:  rgba(255,255,255,0.36);
+  --knob:        #F0EEFF;
+
+  /* Text.
+     --fg-3 was #555278, which measures 2.74:1 against the page — below the 3:1
+     floor for incidental text, and it carries every form hint and table label
+     in the app. Lightened to clear it. */
   --fg:        #F0EEFF;
   --fg-2:      #9B97C0;
-  --fg-3:      #555278;
+  --fg-3:      #6E6A93;
 
-  /* Brand violet (full scale) */
+  /* Brand */
   --brand-200: #DDD6FE;
   --brand-300: #A78BFA;
   --brand-400: #8B5CF6;
   --brand-500: #7C3AED;
   --brand-600: #6D28D9;
   --brand-700: #5B21B6;
-  --brand:     #7C3AED;
-  --brand-mid: #8B5CF6;
-  --brand-hi:  #A78BFA;
-  --brand-dim: rgba(124,58,237,0.15);
+  --on-brand:  #FFFFFF;
 
   /* Status */
   --danger:   #EF4444;
   --warning:  #F59E0B;
   --success:  #22C55E;
+
+  /* Brand mark (SVG paint) */
+  --mark-hi:       #A78BFA;
+  --mark-mid:      #7C3AED;
+  --mark-lo:       #5B21B6;
+  --mark-dot:      #C4B5FD;
+  --mark-knockout: #07070A;
+
+  /* Glass */
+  --glass-bg:   rgba(13,13,20,0.70);
+  --glass-line: rgba(255,255,255,0.09);
+
+  /* Background effects — the auth canvases and page washes */
+  --veil:      rgba(7,7,10,0.58);
+  --veil-deep: rgba(7,7,10,0.82);
+  --veil-mid:  rgba(18,10,38,0.55);
+  --glow:      rgba(124,58,237,0.10);
+  --mesh-node: rgba(167,139,250,0.50);
+  --mesh-link: rgba(196,181,253,0.38);
+  --mesh-spark: rgba(196,181,253,0.85);
+
+  /* Charts */
+  --chart-1:     #A78BFA;
+  --chart-2:     #7C3AED;
+  --chart-3:     #5B21B6;
+  --chart-4:     #DDD6FE;
+  --chart-5:     #555278;
+  --chart-track: rgba(255,255,255,0.07);
 
   /* Aliases */
   --ink:    var(--bg);
@@ -58,13 +115,85 @@
   --subtle: var(--fg-3);
 }
 
-/* Tailwind token map — these generate real utilities
-   (bg-ink, text-muted, rounded-card, …), so they do not need
-   to be hand-written further down. */
+/* ── Light ────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:        #FBFAFF;
+  --surface:   #FFFFFF;
+  --panel:     #FFFFFF;
+  --card:      #FFFFFF;
+  --raised:    #F4F2FB;
+  --ink-2:     #F4F2FB;
+
+  /* Dark overlays, not white — the inverse of the dark set. */
+  --line-soft:   rgba(20,18,28,0.05);
+  --line:        rgba(20,18,28,0.10);
+  --line-strong: rgba(20,18,28,0.17);
+  --field-soft:  rgba(20,18,28,0.02);
+  --field:       rgba(20,18,28,0.035);
+  --field-hover: rgba(20,18,28,0.06);
+  --scrim:       rgba(20,18,28,0.45);
+
+  /* Solid, not an alpha of near-black: a translucent grey over a white page
+     lands around 2:1 and the switch reads as decoration. */
+  --toggle-off:  #8F8AA8;
+  --knob:        #FFFFFF;
+
+  --fg:        #14121C;
+  --fg-2:      #565270;
+  --fg-3:      #8A8699;
+
+  /* Brand shifted one step deeper: #7C3AED on white is 4.1:1, which fails
+     WCAG AA for body text. #6A45F5 clears it. */
+  --brand-200: #C4B5FD;
+  --brand-300: #7C5CFF;
+  --brand-400: #6A45F5;
+  --brand-500: #5B21B6;
+  --brand-600: #4C1D95;
+  --brand-700: #3B1670;
+  --on-brand:  #FFFFFF;
+
+  --danger:   #DC2626;
+  --warning:  #B45309;
+  --success:  #059669;
+
+  --mark-hi:       #8B6DFF;
+  --mark-mid:      #6A45F5;
+  --mark-lo:       #4C2FD8;
+  --mark-dot:      #6A45F5;
+  --mark-knockout: #FFFFFF;
+
+  --glass-bg:   rgba(255,255,255,0.78);
+  --glass-line: rgba(255,255,255,0.95);
+
+  --veil:      rgba(251,250,255,0.62);
+  --veil-deep: rgba(251,250,255,0.86);
+  --veil-mid:  rgba(237,233,254,0.60);
+  --glow:      rgba(124,92,255,0.10);
+  --mesh-node: rgba(106,69,245,0.42);
+  --mesh-link: rgba(124,92,255,0.28);
+  --mesh-spark: rgba(91,33,182,0.70);
+
+  --chart-1:     #6A45F5;
+  --chart-2:     #8B6DFF;
+  --chart-3:     #4C2FD8;
+  --chart-4:     #C4B5FD;
+  --chart-5:     #8A8699;
+  --chart-track: rgba(20,18,28,0.08);
+
+  --ink:    var(--bg);
+  --muted:  var(--fg-2);
+  --subtle: var(--fg-3);
+}
+
+/* Tailwind token map — binds to var(), never to a literal, so the whole
+   palette re-resolves when data-theme flips. */
 @theme inline {
   --color-background: var(--bg);
   --color-foreground: var(--fg);
   --color-ink:        var(--bg);
+  --color-ink-2:      var(--ink-2);
   --color-surface:    var(--surface);
   --color-panel:      var(--panel);
   --color-card:       var(--card);
@@ -75,6 +204,26 @@
   --color-danger:     var(--danger);
   --color-warning:    var(--warning);
   --color-success:    var(--success);
+  --color-on-brand:   var(--on-brand);
+
+  /* Semantic surfaces and hairlines */
+  --color-line-soft:   var(--line-soft);
+  --color-line:        var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-field-soft:  var(--field-soft);
+  --color-field:       var(--field);
+  --color-field-hover: var(--field-hover);
+  --color-scrim:       var(--scrim);
+  --color-toggle-off:  var(--toggle-off);
+  --color-knob:        var(--knob);
+
+  /* Charts */
+  --color-chart-1:     var(--chart-1);
+  --color-chart-2:     var(--chart-2);
+  --color-chart-3:     var(--chart-3);
+  --color-chart-4:     var(--chart-4);
+  --color-chart-5:     var(--chart-5);
+  --color-chart-track: var(--chart-track);
 
   --font-sans: var(--font-inter);
   --font-mono: var(--font-jetbrains-mono);
@@ -86,15 +235,11 @@
 
   /* Brand scale */
   --color-brand-200:  var(--brand-200);
-  --color-brand-300:  var(--brand-hi);
-  --color-brand-400:  var(--brand-mid);
-  --color-brand-500:  var(--brand);
+  --color-brand-300:  var(--brand-300);
+  --color-brand-400:  var(--brand-400);
+  --color-brand-500:  var(--brand-500);
   --color-brand-600:  var(--brand-600);
   --color-brand-700:  var(--brand-700);
-
-  /* Ink tints */
-  --ink-2:       #0D0D14;
-  --color-ink-2: var(--ink-2);
 }
 
 /* ── Base ─────────────────────────────────────────────────────
@@ -108,18 +253,6 @@
 
   html {
     scroll-behavior: smooth;
-    /* Tells the browser to render native controls with a dark palette.
-       Without this, a <select>'s dropdown list, date pickers and number
-       spinners are drawn by the OS in light mode — which rendered our white
-       option text on a white background, i.e. invisible. */
-    color-scheme: dark;
-  }
-
-  /* Belt and braces: some browsers ignore color-scheme for <option>. */
-  select option,
-  select optgroup {
-    background-color: #16161F;
-    color: #F0EEFF;
   }
 
   body {
@@ -130,6 +263,27 @@
     -moz-osx-font-smoothing: grayscale;
     /* Nothing should ever push the document sideways. */
     overflow-x: hidden;
+    /* Cross-fade rather than snap when the theme changes. */
+    transition: background-color 0.35s ease, color 0.35s ease;
+  }
+
+  /* Native controls draw their dropdown from the OS palette. Without an
+     explicit pair here, some browsers ignore color-scheme for <option> and
+     render our light text on their white background — invisible. */
+  select option,
+  select optgroup {
+    background-color: var(--card);
+    color: var(--fg);
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--brand-500) 32%, transparent);
+    color: var(--fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand-400);
+    outline-offset: 2px;
   }
 }
 
@@ -138,10 +292,10 @@
    one of these (e.g. `hover:text-fg` beats `.text-muted`). */
 @layer components {
   .glass {
-    background: rgba(13,13,20,0.70);
+    background: var(--glass-bg);
     backdrop-filter: blur(28px) saturate(1.35);
     -webkit-backdrop-filter: blur(28px) saturate(1.35);
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-line);
   }
 
   .rounded-sm-card {
@@ -149,7 +303,13 @@
   }
 
   .text-gradient-brand {
-    background: linear-gradient(135deg, #C4B5FD 0%, #A78BFA 30%, #7C3AED 65%, #5B21B6 100%);
+    background: linear-gradient(
+      135deg,
+      var(--brand-200) 0%,
+      var(--brand-300) 30%,
+      var(--brand-500) 65%,
+      var(--brand-700) 100%
+    );
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -158,6 +318,34 @@
   .grain {
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
     background-size: 200px;
+  }
+
+  /* Page washes. These were inline style={{ background }} in components and
+     hardcoded rgba(7,7,10,…) — a black smear on a light background. */
+  .wash-centre {
+    background: radial-gradient(
+      58% 52% at 50% 50%,
+      var(--veil),
+      color-mix(in srgb, var(--veil) 30%, transparent) 70%,
+      transparent
+    );
+  }
+
+  .wash-panel {
+    background: linear-gradient(
+      140deg,
+      var(--veil-deep) 0%,
+      var(--veil-mid) 55%,
+      var(--veil-deep) 100%
+    );
+  }
+
+  .wash-glow {
+    background: radial-gradient(62% 48% at 52% 40%, var(--glow), transparent 72%);
+  }
+
+  .wash-glow-top {
+    background: radial-gradient(50% 60% at 50% 0%, var(--glow), transparent 70%);
   }
 }
 

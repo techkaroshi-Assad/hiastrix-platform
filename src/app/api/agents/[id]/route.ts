@@ -8,25 +8,14 @@
  */
 
 import { NextRequest } from "next/server"
-import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { getTenantContext } from "@/lib/tenant"
 import { vapiAssistants } from "@/lib/vapi/client"
-import { AgentConfigSchema, readConfig } from "@/lib/vapi/config"
+import { AgentConfigInputSchema, readConfig } from "@/lib/vapi/config"
+import { AgentPatchSchema, firstIssue } from "@/lib/vapi/agent"
 import { buildAssistantPayload } from "@/lib/vapi/payload"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
-const UpdateSchema = z.object({
-  name:                 z.string().min(2).max(60).optional(),
-  systemPrompt:         z.string().min(10).max(8000).optional(),
-  firstMessage:         z.string().min(1).max(1000).optional(),
-  voice:                z.string().min(1).optional(),
-  model:                z.string().min(1).optional(),
-  recordingEnabled:     z.boolean().optional(),
-  transcriptionEnabled: z.boolean().optional(),
-  config:               AgentConfigSchema.optional(),
-  status:               z.enum(["ACTIVE", "INACTIVE"]).optional(),
-})
 
 async function loadOwnedAgent(id: string) {
   const ctx = await getTenantContext()
@@ -50,21 +39,26 @@ export async function PATCH(
     if ("error" in found) return found.error
     const { agent } = found
 
-    const parsed = UpdateSchema.safeParse(await request.json())
-    if (!parsed.success) {
-      return apiError(
-        parsed.error.issues[0]?.message ?? "Please check the agent details and try again."
-      )
-    }
+    const parsed = AgentPatchSchema.safeParse(await request.json())
+    if (!parsed.success) return apiError(firstIssue(parsed.error))
 
     const patch = parsed.data
 
     // A status-only request is the enable/disable toggle.
     const isToggleOnly = Object.keys(patch).length === 1 && patch.status !== undefined
 
-    // Merge over the stored record so a partial edit never blanks a field the
-    // form did not send.
-    const nextConfig = patch.config ?? readConfig(agent.config)
+    // Merge, never replace.
+    //
+    // A partial `config` in the body used to reset every omitted key to its
+    // default, because zod fills defaults on parse. Harmless while only the
+    // full form posted; a live footgun the moment a JSON editor lets someone
+    // delete a line. ConfigPatchSchema keeps "omitted" distinct from
+    // "explicitly default", so we merge onto the stored value and validate the
+    // result — cross-tool rules included.
+    const storedConfig = readConfig(agent.config)
+    const nextConfig = AgentConfigInputSchema.parse(
+      patch.config ? { ...storedConfig, ...patch.config } : storedConfig
+    )
 
     try {
       if (isToggleOnly) {
@@ -102,7 +96,8 @@ export async function PATCH(
         recordingEnabled:     patch.recordingEnabled,
         transcriptionEnabled: patch.transcriptionEnabled,
         status:               patch.status,
-        ...(patch.config ? { config: patch.config } : {}),
+        // The merged value, not the raw patch — that is the whole point.
+        ...(patch.config ? { config: nextConfig } : {}),
       },
       select: { id: true, status: true },
     })

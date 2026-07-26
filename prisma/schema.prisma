@@ -54,6 +54,7 @@ model Tenant {
   calls              Call[]
   creditLedger       CreditLedger[]
   payments           Payment[]
+  invitations        TenantInvitation[]
 
   @@map("tenants")
 }
@@ -89,6 +90,37 @@ enum TenantUserType {
   ACCOUNT_MANAGER
 
   @@map("tenant_user_type")
+}
+
+// ─── INVITATIONS ──────────────────────────────────────────────────────────────
+// Owners inviting their own staff. Accepting produces a normal TenantUser row.
+
+model TenantInvitation {
+  id         String           @id @default(uuid()) @db.Uuid
+  tenantId   String           @map("tenant_id") @db.Uuid
+  email      String
+  name       String
+  type       TenantUserType   @default(ACCOUNT_MANAGER)
+  /// sha256 of the invite token. The token itself is never stored.
+  tokenHash  String           @unique @map("token_hash")
+  invitedBy  String?          @map("invited_by")
+  status     InvitationStatus @default(PENDING)
+  expiresAt  DateTime         @map("expires_at") @db.Timestamptz(6)
+  acceptedAt DateTime?        @map("accepted_at") @db.Timestamptz(6)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_invitations")
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+
+  @@map("invitation_status")
 }
 
 // ─── ADMIN USERS ─────────────────────────────────────────────────────────────

@@ -14,14 +14,18 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { useTheme } from "@/components/theme/theme-provider"
+import { readCanvasPalette, rgba } from "@/lib/canvas-palette"
 
 /* ── Neural Mesh ──────────────────────────────────────────── */
 
 export function NeuralMeshCanvas({ className }: { className?: string }) {
+  const { resolved } = useTheme()
   const cvs   = useRef<HTMLCanvasElement>(null)
   const mouse = useRef({ x: -9999, y: -9999 })
 
   useEffect(() => {
+    const P = readCanvasPalette()
     const canvas = cvs.current
     if (!canvas) return
     const ctx = canvas.getContext("2d")!
@@ -115,8 +119,8 @@ export function NeuralMeshCanvas({ className }: { className?: string }) {
           const a     = (1 - d / THRESH) * 0.26 * boost
 
           const g = ctx.createLinearGradient(pts[i].x, pts[i].y, pts[j].x, pts[j].y)
-          g.addColorStop(0, `rgba(167,139,250,${a})`)
-          g.addColorStop(1, `rgba(124,58,237,${a * 0.7})`)
+          g.addColorStop(0, rgba(P.node, a))
+          g.addColorStop(1, rgba(P.node, a * 0.7))
 
           ctx.beginPath()
           ctx.moveTo(pts[i].x, pts[i].y)
@@ -136,8 +140,8 @@ export function NeuralMeshCanvas({ className }: { className?: string }) {
 
         // Halo
         const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 4.2)
-        g.addColorStop(0, `rgba(139,92,246,${0.18 * twinkle * mb})`)
-        g.addColorStop(1, "rgba(139,92,246,0)")
+        g.addColorStop(0, rgba(P.node, 0.18 * twinkle * mb))
+        g.addColorStop(1, rgba(P.node, 0))
         ctx.fillStyle = g
         ctx.beginPath()
         ctx.arc(p.x, p.y, r * 4.2, 0, Math.PI * 2)
@@ -146,15 +150,15 @@ export function NeuralMeshCanvas({ className }: { className?: string }) {
         // Core dot
         ctx.beginPath()
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(167,139,250,${0.55 + 0.38 * twinkle})`
+        ctx.fillStyle = rgba(P.node, 0.55 + 0.38 * twinkle)
         ctx.fill()
       }
 
       // Mouse cursor glow
       if (mx > 0 && mx < W && my > 0 && my < H) {
         const g = ctx.createRadialGradient(mx, my, 0, mx, my, 60)
-        g.addColorStop(0, "rgba(167,139,250,0.10)")
-        g.addColorStop(1, "rgba(124,58,237,0)")
+        g.addColorStop(0, rgba(P.node, 0.10))
+        g.addColorStop(1, rgba(P.node, 0))
         ctx.fillStyle = g
         ctx.beginPath()
         ctx.arc(mx, my, 60, 0, Math.PI * 2)
@@ -172,7 +176,9 @@ export function NeuralMeshCanvas({ className }: { className?: string }) {
       canvas.removeEventListener("mousemove", onMove)
       canvas.removeEventListener("mouseleave", onLeave)
     }
-  }, [])
+    // `resolved` in deps: the canvas must repaint when the theme flips,
+    // since these colours were sampled from CSS at setup time.
+  }, [resolved])
 
   return (
     <canvas
@@ -186,10 +192,12 @@ export function NeuralMeshCanvas({ className }: { className?: string }) {
 /* ── Magnetic Field ───────────────────────────────────────── */
 
 export function MagneticFieldCanvas({ className }: { className?: string }) {
+  const { resolved } = useTheme()
   const cvs   = useRef<HTMLCanvasElement>(null)
   const mouse = useRef({ x: -9999, y: -9999, active: false })
 
   useEffect(() => {
+    const P = readCanvasPalette()
     const canvas = cvs.current
     if (!canvas) return
     const ctx = canvas.getContext("2d")!
@@ -300,9 +308,9 @@ export function MagneticFieldCanvas({ className }: { className?: string }) {
             path[0][0], path[0][1],
             path[path.length - 1][0], path[path.length - 1][1]
           )
-          g.addColorStop(0,   "rgba(167,139,250,0.50)")
-          g.addColorStop(0.45,"rgba(124,58,237,0.28)")
-          g.addColorStop(1,   "rgba(91,33,182,0.04)")
+          g.addColorStop(0,   rgba(P.node, 0.50))
+          g.addColorStop(0.45,rgba(P.node, 0.28))
+          g.addColorStop(1,   rgba(P.deep, 0.04))
 
           ctx.beginPath()
           ctx.moveTo(path[0][0], path[0][1])
@@ -333,7 +341,7 @@ export function MagneticFieldCanvas({ className }: { className?: string }) {
           ctx.beginPath()
           ctx.moveTo(path[0][0], path[0][1])
           for (let k = 1; k < path.length; k++) ctx.lineTo(path[k][0], path[k][1])
-          ctx.strokeStyle = "rgba(196,181,253,0.38)"
+          ctx.strokeStyle = rgba(P.link, 0.38)
           ctx.lineWidth   = 0.7
           ctx.stroke()
         }
@@ -347,12 +355,12 @@ export function MagneticFieldCanvas({ className }: { className?: string }) {
 
         const g = ctx.createRadialGradient(x, y, 0, x, y, r)
         if (isPos) {
-          g.addColorStop(0,   "rgba(167,139,250,0.62)")
-          g.addColorStop(0.42,"rgba(124,58,237,0.30)")
-          g.addColorStop(1,   "rgba(91,33,182,0)")
+          g.addColorStop(0,   rgba(P.node, 0.62))
+          g.addColorStop(0.42,rgba(P.node, 0.30))
+          g.addColorStop(1,   rgba(P.deep, 0))
         } else {
-          g.addColorStop(0, "rgba(196,181,253,0.42)")
-          g.addColorStop(1, "rgba(124,58,237,0)")
+          g.addColorStop(0, rgba(P.link, 0.42))
+          g.addColorStop(1, rgba(P.node, 0))
         }
         ctx.fillStyle = g
         ctx.beginPath()
@@ -363,7 +371,7 @@ export function MagneticFieldCanvas({ className }: { className?: string }) {
         if (isPos) {
           ctx.beginPath()
           ctx.arc(x, y, r * 0.52, 0, Math.PI * 2)
-          ctx.strokeStyle = "rgba(167,139,250,0.22)"
+          ctx.strokeStyle = rgba(P.node, 0.22)
           ctx.lineWidth   = 1
           ctx.stroke()
         }
@@ -371,15 +379,15 @@ export function MagneticFieldCanvas({ className }: { className?: string }) {
         // Core dot
         ctx.beginPath()
         ctx.arc(x, y, isPos ? 5 : 3.5, 0, Math.PI * 2)
-        ctx.fillStyle = isPos ? "#A78BFA" : "#C4B5FD"
+        ctx.fillStyle = isPos ? rgba(P.node, 1) : rgba(P.link, 1)
         ctx.fill()
       }
 
       // Mouse cursor indicator
       if (mActive && mx > 0 && mx < W && my > 0 && my < H) {
         const g = ctx.createRadialGradient(mx, my, 0, mx, my, 22)
-        g.addColorStop(0, "rgba(196,181,253,0.38)")
-        g.addColorStop(1, "rgba(167,139,250,0)")
+        g.addColorStop(0, rgba(P.link, 0.38))
+        g.addColorStop(1, rgba(P.node, 0))
         ctx.fillStyle = g
         ctx.beginPath()
         ctx.arc(mx, my, 22, 0, Math.PI * 2)
@@ -387,7 +395,7 @@ export function MagneticFieldCanvas({ className }: { className?: string }) {
 
         ctx.beginPath()
         ctx.arc(mx, my, 3.5, 0, Math.PI * 2)
-        ctx.fillStyle = "rgba(196,181,253,0.85)"
+        ctx.fillStyle = rgba(P.spark, 0.85)
         ctx.fill()
       }
 
@@ -402,7 +410,9 @@ export function MagneticFieldCanvas({ className }: { className?: string }) {
       canvas.removeEventListener("mousemove", onMove)
       canvas.removeEventListener("mouseleave", onLeave)
     }
-  }, [])
+    // `resolved` in deps: the canvas must repaint when the theme flips,
+    // since these colours were sampled from CSS at setup time.
+  }, [resolved])
 
   return (
     <canvas

@@ -95,7 +95,7 @@ export default function UpdatePasswordPage() {
                     key={i}
                     className={cn(
                       "h-1 flex-1 rounded-full transition-colors duration-300",
-                      i <= score ? STRENGTH[score].color : "bg-white/10"
+                      i <= score ? STRENGTH[score].color : "bg-chart-track"
                     )}
                   />
                 ))}

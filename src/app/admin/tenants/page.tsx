@@ -47,7 +47,7 @@ export default async function AdminTenantsPage() {
               <EmptyRow colSpan={8}>No tenants yet.</EmptyRow>
             ) : (
               tenants.map(t => (
-                <tr key={t.id} className="transition-colors hover:bg-white/[0.02]">
+                <tr key={t.id} className="transition-colors hover:bg-field-soft">
                   <TD>
                     <Link
                       href={`/admin/tenants/${t.id}`}

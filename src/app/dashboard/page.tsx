@@ -78,7 +78,7 @@ export default async function DashboardPage() {
 
       {/* Usage against the package cap */}
       {cap > 0 && (
-        <section className="mt-6 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+        <section className="mt-6 rounded-2xl border border-line bg-field-soft p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-[15px] font-semibold tracking-[-0.01em]">
               {tenant.package?.name ?? "Package"} usage
@@ -89,7 +89,7 @@ export default async function DashboardPage() {
           </div>
 
           <div
-            className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/[0.07]"
+            className="mt-3 h-2 w-full overflow-hidden rounded-full bg-field-hover"
             role="progressbar"
             aria-valuenow={pct}
             aria-valuemin={0}
@@ -130,15 +130,15 @@ export default async function DashboardPage() {
             action={
               <Link
                 href="/dashboard/agents"
-                className="inline-flex h-10 items-center rounded-field border border-white/[0.12] bg-white/[0.04] px-5 text-[13px] font-medium text-fg transition-colors hover:border-white/20 hover:bg-white/[0.07]"
+                className="inline-flex h-10 items-center rounded-field border border-line-strong bg-field px-5 text-[13px] font-medium text-fg transition-colors hover:border-line-strong hover:bg-field-hover"
               >
                 {activeAgents === 0 ? "Create an agent" : "Go to agents"}
               </Link>
             }
           />
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
-            <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+          <div className="overflow-hidden rounded-2xl border border-line bg-field-soft">
+            <div className="flex items-center justify-between border-b border-line px-5 py-4">
               <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Recent calls</h2>
               <Link
                 href="/dashboard/calls"
@@ -151,7 +151,7 @@ export default async function DashboardPage() {
               {recentCalls.map(call => (
                 <li
                   key={call.id}
-                  className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.04] px-5 py-3.5 last:border-b-0"
+                  className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-5 py-3.5 last:border-b-0"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-[13.5px] font-medium">

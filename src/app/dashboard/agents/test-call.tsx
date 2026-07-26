@@ -238,7 +238,7 @@ export function TestCallPanel({
             )}
 
             {transcript.length > 0 && (
-              <div className="max-h-[280px] space-y-1.5 overflow-y-auto rounded-field border border-white/[0.08] bg-white/[0.02] p-3.5">
+              <div className="max-h-[280px] space-y-1.5 overflow-y-auto rounded-field border border-line bg-field-soft p-3.5">
                 {transcript.map((line, i) => (
                   <p key={i} className="text-[12.5px] leading-relaxed text-muted">
                     {line}

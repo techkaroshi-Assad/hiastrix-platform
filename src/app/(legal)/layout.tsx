@@ -4,7 +4,7 @@ import { Logo } from "@/components/brand/logo"
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-ink">
-      <header className="border-b border-white/[0.07] px-6 py-5">
+      <header className="border-b border-line px-6 py-5">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
           <Link href="/">
             <Logo size={26} />
@@ -33,7 +33,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
         </article>
       </main>
 
-      <footer className="border-t border-white/[0.07] px-6 py-8">
+      <footer className="border-t border-line px-6 py-8">
         <div className="mx-auto flex max-w-3xl items-center justify-between text-[12px] text-subtle">
           <span>© {new Date().getFullYear()} Hi-Astrix</span>
           <span className="flex gap-5">

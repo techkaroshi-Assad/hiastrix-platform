@@ -12,11 +12,11 @@ import { forwardRef, useId, useState } from "react"
 import { cn } from "@/lib/utils"
 
 const CONTROL = [
-  "w-full rounded-field bg-white/[0.035] text-sm text-fg",
-  "border border-white/10 placeholder:text-subtle",
+  "w-full rounded-field bg-field text-sm text-fg",
+  "border border-line placeholder:text-subtle",
   "transition-[border-color,box-shadow] duration-200 outline-none",
-  "hover:border-white/[0.16]",
-  "focus:border-brand-500/65 focus:shadow-[0_0_0_3.5px_rgba(124,92,255,0.16)]",
+  "hover:border-line-strong",
+  "focus:border-brand-400 focus:shadow-[0_0_0_3.5px] focus:shadow-brand-400/20",
   "disabled:cursor-not-allowed disabled:opacity-50",
 ].join(" ")
 
@@ -141,7 +141,7 @@ export function Toggle({
       onClick={() => onChange(!checked)}
       className={cn(
         "flex w-full items-start justify-between gap-4 rounded-field border px-3.5 py-3 text-left transition-colors",
-        "border-white/10 hover:border-white/[0.16]",
+        "border-line hover:border-line-strong",
         "disabled:cursor-not-allowed disabled:opacity-50"
       )}
     >
@@ -155,12 +155,12 @@ export function Toggle({
         aria-hidden="true"
         className={cn(
           "relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors duration-200",
-          checked ? "bg-brand-500" : "bg-white/15"
+          checked ? "bg-brand-500" : "bg-toggle-off"
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200",
+            "absolute top-0.5 h-4 w-4 rounded-full bg-knob shadow-[0_1px_2px_rgba(0,0,0,0.28)] transition-transform duration-200",
             checked ? "translate-x-[18px]" : "translate-x-0.5"
           )}
         />
@@ -179,8 +179,8 @@ export function SecondaryButton({ className, children, ...props }: BtnProps) {
       {...props}
       className={cn(
         "inline-flex h-10 items-center justify-center gap-2 rounded-field px-4",
-        "border border-white/[0.12] bg-white/[0.04] text-[13px] font-medium text-fg",
-        "transition-colors duration-200 hover:border-white/20 hover:bg-white/[0.07]",
+        "border border-line bg-field text-[13px] font-medium text-fg",
+        "transition-colors duration-200 hover:border-line-strong hover:bg-field-hover",
         "disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
@@ -228,12 +228,12 @@ export function Section({
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className="overflow-hidden rounded-field border border-white/[0.08]">
+    <div className="overflow-hidden rounded-field border border-line">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 bg-white/[0.02] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
+        className="flex w-full items-center justify-between gap-3 bg-field-soft px-4 py-3 text-left transition-colors hover:bg-field"
       >
         <span className="min-w-0">
           <span className="block text-[13.5px] font-medium text-fg">{title}</span>
@@ -260,7 +260,7 @@ export function Section({
         </svg>
       </button>
 
-      {open && <div className="space-y-4 border-t border-white/[0.06] px-4 py-4">{children}</div>}
+      {open && <div className="space-y-4 border-t border-line px-4 py-4">{children}</div>}
     </div>
   )
 }
@@ -287,7 +287,7 @@ export function Panel({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+        className="absolute inset-0 bg-scrim backdrop-blur-sm animate-fade-in"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -295,9 +295,9 @@ export function Panel({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative flex h-full w-full max-w-[520px] flex-col border-l border-white/[0.08] bg-surface shadow-2xl"
+        className="relative flex h-full w-full max-w-[520px] flex-col border-l border-line bg-surface shadow-2xl"
       >
-        <header className="flex items-start justify-between gap-4 border-b border-white/[0.07] px-6 py-5">
+        <header className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
           <div className="min-w-0">
             <h2 className="text-[17px] font-semibold tracking-[-0.02em]">{title}</h2>
             {subtitle && <p className="mt-1 text-[13px] font-light text-muted">{subtitle}</p>}
@@ -306,7 +306,7 @@ export function Panel({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-white/[0.06] hover:text-fg"
+            className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-field-hover hover:text-fg"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
               <path d="M18 6 6 18M6 6l12 12" />
@@ -317,7 +317,7 @@ export function Panel({
         <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
 
         {footer && (
-          <footer className="border-t border-white/[0.07] px-6 py-4">{footer}</footer>
+          <footer className="border-t border-line px-6 py-4">{footer}</footer>
         )}
       </div>
     </div>

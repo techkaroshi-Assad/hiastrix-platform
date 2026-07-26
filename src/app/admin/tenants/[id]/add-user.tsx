@@ -64,7 +64,7 @@ export function AddAccountManager({ tenantId }: { tenantId: string }) {
 
   if (!open) {
     return (
-      <div className="border-t border-white/[0.06] px-5 py-4">
+      <div className="border-t border-line px-5 py-4">
         {done && (
           <div className="mb-3">
             <InfoNote>{done}</InfoNote>
@@ -76,7 +76,7 @@ export function AddAccountManager({ tenantId }: { tenantId: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4 border-t border-white/[0.06] px-5 py-5">
+    <form onSubmit={submit} className="space-y-4 border-t border-line px-5 py-5">
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <Field

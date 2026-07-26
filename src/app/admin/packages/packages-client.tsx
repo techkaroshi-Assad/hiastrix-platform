@@ -100,7 +100,7 @@ export function PackagesClient({ packages }: { packages: PackageRow[] }) {
         {packages.map(p => (
           <div
             key={p.id}
-            className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5"
+            className="rounded-2xl border border-line bg-field-soft p-5"
           >
             <div className="flex items-start justify-between gap-3">
               <h3 className="text-[15px] font-semibold tracking-[-0.01em]">{p.name}</h3>
@@ -108,7 +108,7 @@ export function PackagesClient({ packages }: { packages: PackageRow[] }) {
                 className={
                   p.isActive
                     ? "rounded-full bg-success/12 px-2 py-0.5 text-[11px] font-medium text-success"
-                    : "rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px] font-medium text-subtle"
+                    : "rounded-full bg-field-hover px-2 py-0.5 text-[11px] font-medium text-subtle"
                 }
               >
                 {p.isActive ? "Published" : "Retired"}

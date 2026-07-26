@@ -67,8 +67,8 @@ export function NumberAssign({
         value={number.agentId ?? ""}
         onChange={e => assign(e.target.value)}
         className={cn(
-          "h-9 max-w-[200px] rounded-field border border-white/10 bg-white/[0.035] px-3 text-[12.5px] text-fg",
-          "outline-none transition-colors hover:border-white/[0.16] focus:border-brand-500/65",
+          "h-9 max-w-[200px] rounded-field border border-line-strong bg-field px-3 text-[12.5px] text-fg",
+          "outline-none transition-colors hover:border-line-strong focus:border-brand-500/65",
           "disabled:cursor-not-allowed disabled:opacity-50"
         )}
       >

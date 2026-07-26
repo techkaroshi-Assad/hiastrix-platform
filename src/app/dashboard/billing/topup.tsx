@@ -86,7 +86,7 @@ export function TopUp({ enabled }: { enabled: boolean }) {
             value={custom}
             onChange={e => setCustom(e.target.value)}
             placeholder="100"
-            className="h-11 w-full rounded-field border border-white/10 bg-white/[0.035] pl-7 pr-3.5 text-sm text-fg outline-none transition-colors placeholder:text-subtle hover:border-white/[0.16] focus:border-brand-500/65"
+            className="h-11 w-full rounded-field border border-line-strong bg-field pl-7 pr-3.5 text-sm text-fg outline-none transition-colors placeholder:text-subtle hover:border-line-strong focus:border-brand-500/65"
           />
         </div>
       </div>

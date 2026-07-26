@@ -15,6 +15,7 @@
 import Link from "next/link"
 import { Logo } from "@/components/brand/logo"
 import { NeuralMeshCanvas, MagneticFieldCanvas } from "@/components/ui/auth-canvas"
+import { ThemeToggle } from "@/components/theme/theme-toggle"
 
 /* ── Centred card ─────────────────────────────────────────── */
 
@@ -36,14 +37,13 @@ export function AuthShell({
       <NeuralMeshCanvas />
 
       {/* Radial vignette — keeps the card readable over the canvas */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(58% 52% at 50% 50%, rgba(7,7,10,.58), rgba(7,7,10,.18) 70%, transparent)",
-        }}
-      />
+      <div aria-hidden="true" className="wash-centre pointer-events-none absolute inset-0" />
+
+      {/* Offered before sign-in on purpose — someone on a bright screen shouldn't
+          have to authenticate through a dark page first. */}
+      <div className="absolute right-5 top-5 z-20">
+        <ThemeToggle />
+      </div>
 
       <div className="relative w-full max-w-[400px] animate-rise-in">
         <div className="glass rounded-card px-8 py-9">
@@ -99,20 +99,13 @@ export function AuthSplit({
     <main className="flex min-h-screen flex-col bg-ink lg:flex-row">
 
       {/* ── Left — brand panel ──────────────────────────────── */}
-      <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-white/[0.065] p-12 lg:flex lg:w-[52%] lg:min-h-screen lg:shrink-0">
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-line p-12 lg:flex lg:w-[52%] lg:min-h-screen lg:shrink-0">
 
         {/* Magnetic field canvas */}
         <MagneticFieldCanvas />
 
         {/* Darken overlay so text stays legible */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(140deg, rgba(7,7,10,0.82) 0%, rgba(18,10,38,0.55) 55%, rgba(7,7,10,0.65) 100%)",
-          }}
-        />
+        <div aria-hidden="true" className="wash-panel pointer-events-none absolute inset-0" />
 
         {/* Logo */}
         <Link href="/" className="relative z-10 w-fit">
@@ -152,14 +145,11 @@ export function AuthSplit({
         </div>
 
         {/* Subtle violet bloom on the form side (desktop) */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 hidden lg:block"
-          style={{
-            background:
-              "radial-gradient(62% 48% at 52% 40%, rgba(124,58,237,.07), transparent 72%)",
-          }}
-        />
+        <div aria-hidden="true" className="wash-glow pointer-events-none absolute inset-0 hidden lg:block" />
+
+        <div className="absolute right-5 top-5 z-20">
+          <ThemeToggle />
+        </div>
 
         <div className="relative w-full max-w-[340px] animate-rise-in">
 

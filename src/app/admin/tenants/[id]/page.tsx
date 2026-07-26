@@ -72,7 +72,7 @@ export default async function AdminTenantDetailPage({
       actions={
         <Link
           href="/admin/tenants"
-          className="inline-flex h-10 items-center rounded-field border border-white/[0.12] bg-white/[0.04] px-4 text-[13px] font-medium transition-colors hover:bg-white/[0.07]"
+          className="inline-flex h-10 items-center rounded-field border border-line-strong bg-field px-4 text-[13px] font-medium transition-colors hover:bg-field-hover"
         >
           All tenants
         </Link>

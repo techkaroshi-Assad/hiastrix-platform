@@ -61,7 +61,7 @@ export default async function AdminSettingsPage() {
             {integrations.map(([label, ok, envVar]) => (
               <div
                 key={envVar}
-                className="flex items-center justify-between gap-4 border-b border-white/[0.04] py-3 last:border-b-0"
+                className="flex items-center justify-between gap-4 border-b border-line-soft py-3 last:border-b-0"
               >
                 <div className="min-w-0">
                   <div className="text-[13px]">{label}</div>
@@ -73,7 +73,7 @@ export default async function AdminSettingsPage() {
               </div>
             ))}
           </div>
-          <p className="border-t border-white/[0.06] px-5 py-4 text-[12.5px] leading-relaxed text-subtle">
+          <p className="border-t border-line px-5 py-4 text-[12.5px] leading-relaxed text-subtle">
             Keys live in the hosting environment and are never shown here. Anything
             marked “Not set” means that capability is simply hidden from tenants
             rather than failing.
@@ -109,7 +109,7 @@ export default async function AdminSettingsPage() {
               ))}
             </tbody>
           </Table>
-          <p className="border-t border-white/[0.06] px-5 py-4 text-[12.5px] leading-relaxed text-subtle">
+          <p className="border-t border-line px-5 py-4 text-[12.5px] leading-relaxed text-subtle">
             Operator accounts are provisioned by hand in the database — there is
             deliberately no signup route for this console. Use{" "}
             <code className="font-mono text-[11.5px] text-muted">create-super-admin.sql</code>{" "}

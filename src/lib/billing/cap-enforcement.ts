@@ -78,9 +78,16 @@ export async function processCallEnded(params: {
         creditBalanceCents: { decrement: costCents },
       },
     }),
+    // Deliberately does NOT touch `status`.
+    //
+    // The webhook already derived FAILED / NO_ANSWER / BUSY from the provider's
+    // endedReason before calling us. Overwriting that with COMPLETED here
+    // relabelled every call that ran for more than zero seconds, which made the
+    // outcome breakdown read as ~100% completed. Billing owns the money
+    // columns; the webhook owns the outcome.
     prisma.call.update({
       where: { id: callId },
-      data: { minutesBilled, costCents, status: "COMPLETED" },
+      data: { minutesBilled, costCents },
     }),
     // Only recorded when the call actually incurred a charge.
     ...(costCents > 0

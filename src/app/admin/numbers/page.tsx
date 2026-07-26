@@ -60,7 +60,7 @@ export default async function AdminNumbersPage() {
               </EmptyRow>
             ) : (
               numbers.map(n => (
-                <tr key={n.id} className="transition-colors hover:bg-white/[0.02]">
+                <tr key={n.id} className="transition-colors hover:bg-field-soft">
                   <TD className="font-medium tabular-nums">{n.phoneNumber}</TD>
                   <TD>
                     <Pill tone={n.status === "ACTIVE" ? "success" : "neutral"}>

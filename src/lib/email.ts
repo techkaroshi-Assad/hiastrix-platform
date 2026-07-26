@@ -167,6 +167,34 @@ export async function sendWorkspaceActivated(opts: {
   )
 }
 
+export async function sendTeamInvite(opts: {
+  to: string
+  name: string
+  companyName: string
+  inviterName: string
+  url: string
+  expiresAt: Date
+}) {
+  const expires = opts.expiresAt.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+  })
+
+  await send(
+    opts.to,
+    `${opts.inviterName} invited you to ${opts.companyName}`,
+    wrap(
+      "You've been invited",
+      `<p style="margin:0 0 12px;">Hi ${opts.name}, ${opts.inviterName} has invited you to join
+        <strong style="color:#F0EEFF;">${opts.companyName}</strong> on Hi-Astrix.</p>
+       <p style="margin:0 0 12px;">You'll be able to build and manage voice agents, listen back to
+        calls, and see how they're performing.</p>
+       <p style="margin:0;">This link works until ${expires}.</p>`,
+      { label: "Accept invitation", href: opts.url }
+    )
+  )
+}
+
 export async function sendAccountManagerInvite(opts: {
   to: string
   name: string

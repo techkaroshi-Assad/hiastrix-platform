@@ -66,3 +66,10 @@ export const IconPackages = () => (
     <path d="M3.5 7.5 12 12l8.5-4.5M12 12v9" />
   </svg>
 )
+
+export const IconAnalytics = () => (
+  <svg {...base}>
+    <path d="M3 20h18" />
+    <path d="M6 20v-6M11 20V6M16 20v-9M21 20v-4" />
+  </svg>
+)

@@ -34,6 +34,8 @@ import {
   LANGUAGES,
   type AgentConfig,
 } from "@/lib/vapi/config"
+import { ToolsEditor } from "@/components/agents/tools-editor"
+import { JsonEditor } from "@/components/agents/json-editor"
 import { TestCallPanel } from "./test-call"
 import { cn } from "@/lib/utils"
 
@@ -118,6 +120,10 @@ export function AgentsClient({
   const [error, setError] = useState<string | null>(null)
   const [rowBusy, setRowBusy] = useState<string | null>(null)
   const [testing, setTesting] = useState<AgentRow | null>(null)
+  const [tab, setTab] = useState<"form" | "json">("form")
+  // A malformed JSON draft must not be submittable, and must not be silently
+  // dropped by switching tabs either.
+  const [jsonValid, setJsonValid] = useState(true)
 
   const setConfig = (patch: Partial<AgentConfig>) =>
     setDraft(d => ({ ...d, config: { ...d.config, ...patch } }))
@@ -127,6 +133,8 @@ export function AgentsClient({
   }
 
   function openCreate() {
+    setTab("form")
+    setJsonValid(true)
     setEditing(null)
     setDraft(blankDraft(voices, models))
     setError(null)
@@ -134,6 +142,8 @@ export function AgentsClient({
   }
 
   function openEdit(agent: AgentRow) {
+    setTab("form")
+    setJsonValid(true)
     setEditing(agent)
     setDraft({
       name:                 agent.name,
@@ -293,6 +303,7 @@ export function AgentsClient({
               form="agent-form"
               type="submit"
               loading={busy}
+              disabled={!jsonValid}
               sheen={false}
               className="w-auto px-5"
             >
@@ -301,7 +312,38 @@ export function AgentsClient({
           </div>
         }
       >
-        <form id="agent-form" onSubmit={save} className="space-y-5">
+        <div className="mb-5 flex gap-2">
+          <SecondaryButton
+            type="button"
+            onClick={() => setTab("form")}
+            disabled={!jsonValid}
+            className={cn(tab === "form" && "border-brand-500/60 bg-brand-500/12 text-brand-200")}
+          >
+            Form
+          </SecondaryButton>
+          <SecondaryButton
+            type="button"
+            onClick={() => setTab("json")}
+            className={cn(tab === "json" && "border-brand-500/60 bg-brand-500/12 text-brand-200")}
+          >
+            JSON
+          </SecondaryButton>
+        </div>
+
+        {tab === "json" && (
+          <JsonEditor
+            key={editing?.id ?? "new"}
+            draft={draft}
+            onChange={setDraft}
+            onValidityChange={setJsonValid}
+          />
+        )}
+
+        <form
+          id="agent-form"
+          onSubmit={save}
+          className={cn("space-y-5", tab === "json" && "hidden")}
+        >
           {error && <ErrorNote>{error}</ErrorNote>}
 
           {/* ── Essentials ─────────────────────────────────────────── */}
@@ -599,14 +641,20 @@ export function AgentsClient({
               placeholder="Leave blank for none"
               hint="Attaches an existing knowledge base so the agent can answer from your documents."
             />
-            <TextArea
-              label="Tools (JSON array)"
-              rows={10}
-              value={c.toolsJson}
-              onChange={e => setConfig({ toolsJson: e.target.value })}
-              placeholder={`[\n  {\n    "type": "function",\n    "function": {\n      "name": "book_appointment",\n      "description": "Book a slot",\n      "parameters": { "type": "object", "properties": {} }\n    }\n  }\n]`}
-              hint="Functions the agent can call mid-conversation. Must be a JSON array."
-            />
+            <ToolsEditor value={c.tools} onChange={tools => setConfig({ tools })} />
+
+            {/* Only shown when an older agent still carries raw JSON. New
+                agents never see this; it exists so a pre-builder tool keeps
+                working until it is migrated. */}
+            {c.toolsJson.trim() !== "" && (
+              <TextArea
+                label="Legacy tools (raw JSON)"
+                rows={8}
+                value={c.toolsJson}
+                onChange={e => setConfig({ toolsJson: e.target.value })}
+                hint="These were set up before the tool builder existed. They still run — move them into Custom tools above when convenient, then clear this box."
+              />
+            )}
           </Section>
 
           {/* ── Compliance ─────────────────────────────────────────── */}
@@ -664,7 +712,7 @@ function AgentCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 transition-opacity",
+        "rounded-2xl border border-line bg-field-soft p-5 transition-opacity",
         busy && "opacity-60"
       )}
     >
@@ -702,7 +750,7 @@ function AgentCard({
         />
       </dl>
 
-      <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-white/[0.05] pt-4">
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-line-soft pt-4">
         <div className="w-full max-w-[280px]">
           <Select
             label="Phone number"
@@ -739,7 +787,7 @@ function StatusPill({ active }: { active: boolean }) {
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
-        active ? "bg-success/12 text-success" : "bg-white/[0.06] text-subtle"
+        active ? "bg-success/12 text-success" : "bg-field-hover text-subtle"
       )}
     >
       <span

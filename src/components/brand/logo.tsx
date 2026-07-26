@@ -86,9 +86,9 @@ export function MarkSignalArc({ size = 32, className, animated = true }: MarkPro
     >
       <defs>
         <linearGradient id={`${id}g`} x1="14" y1="62" x2="62" y2="14" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"  stopColor="#A78BFA" />
-          <stop offset="55%" stopColor="#7C3AED" />
-          <stop offset="100%" stopColor="#5B21B6" />
+          <stop offset="0%"  stopColor="var(--mark-hi)" />
+          <stop offset="55%" stopColor="var(--mark-mid)" />
+          <stop offset="100%" stopColor="var(--mark-lo)" />
         </linearGradient>
       </defs>
 
@@ -96,7 +96,7 @@ export function MarkSignalArc({ size = 32, className, animated = true }: MarkPro
       <path
         className="ha-s2"
         d="M14 33 A29 29 0 0 1 43 62"
-        stroke="#A78BFA"
+        stroke="var(--mark-hi)"
         strokeWidth="1.4"
         strokeLinecap="round"
         opacity="0.55"
@@ -106,7 +106,7 @@ export function MarkSignalArc({ size = 32, className, animated = true }: MarkPro
       <path
         className="ha-s1"
         d="M14 47 A15 15 0 0 1 29 62"
-        stroke="#A78BFA"
+        stroke="var(--mark-hi)"
         strokeWidth="2.1"
         strokeLinecap="round"
         opacity="0.85"
@@ -122,10 +122,10 @@ export function MarkSignalArc({ size = 32, className, animated = true }: MarkPro
       />
 
       {/* Origin dot — junction of H & A */}
-      <circle className="ha-dot" cx="14" cy="62" r="4.5" fill="#7C3AED" />
+      <circle className="ha-dot" cx="14" cy="62" r="4.5" fill="var(--mark-mid)" />
 
       {/* Peak dot — A tip */}
-      <circle cx="62" cy="14" r="1.8" fill="#A78BFA" opacity="0.7" />
+      <circle cx="62" cy="14" r="1.8" fill="var(--mark-hi)" opacity="0.7" />
     </svg>
   )
 }
@@ -137,18 +137,18 @@ export function MarkOrbit({ size = 32, className, animated = true }: MarkProps) 
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" className={className} aria-hidden="true">
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#A78BFA" />
-          <stop offset="1" stopColor="#5B32EC" />
+          <stop offset="0" stopColor="var(--mark-hi)" />
+          <stop offset="1" stopColor="var(--mark-lo)" />
         </linearGradient>
       </defs>
       <circle cx="32" cy="32" r="21" stroke={`url(#${id})`} strokeWidth="2.4" opacity="0.5" />
       <circle cx="32" cy="32" r="13" stroke={`url(#${id})`} strokeWidth="2.4" opacity="0.8" />
       <circle cx="32" cy="32" r="7"  fill={`url(#${id})`} />
       <g className={cn(animated && "animate-orbit")} style={{ transformOrigin: "32px 32px" }}>
-        <circle cx="53" cy="32" r="4" fill="#C4B5FD" />
+        <circle cx="53" cy="32" r="4" fill="var(--mark-dot)" />
       </g>
       <g className={cn(animated && "animate-orbit-rev")} style={{ transformOrigin: "32px 32px" }}>
-        <circle cx="45" cy="32" r="2.6" fill="#7C5CFF" opacity="0.85" />
+        <circle cx="45" cy="32" r="2.6" fill="var(--mark-mid)" opacity="0.85" />
       </g>
     </svg>
   )

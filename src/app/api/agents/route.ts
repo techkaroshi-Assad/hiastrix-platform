@@ -9,24 +9,14 @@
  */
 
 import { NextRequest } from "next/server"
-import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { getTenantContext } from "@/lib/tenant"
 import { vapiAssistants } from "@/lib/vapi/client"
-import { AgentConfigSchema } from "@/lib/vapi/config"
+import { AgentConfigInputSchema } from "@/lib/vapi/config"
+import { AgentDraftSchema, firstIssue } from "@/lib/vapi/agent"
 import { buildAssistantPayload } from "@/lib/vapi/payload"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
-const AgentSchema = z.object({
-  name:                 z.string().min(2).max(60),
-  systemPrompt:         z.string().min(10).max(8000),
-  firstMessage:         z.string().min(1).max(1000),
-  voice:                z.string().min(1),
-  model:                z.string().min(1),
-  recordingEnabled:     z.boolean(),
-  transcriptionEnabled: z.boolean(),
-  config:               AgentConfigSchema.optional(),
-})
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,15 +26,11 @@ export async function POST(request: NextRequest) {
     if (ctx.tenant.status === "BLOCKED") return apiError(ERRORS.ACCOUNT_BLOCKED, 403)
     if (ctx.tenant.status === "PENDING") return apiError(ERRORS.ACCOUNT_PENDING, 403)
 
-    const parsed = AgentSchema.safeParse(await request.json())
-    if (!parsed.success) {
-      return apiError(
-        parsed.error.issues[0]?.message ?? "Please check the agent details and try again."
-      )
-    }
+    const parsed = AgentDraftSchema.safeParse(await request.json())
+    if (!parsed.success) return apiError(firstIssue(parsed.error))
 
     const { config: rawConfig, ...core } = parsed.data
-    const config = AgentConfigSchema.parse(rawConfig ?? {})
+    const config = AgentConfigInputSchema.parse(rawConfig ?? {})
 
     // 1. Create on Vapi.
     let vapiAssistantId: string

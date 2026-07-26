@@ -15,6 +15,7 @@
 import Link from "next/link"
 import { Logo } from "@/components/brand/logo"
 import { SignOutButton } from "@/components/app/sign-out-button"
+import { ThemeToggle } from "@/components/theme/theme-toggle"
 import { cn } from "@/lib/utils"
 
 /** Shared measure for header and content so their left edges line up exactly. */
@@ -46,7 +47,7 @@ export function AppShell({
   return (
     <div className="flex min-h-screen bg-ink">
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
-      <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col border-r border-white/[0.07] bg-ink-2/60 px-4 py-6 lg:flex">
+      <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col border-r border-line bg-ink-2/60 px-4 py-6 lg:flex">
         <Link href="/" className="mb-8 px-2">
           <Logo size={26} />
         </Link>
@@ -60,8 +61,8 @@ export function AppShell({
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] transition-colors",
                 item.active
-                  ? "bg-white/[0.06] font-medium text-fg"
-                  : "text-muted hover:bg-white/[0.03] hover:text-fg"
+                  ? "bg-field-hover font-medium text-fg"
+                  : "text-muted hover:bg-field-soft hover:text-fg"
               )}
             >
               <span className={cn("shrink-0", item.active ? "text-brand-300" : "text-subtle")}>
@@ -72,7 +73,8 @@ export function AppShell({
           ))}
         </nav>
 
-        <div className="mt-6 border-t border-white/[0.07] pt-4">
+        <div className="mt-6 space-y-3 border-t border-line pt-4">
+          <ThemeToggle className="w-full justify-between" />
           {userEmail && (
             <div className="mb-2 truncate px-3 text-[11.5px] text-subtle" title={userEmail}>
               {userEmail}
@@ -84,7 +86,7 @@ export function AppShell({
 
       {/* ── Main ────────────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-ink/80 px-6 py-5 backdrop-blur-xl lg:px-10">
+        <header className="sticky top-0 z-20 border-b border-line bg-ink/80 px-6 py-5 backdrop-blur-xl lg:px-10">
           <div className={cn(MEASURE, "flex flex-wrap items-center justify-between gap-4")}>
             <div className="min-w-0">
               <div className="mb-4 lg:hidden">
@@ -100,7 +102,7 @@ export function AppShell({
         </header>
 
         {/* Horizontal rail replaces the sidebar below `lg`, where it is hidden. */}
-        <nav className="border-b border-white/[0.07] bg-ink-2/40 lg:hidden">
+        <nav className="border-b border-line bg-ink-2/40 lg:hidden">
           <div className="flex gap-1 overflow-x-auto px-4 py-2.5">
             {nav.map(item => (
               <Link
@@ -110,7 +112,7 @@ export function AppShell({
                 className={cn(
                   "shrink-0 rounded-lg px-3 py-1.5 text-[13px] whitespace-nowrap transition-colors",
                   item.active
-                    ? "bg-white/[0.06] font-medium text-fg"
+                    ? "bg-field-hover font-medium text-fg"
                     : "text-muted hover:text-fg"
                 )}
               >
@@ -140,10 +142,10 @@ export function StatCard({
   meta?: string
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-linear-to-b from-white/[0.035] to-white/[0.012] p-5">
+    <div className="relative overflow-hidden rounded-2xl border border-line bg-linear-to-b from-field to-field-soft p-5">
       <span
         aria-hidden="true"
-        className="absolute inset-x-[14%] top-0 h-px bg-linear-to-r from-transparent via-white/20 to-transparent"
+        className="absolute inset-x-[14%] top-0 h-px bg-linear-to-r from-transparent via-line-strong to-transparent"
       />
       <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-subtle">{label}</div>
       <div className="mt-2.5 text-[26px] font-semibold tracking-[-0.03em]">{value}</div>
@@ -164,14 +166,8 @@ export function EmptyState({
   action?: React.ReactNode
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] px-8 py-16 text-center">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: "radial-gradient(50% 60% at 50% 0%, rgba(124,92,255,.10), transparent 70%)",
-        }}
-      />
+    <div className="relative overflow-hidden rounded-2xl border border-line bg-field-soft px-8 py-16 text-center">
+      <div aria-hidden="true" className="wash-glow-top pointer-events-none absolute inset-0" />
       <div className="relative mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-500/25 bg-brand-500/10 text-brand-300">
         {icon}
       </div>

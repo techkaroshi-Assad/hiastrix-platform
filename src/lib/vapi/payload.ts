@@ -14,6 +14,106 @@
 import { splitOption } from "./options"
 import { transcriberPayload } from "./catalog"
 import type { AgentConfig } from "./config"
+import type { AgentTool } from "./tools"
+
+/* ── Tools ─────────────────────────────────────────────────────────────── */
+
+/** One of our tools → one provider tool object. */
+function toolPayload(tool: AgentTool): Record<string, unknown> {
+  const fn: Record<string, unknown> = {
+    name: tool.name,
+    description: tool.description,
+  }
+
+  switch (tool.type) {
+    case "function": {
+      // Expand our typed parameter list into the JSON Schema object the
+      // provider expects. The object wrapper is required even with no
+      // properties.
+      const properties: Record<string, unknown> = {}
+      for (const p of tool.parameters) {
+        properties[p.name] = {
+          type: p.type,
+          ...(p.description ? { description: p.description } : {}),
+        }
+      }
+      const required = tool.parameters.filter(p => p.required).map(p => p.name)
+
+      return {
+        type: "function",
+        function: {
+          ...fn,
+          parameters: {
+            type: "object",
+            properties,
+            ...(required.length ? { required } : {}),
+          },
+        },
+        // Each function tool names its own destination, so a tool call never
+        // falls back to OUR assistant-level server block — which is subscribed
+        // to call lifecycle events, not tool calls, and would leave the caller
+        // listening to silence.
+        server: {
+          url: tool.serverUrl,
+          ...(tool.serverSecret
+            ? { headers: { "x-tool-secret": tool.serverSecret } }
+            : {}),
+        },
+        ...(tool.waitingMessage
+          ? { messages: [{ type: "request-start", content: tool.waitingMessage }] }
+          : {}),
+      }
+    }
+
+    case "gohighlevel.contact.get":
+    case "gohighlevel.contact.create":
+      return { type: tool.type, function: fn }
+
+    case "gohighlevel.calendar.availability.check":
+      return {
+        type: tool.type,
+        function: fn,
+        metadata: { calendarId: tool.calendarId, timeZone: tool.timeZone },
+      }
+
+    case "gohighlevel.calendar.event.create":
+      return {
+        type: tool.type,
+        function: fn,
+        metadata: { calendarId: tool.calendarId },
+      }
+  }
+}
+
+const toolName = (t: Record<string, unknown>) =>
+  (t?.function as { name?: string } | undefined)?.name
+
+/**
+ * Structured tools first, then any un-migrated legacy JSON, de-duped by name.
+ *
+ * Emitting both is what makes the one-off migration safe: an agent's effective
+ * tool list is identical before and after conversion, so nothing needs
+ * re-syncing upstream.
+ */
+function toolsPayload(config: AgentConfig): Record<string, unknown>[] {
+  const structured = config.tools.map(toolPayload)
+  if (!config.toolsJson.trim()) return structured
+
+  const taken = new Set(structured.map(toolName))
+
+  let legacy: unknown = []
+  try {
+    legacy = JSON.parse(config.toolsJson)
+  } catch {
+    legacy = []
+  }
+  if (!Array.isArray(legacy)) return structured
+
+  return [
+    ...structured,
+    ...(legacy as Record<string, unknown>[]).filter(t => !taken.has(toolName(t))),
+  ]
+}
 
 export type AgentCore = {
   name: string
@@ -47,6 +147,7 @@ export function buildAssistantPayload(
 ): Record<string, unknown> {
   const v = splitOption(core.voice)
   const m = splitOption(core.model)
+  const tools = toolsPayload(config)
 
   const payload: Record<string, unknown> = {
     name: core.name,
@@ -63,9 +164,11 @@ export function buildAssistantPayload(
       ...(config.knowledgeBaseId
         ? { knowledgeBaseId: config.knowledgeBaseId }
         : {}),
-      ...(config.toolsJson.trim()
-        ? { tools: JSON.parse(config.toolsJson) }
-        : {}),
+      // Always sent, including as an empty array. Omitting the key on an update
+      // risks the provider deep-merging `model` and keeping a tool the tenant
+      // just deleted — an agent that still books appointments after you removed
+      // its booking tool is worse than a redundant empty array.
+      tools,
     },
 
     voice: { provider: v.provider, voiceId: v.id },

@@ -14,6 +14,9 @@
  */
 
 import { z } from "zod"
+import { AgentToolSchema, toolIssues, type AgentTool } from "./tools"
+
+export type { AgentTool }
 
 /* ── Option lists for the builder UI ──────────────────────────────────── */
 
@@ -150,12 +153,46 @@ export const AgentConfigSchema = z.object({
   pciEnabled: z.boolean().default(false),
 
   /* Tools */
+  tools: z.array(AgentToolSchema).max(20).default([]),
+
+  /**
+   * DEPRECATED — raw tool JSON from before the structured builder existed.
+   *
+   * Still read and still emitted into the payload verbatim. Removing this key
+   * would silently strip working tools from any agent that predates the
+   * builder, on its very next save. New agents never see it; the UI only
+   * surfaces it when it is already non-empty.
+   */
   toolsJson: ToolsJsonSchema.default(""),
 })
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>
 
 export const DEFAULT_CONFIG: AgentConfig = AgentConfigSchema.parse({})
+
+/**
+ * Cross-field validation lives outside the base object, deliberately.
+ *
+ *   AgentConfigSchema      — field-level only, a plain object schema.
+ *                            `readConfig` uses it, so a stored row that trips a
+ *                            cross-tool rule is never silently replaced
+ *                            wholesale by DEFAULT_CONFIG. `.partial()` also
+ *                            stays available, which a refinement would remove.
+ *
+ *   AgentConfigInputSchema — what every write path validates against.
+ */
+export const AgentConfigInputSchema = AgentConfigSchema.superRefine((cfg, ctx) => {
+  for (const issue of toolIssues(cfg.tools)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["tools", ...issue.path],
+      message: issue.message,
+    })
+  }
+})
+
+/** Partial patch — keeps "omitted" distinct from "explicitly default". */
+export const ConfigPatchSchema = AgentConfigSchema.partial()
 
 /** Parse whatever is in the DB column, falling back to defaults per field. */
 export function readConfig(raw: unknown): AgentConfig {

@@ -113,7 +113,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
               </EmptyRow>
             ) : (
               calls.map(call => (
-                <tr key={call.id} className="transition-colors hover:bg-white/[0.02]">
+                <tr key={call.id} className="transition-colors hover:bg-field-soft">
                   <TD>
                     <Link
                       href={`/dashboard/calls/${call.id}`}
@@ -167,7 +167,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
             {page > 1 ? (
               <Link
                 href={qs(page - 1)}
-                className="rounded-field border border-white/[0.12] bg-white/[0.04] px-3.5 py-2 text-[13px] transition-colors hover:bg-white/[0.07]"
+                className="rounded-field border border-line-strong bg-field px-3.5 py-2 text-[13px] transition-colors hover:bg-field-hover"
               >
                 Previous
               </Link>
@@ -177,7 +177,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
             {page < pages && (
               <Link
                 href={qs(page + 1)}
-                className="rounded-field border border-white/[0.12] bg-white/[0.04] px-3.5 py-2 text-[13px] transition-colors hover:bg-white/[0.07]"
+                className="rounded-field border border-line-strong bg-field px-3.5 py-2 text-[13px] transition-colors hover:bg-field-hover"
               >
                 Next
               </Link>

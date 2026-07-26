@@ -109,7 +109,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                   <EmptyRow colSpan={4}>No credit activity yet.</EmptyRow>
                 ) : (
                   ledger.map(entry => (
-                    <tr key={entry.id} className="transition-colors hover:bg-white/[0.02]">
+                    <tr key={entry.id} className="transition-colors hover:bg-field-soft">
                       <TD muted>{dateTime(entry.createdAt)}</TD>
                       <TD>
                         <Pill tone={entry.amountCents >= 0 ? "success" : "neutral"}>
@@ -149,7 +149,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                   <EmptyRow colSpan={4}>No payments yet.</EmptyRow>
                 ) : (
                   payments.map(p => (
-                    <tr key={p.id} className="transition-colors hover:bg-white/[0.02]">
+                    <tr key={p.id} className="transition-colors hover:bg-field-soft">
                       <TD muted>{dateTime(p.createdAt)}</TD>
                       <TD muted>{titleCase(p.type)}</TD>
                       <TD>

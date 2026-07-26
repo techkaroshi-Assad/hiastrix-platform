@@ -74,7 +74,7 @@ export default async function AdminOverviewPage() {
                   const cap = t.package?.minutesIncluded ?? 0
                   const pct = cap > 0 ? Math.round((t.minutesUsed / cap) * 100) : 0
                   return (
-                    <tr key={t.id} className="transition-colors hover:bg-white/[0.02]">
+                    <tr key={t.id} className="transition-colors hover:bg-field-soft">
                       <TD>
                         <Link href={`/admin/tenants/${t.id}`} className="underline-offset-4 hover:underline">
                           {t.companyName}
@@ -122,7 +122,7 @@ export default async function AdminOverviewPage() {
                 <EmptyRow colSpan={6}>No tenants yet.</EmptyRow>
               ) : (
                 tenants.map(t => (
-                  <tr key={t.id} className="transition-colors hover:bg-white/[0.02]">
+                  <tr key={t.id} className="transition-colors hover:bg-field-soft">
                     <TD>
                       <Link href={`/admin/tenants/${t.id}`} className="font-medium underline-offset-4 hover:underline">
                         {t.companyName}

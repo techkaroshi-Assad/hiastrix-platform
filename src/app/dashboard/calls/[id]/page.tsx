@@ -89,7 +89,7 @@ export default async function CallDetailPage({
       actions={
         <Link
           href="/dashboard/calls"
-          className="inline-flex h-10 items-center rounded-field border border-white/[0.12] bg-white/[0.04] px-4 text-[13px] font-medium transition-colors hover:bg-white/[0.07]"
+          className="inline-flex h-10 items-center rounded-field border border-line-strong bg-field px-4 text-[13px] font-medium transition-colors hover:bg-field-hover"
         >
           Back to calls
         </Link>
@@ -118,7 +118,7 @@ export default async function CallDetailPage({
                   <a
                     href={call.recordingUrl}
                     download
-                    className="inline-flex h-9 items-center rounded-field border border-white/[0.12] bg-white/[0.04] px-3.5 text-[12.5px] font-medium transition-colors hover:bg-white/[0.07]"
+                    className="inline-flex h-9 items-center rounded-field border border-line-strong bg-field px-3.5 text-[12.5px] font-medium transition-colors hover:bg-field-hover"
                   >
                     Download recording
                   </a>
@@ -181,7 +181,7 @@ export default async function CallDetailPage({
                 {Object.entries(structured).map(([key, value]) => (
                   <div
                     key={key}
-                    className="flex items-start justify-between gap-4 border-b border-white/[0.04] py-3 last:border-b-0"
+                    className="flex items-start justify-between gap-4 border-b border-line-soft py-3 last:border-b-0"
                   >
                     <dt className="shrink-0 text-[12.5px] text-subtle">{titleCase(key)}</dt>
                     <dd className="text-right text-[13px] break-words">
@@ -200,14 +200,14 @@ export default async function CallDetailPage({
         <div className="space-y-5">
           <Card title="Details">
             <dl className="px-5 py-2">
-              <div className="flex items-center justify-between border-b border-white/[0.04] py-3">
+              <div className="flex items-center justify-between border-b border-line-soft py-3">
                 <dt className="text-[12.5px] text-subtle">Status</dt>
                 <dd>
                   <Pill tone={callTone(call.status)}>{titleCase(call.status)}</Pill>
                 </dd>
               </div>
               {success !== null && success !== undefined && (
-                <div className="flex items-center justify-between border-b border-white/[0.04] py-3">
+                <div className="flex items-center justify-between border-b border-line-soft py-3">
                   <dt className="text-[12.5px] text-subtle">Outcome</dt>
                   <dd>
                     <Pill
@@ -227,7 +227,7 @@ export default async function CallDetailPage({
               {facts.map(([label, value]) => (
                 <div
                   key={label}
-                  className="flex items-center justify-between gap-4 border-b border-white/[0.04] py-3 last:border-b-0"
+                  className="flex items-center justify-between gap-4 border-b border-line-soft py-3 last:border-b-0"
                 >
                   <dt className="shrink-0 text-[12.5px] text-subtle">{label}</dt>
                   <dd className="truncate text-right text-[13px]">{value}</dd>

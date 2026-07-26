@@ -65,7 +65,7 @@ export default async function AdminCallsPage({ searchParams }: { searchParams: S
           href={link({ tenant: undefined })}
           className={
             sp.tenant
-              ? "rounded-field border border-white/[0.12] bg-white/[0.04] px-3.5 py-2 text-[12.5px] transition-colors hover:bg-white/[0.07]"
+              ? "rounded-field border border-line-strong bg-field px-3.5 py-2 text-[12.5px] transition-colors hover:bg-field-hover"
               : "rounded-field border border-brand-500/50 bg-brand-500/12 px-3.5 py-2 text-[12.5px] text-brand-200"
           }
         >
@@ -78,7 +78,7 @@ export default async function AdminCallsPage({ searchParams }: { searchParams: S
             className={
               sp.tenant === t.id
                 ? "rounded-field border border-brand-500/50 bg-brand-500/12 px-3.5 py-2 text-[12.5px] text-brand-200"
-                : "rounded-field border border-white/[0.12] bg-white/[0.04] px-3.5 py-2 text-[12.5px] transition-colors hover:bg-white/[0.07]"
+                : "rounded-field border border-line-strong bg-field px-3.5 py-2 text-[12.5px] transition-colors hover:bg-field-hover"
             }
           >
             {t.companyName}
@@ -112,7 +112,7 @@ export default async function AdminCallsPage({ searchParams }: { searchParams: S
               <EmptyRow colSpan={6}>No calls match this view.</EmptyRow>
             ) : (
               calls.map(c => (
-                <tr key={c.id} className="transition-colors hover:bg-white/[0.02]">
+                <tr key={c.id} className="transition-colors hover:bg-field-soft">
                   <TD muted>{dateTime(c.startedAt ?? c.createdAt)}</TD>
                   <TD>
                     <Link
@@ -139,7 +139,7 @@ export default async function AdminCallsPage({ searchParams }: { searchParams: S
             {page > 1 ? (
               <Link
                 href={link({ page: String(page - 1) })}
-                className="rounded-field border border-white/[0.12] bg-white/[0.04] px-3.5 py-2 text-[13px] transition-colors hover:bg-white/[0.07]"
+                className="rounded-field border border-line-strong bg-field px-3.5 py-2 text-[13px] transition-colors hover:bg-field-hover"
               >
                 Previous
               </Link>
@@ -149,7 +149,7 @@ export default async function AdminCallsPage({ searchParams }: { searchParams: S
             {page < pages && (
               <Link
                 href={link({ page: String(page + 1) })}
-                className="rounded-field border border-white/[0.12] bg-white/[0.04] px-3.5 py-2 text-[13px] transition-colors hover:bg-white/[0.07]"
+                className="rounded-field border border-line-strong bg-field px-3.5 py-2 text-[13px] transition-colors hover:bg-field-hover"
               >
                 Next
               </Link>
