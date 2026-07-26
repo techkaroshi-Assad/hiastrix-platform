@@ -1,13 +1,17 @@
 /**
  * Prisma Client Singleton (Prisma 7 + pg adapter)
  *
- * Uses a Proxy for lazy initialization — PrismaClient is only instantiated
+ * Uses a Proxy for lazy initialisation — PrismaClient is only instantiated
  * on first actual use (inside a request), never at module import time.
  * This prevents build-time failures when DATABASE_URL is not yet available.
+ *
+ * Pool is capped at 5 connections per function instance — safe for serverless
+ * (Supabase free tier allows 60 direct connections; 5 × ≤12 warm instances = 60).
  */
 
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
+import { Pool } from "pg"
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -23,11 +27,14 @@ function getPrismaClient(): PrismaClient {
     )
   }
 
-  const client = new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
+  const pool    = new Pool({ connectionString, max: 5 })
+  const adapter = new PrismaPg(pool)
+  const client  = new PrismaClient({ adapter })
 
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prisma = client
-  }
+  // Always cache on globalThis — both dev and prod.
+  // Dev: prevents exhausting connections across hot-reloads.
+  // Prod: reuses the pool across warm invocations of the same function instance.
+  globalForPrisma.prisma = client
 
   return client
 }
@@ -39,13 +46,3 @@ export const prisma = new Proxy({} as PrismaClient, {
     return (getPrismaClient() as unknown as Record<string | symbol, unknown>)[prop]
   },
 })
-
-/**
- * The client handed to an interactive `prisma.$transaction(async tx => …)`
- * callback. Derived structurally rather than imported from the `Prisma`
- * namespace, so it resolves whether or not `prisma generate` has run yet.
- */
-export type TransactionClient = Omit<
-  typeof prisma,
-  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
->
