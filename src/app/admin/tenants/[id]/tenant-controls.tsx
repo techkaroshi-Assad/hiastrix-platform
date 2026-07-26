@@ -37,6 +37,21 @@ type SubAccount = {
   takenBy: { id: string; name: string } | null
 }
 
+type CrmState = {
+  connected: boolean
+  problem?: "unconfigured" | "disconnected" | "unavailable"
+  detail?: string
+  locations: SubAccount[]
+}
+
+/** Three different problems, three different next actions. Collapsing them into
+ *  one message sends operators to the wrong screen. */
+const CRM_PROBLEM: Record<string, string> = {
+  unconfigured: "The CRM keys aren't set on this environment yet.",
+  disconnected: "No CRM is connected yet.",
+  unavailable:  "The CRM isn't responding right now.",
+}
+
 export function TenantControls({
   tenantId,
   status,
@@ -67,14 +82,14 @@ export function TenantControls({
   const [activate, setActivate] = useState(false)
 
   const [nextLocation, setNextLocation] = useState(crmLocationId ?? "")
-  const [crm, setCrm] = useState<{ connected: boolean; locations: SubAccount[] } | null>(null)
+  const [crm, setCrm] = useState<CrmState | null>(null)
 
   useEffect(() => {
     let live = true
     fetch("/api/admin/crm/locations")
-      .then(r => (r.ok ? r.json() : { connected: false, locations: [] }))
+      .then(r => (r.ok ? r.json() : { connected: false, problem: "unavailable", locations: [] }))
       .then(data => { if (live) setCrm(data) })
-      .catch(() => { if (live) setCrm({ connected: false, locations: [] }) })
+      .catch(() => { if (live) setCrm({ connected: false, problem: "unavailable", locations: [] }) })
     return () => { live = false }
   }, [])
 
@@ -174,13 +189,16 @@ export function TenantControls({
         </div>
 
         {crm && !crm.connected ? (
-          <p className="text-xs text-subtle">
-            No CRM is connected on this environment yet. Connect it from{" "}
-            <a href="/admin/settings" className="text-muted underline-offset-4 hover:text-fg hover:underline">
-              Settings
-            </a>
-            .
-          </p>
+          <div className="space-y-1">
+            <p className="text-xs text-muted">
+              {CRM_PROBLEM[crm.problem ?? "unavailable"]}{" "}
+              <a href="/admin/settings" className="underline-offset-4 hover:text-fg hover:underline">
+                Check Settings
+              </a>
+              .
+            </p>
+            {crm.detail && <p className="text-xs text-subtle">{crm.detail}</p>}
+          </div>
         ) : (
           <>
             <Select

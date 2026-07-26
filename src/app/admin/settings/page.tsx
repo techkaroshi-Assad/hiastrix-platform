@@ -46,7 +46,10 @@ export default async function AdminSettingsPage() {
     ["Payments",       stripeConfigured(), "STRIPE_SECRET_KEY"],
     ["Payment webhooks", Boolean(process.env.STRIPE_WEBHOOK_SECRET), "STRIPE_WEBHOOK_SECRET"],
     ["Email",          emailConfigured(), "RESEND_API_KEY"],
-    ["CRM",            crmConfigured(), "CRM_CLIENT_ID"],
+    ["CRM keys",       crmConfigured(), "CRM_CLIENT_ID"],
+    // Listed separately because it is easy to set the pair and forget this one,
+    // and without it the sub-account picker comes up empty with no clue why.
+    ["CRM app",        Boolean(process.env.CRM_APP_ID), "CRM_APP_ID"],
   ]
 
   return (
