@@ -14,7 +14,7 @@ import type Stripe from "stripe"
 import { prisma } from "@/lib/prisma"
 import { getStripe } from "@/lib/stripe"
 import { enableAllTenantAgents } from "@/lib/billing/cap-enforcement"
-import { sendTopUpConfirmed, billingRecipients } from "@/lib/email"
+import { sendTopUpConfirmed, sendPackageActivated, billingRecipients } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
 
@@ -37,11 +37,22 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent
-        await creditTenant({
-          tenantId:    pi.metadata?.tenantId,
-          intentId:    pi.id,
-          amountCents: pi.amount_received || pi.amount,
-        })
+        // Two kinds of payment arrive here. A package purchase carries a
+        // packageId; a top-up does not.
+        if (pi.metadata?.packageId) {
+          await assignPackage({
+            tenantId:    pi.metadata?.tenantId,
+            packageId:   pi.metadata.packageId,
+            intentId:    pi.id,
+            amountCents: pi.amount_received || pi.amount,
+          })
+        } else {
+          await creditTenant({
+            tenantId:    pi.metadata?.tenantId,
+            intentId:    pi.id,
+            amountCents: pi.amount_received || pi.amount,
+          })
+        }
         break
       }
 
@@ -146,6 +157,112 @@ async function creditTenant({
       amountCents,
       balanceCents: after.creditBalanceCents,
       resumed,
+    })
+  }
+}
+
+/**
+ * Settle a package purchase.
+ *
+ * Assigned here rather than on the success redirect, because a redirect only
+ * proves someone reached a URL. Money moving is the only evidence that should
+ * grant an allowance.
+ *
+ * Resets `minutesUsed`, which is what makes this a new period: buying the same
+ * package again is how a tenant renews, and buying a different one is how they
+ * switch. The credit balance is untouched — included minutes cost nothing to
+ * use, and crediting the price as well would give the same minutes away twice.
+ */
+async function assignPackage({
+  tenantId,
+  packageId,
+  intentId,
+  amountCents,
+}: {
+  tenantId?: string
+  packageId: string
+  intentId: string
+  amountCents: number
+}) {
+  if (!tenantId || amountCents <= 0) return
+
+  const existing = await prisma.payment.findUnique({
+    where:  { stripePaymentIntentId: intentId },
+    select: { id: true, status: true },
+  })
+  if (existing?.status === "COMPLETED") return
+
+  const [tenant, pkg] = await Promise.all([
+    prisma.tenant.findUnique({
+      where:  { id: tenantId },
+      select: { id: true, companyName: true, minutesUsed: true },
+    }),
+    prisma.package.findUnique({
+      where:  { id: packageId },
+      select: { id: true, name: true, minutesIncluded: true, overageRateCents: true },
+    }),
+  ])
+
+  // Paid for something that has since been deleted. Fall back to plain credit
+  // rather than silently keeping their money and giving nothing back.
+  if (!tenant) return
+  if (!pkg) {
+    await creditTenant({ tenantId, intentId, amountCents })
+    return
+  }
+
+  await prisma.$transaction([
+    existing
+      ? prisma.payment.update({
+          where: { id: existing.id },
+          data:  { status: "COMPLETED", amountCents, type: "PACKAGE_PURCHASE" },
+        })
+      : prisma.payment.create({
+          data: {
+            tenantId,
+            stripePaymentIntentId: intentId,
+            amountCents,
+            type:   "PACKAGE_PURCHASE",
+            status: "COMPLETED",
+          },
+        }),
+    prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        packageId:         pkg.id,
+        packageAssignedAt: new Date(),
+        minutesUsed:       0,
+      },
+    }),
+    // Not a credit movement, so amountCents is zero — but the tenant should be
+    // able to see in one place that their allowance was renewed.
+    prisma.creditLedger.create({
+      data: {
+        tenantId,
+        type:        "MANUAL_CREDIT",
+        amountCents: 0,
+        description: `${pkg.name} plan activated — ${pkg.minutesIncluded.toLocaleString()} minutes included`,
+      },
+    }),
+  ])
+
+  // A fresh allowance is reason enough to bring paused agents back, whatever the
+  // balance says.
+  const paused = await prisma.agent.findMany({
+    where:  { tenantId, status: "INACTIVE" },
+    select: { id: true, vapiAssistantId: true },
+  })
+  if (paused.length) await enableAllTenantAgents(tenantId, paused)
+
+  const recipients = await billingRecipients(tenantId)
+  if (recipients.length) {
+    await sendPackageActivated({
+      to: recipients,
+      companyName:      tenant.companyName,
+      packageName:      pkg.name,
+      minutesIncluded:  pkg.minutesIncluded,
+      overageRateCents: pkg.overageRateCents,
+      amountCents,
     })
   }
 }

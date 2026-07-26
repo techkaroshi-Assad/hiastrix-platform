@@ -151,6 +151,27 @@ export async function sendCreditGranted(opts: {
   )
 }
 
+export async function sendPackageActivated(opts: {
+  to: string[]
+  companyName: string
+  packageName: string
+  minutesIncluded: number
+  overageRateCents: number
+  amountCents: number
+}) {
+  await send(
+    opts.to,
+    `Your ${opts.packageName} plan is active`,
+    wrap(
+      "Your plan is active",
+      `<p style="margin:0 0 12px;">Thanks — we've activated the <strong style="color:#F0EEFF;">${opts.packageName}</strong> plan for <strong style="color:#F0EEFF;">${opts.companyName}</strong>.</p>
+       <p style="margin:0 0 12px;">That's <strong style="color:#F0EEFF;">${opts.minutesIncluded.toLocaleString()} minutes</strong> of calling included, and ${usd(opts.overageRateCents)} a minute after that. We charged ${usd(opts.amountCents)}.</p>
+       <p style="margin:0;">Your minutes counter starts again from zero today.</p>`,
+      { label: "View billing", href: `${APP}/dashboard/billing` }
+    )
+  )
+}
+
 export async function sendWorkspaceActivated(opts: {
   to: string[]
   companyName: string

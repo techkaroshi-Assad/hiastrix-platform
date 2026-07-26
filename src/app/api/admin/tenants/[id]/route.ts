@@ -21,6 +21,7 @@ import {
   billingRecipients,
 } from "@/lib/email"
 import { forgetLocation } from "@/lib/crm/client"
+import { readAllowance } from "@/lib/billing/allowance"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
 const BodySchema = z.object({
@@ -59,7 +60,8 @@ export async function PATCH(
       where:  { id },
       select: {
         id: true, creditBalanceCents: true, status: true,
-        companyName: true, crmLocationId: true,
+        companyName: true, crmLocationId: true, minutesUsed: true,
+        package: { select: { minutesIncluded: true, overageRateCents: true } },
       },
     })
     if (!tenant) return apiError(ERRORS.NOT_FOUND, 404)
@@ -80,7 +82,20 @@ export async function PATCH(
         return apiError(`That CRM sub-account is already assigned to ${clash.companyName}.`)
       }
     }
-    const wasEmpty = tenant.creditBalanceCents <= 0
+    /*
+    * "Can they call?" is not "is the balance above zero".
+    *
+    * A tenant on a plan with allowance left calls for free — metering never
+    * charges them, so pausing their agents because credit hit zero would take a
+    * paying customer off the air for no reason.
+    */
+    const before = readAllowance({
+      includedMinutes:  tenant.package?.minutesIncluded ?? 0,
+      overageRateCents: tenant.package?.overageRateCents ?? 0,
+      minutesUsed:      tenant.minutesUsed,
+      balanceCents:     tenant.creditBalanceCents,
+    })
+    const couldCall = before.canCall
 
     // ── Status / package ────────────────────────────────────────────────
     if (status !== undefined || packageId !== undefined || crmLocationId !== undefined) {
@@ -124,14 +139,23 @@ export async function PATCH(
     // ── Reconcile agent availability with the new balance ───────────────
     const after = await prisma.tenant.findUnique({
       where:  { id },
-      select: { creditBalanceCents: true, status: true },
+      select: {
+        creditBalanceCents: true, status: true, minutesUsed: true,
+        package: { select: { minutesIncluded: true, overageRateCents: true } },
+      },
     })
 
     if (after) {
-      const nowEmpty = after.creditBalanceCents <= 0
+      const now = readAllowance({
+        includedMinutes:  after.package?.minutesIncluded ?? 0,
+        overageRateCents: after.package?.overageRateCents ?? 0,
+        minutesUsed:      after.minutesUsed,
+        balanceCents:     after.creditBalanceCents,
+      })
       const suspended = after.status === "BLOCKED" || after.status === "INACTIVE"
+      const canCall   = now.canCall
 
-      if (wasEmpty && !nowEmpty && !suspended) {
+      if (!couldCall && canCall && !suspended) {
         const agents = await prisma.agent.findMany({
           where:  { tenantId: id, status: "INACTIVE" },
           select: { id: true, vapiAssistantId: true },
@@ -139,7 +163,7 @@ export async function PATCH(
         if (agents.length) await enableAllTenantAgents(id, agents)
       }
 
-      if (!wasEmpty && (nowEmpty || suspended)) {
+      if (couldCall && (!canCall || suspended)) {
         const agents = await prisma.agent.findMany({
           where:  { tenantId: id, status: "ACTIVE" },
           select: { id: true, vapiAssistantId: true },

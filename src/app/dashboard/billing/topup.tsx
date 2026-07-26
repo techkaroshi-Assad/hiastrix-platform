@@ -9,11 +9,21 @@ import { useState } from "react"
 import { SubmitButton, ErrorNote } from "@/components/ui/field"
 import { SecondaryButton } from "@/components/ui/form"
 import { usd } from "@/lib/format"
+import { minutesFor, minutesLabel } from "@/lib/billing/allowance"
 import { cn } from "@/lib/utils"
 
 const PRESETS = [2500, 5000, 10000, 25000]
 
-export function TopUp({ enabled }: { enabled: boolean }) {
+export function TopUp({
+  enabled,
+  rateCents,
+}: {
+  enabled: boolean
+  /** Their overage rate, so an amount can be shown in minutes as well as
+   *  dollars. Zero when they have no plan, in which case we only show money —
+   *  inventing a conversion would be worse than omitting one. */
+  rateCents: number
+}) {
   const [amount, setAmount] = useState<number>(5000)
   const [custom, setCustom] = useState("")
   const [busy, setBusy] = useState(false)
@@ -21,6 +31,7 @@ export function TopUp({ enabled }: { enabled: boolean }) {
 
   const effective = custom ? Math.round(Number(custom) * 100) : amount
   const valid = Number.isFinite(effective) && effective >= 500 && effective <= 500000
+  const buysMinutes = valid && rateCents > 0 ? minutesFor(effective, rateCents) : 0
 
   async function go() {
     setError(null)
@@ -100,6 +111,15 @@ export function TopUp({ enabled }: { enabled: boolean }) {
       >
         {enabled ? `Top up ${valid ? usd(effective) : ""}` : "Payments unavailable"}
       </SubmitButton>
+
+      {/* What the money actually buys. A number of dollars is not something a
+          caller-facing business can plan around; a number of minutes is. */}
+      {enabled && buysMinutes > 0 && (
+        <p className="text-xs leading-relaxed text-subtle">
+          That&rsquo;s about {minutesLabel(buysMinutes)} of calling beyond your
+          included allowance, at {usd(rateCents)} a minute.
+        </p>
+      )}
 
       <p className="text-xs leading-relaxed text-subtle">
         You&rsquo;ll be taken to our secure payment page to complete the top-up. Your

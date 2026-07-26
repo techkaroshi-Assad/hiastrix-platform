@@ -7,18 +7,20 @@ import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { InfoNote, ErrorNote } from "@/components/ui/field"
 import { usd, dateTime, titleCase } from "@/lib/format"
 import { stripeConfigured } from "@/lib/stripe"
+import { readAllowance, minutesLabel } from "@/lib/billing/allowance"
 import { TopUp } from "./topup"
+import { Plans } from "./plans"
 
 export const metadata: Metadata = { title: "Billing" }
 export const dynamic = "force-dynamic"
 
-type Search = Promise<{ topup?: string }>
+type Search = Promise<{ topup?: string; plan?: string }>
 
 export default async function BillingPage({ searchParams }: { searchParams: Search }) {
   const { tenant, email } = await requireTenant()
   const sp = await searchParams
 
-  const [ledger, payments] = await Promise.all([
+  const [ledger, payments, plans] = await Promise.all([
     prisma.creditLedger.findMany({
       where: { tenantId: tenant.id },
       orderBy: { createdAt: "desc" },
@@ -29,15 +31,29 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
       orderBy: { createdAt: "desc" },
       take: 25,
     }),
+    prisma.package.findMany({
+      where:   { isActive: true },
+      orderBy: { priceCents: "asc" },
+      select:  {
+        id: true, name: true, minutesIncluded: true,
+        priceCents: true, overageRateCents: true,
+      },
+    }),
   ])
 
-  const cap         = tenant.package?.minutesIncluded ?? 0
-  const rate        = tenant.package?.overageRateCents ?? 0
-  const used        = tenant.minutesUsed
-  const overage     = Math.max(0, used - cap)
-  const overageCost = overage * rate
-  const balance     = tenant.creditBalanceCents
-  const pct         = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0
+  /*
+   * One place decides what the numbers mean, so the stat row, the warning banner
+   * and the agent-pausing rule cannot disagree. In particular "calls are paused"
+   * is NOT "balance is zero" — a tenant who has just bought a plan sits at full
+   * allowance and no credit, and is perfectly able to call.
+   */
+  const a = readAllowance({
+    includedMinutes:  tenant.package?.minutesIncluded ?? 0,
+    overageRateCents: tenant.package?.overageRateCents ?? 0,
+    minutesUsed:      tenant.minutesUsed,
+    balanceCents:     tenant.creditBalanceCents,
+  })
+  const overageCost = a.overageMinutes * a.overageRateCents
 
   return (
     <AppShell
@@ -59,36 +75,86 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
           <InfoNote>Top-up cancelled. Nothing was charged.</InfoNote>
         </div>
       )}
-      {balance <= 0 && (
+      {sp.plan === "success" && (
+        <div className="mb-5">
+          <InfoNote>
+            Payment received. Your plan activates within a few seconds — refresh if
+            you don&rsquo;t see it yet.
+          </InfoNote>
+        </div>
+      )}
+      {sp.plan === "cancelled" && (
+        <div className="mb-5">
+          <InfoNote>Nothing was charged and your plan is unchanged.</InfoNote>
+        </div>
+      )}
+      {a.stoppedReason && (
         <div className="mb-5">
           <ErrorNote>
-            Your balance is empty, so calls are paused. Top up to bring your agents
-            back online.
+            {a.stoppedReason} Add credit or choose a plan to bring your agents back
+            online.
           </ErrorNote>
         </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Package"
+          label="Plan"
           value={tenant.package?.name ?? "None"}
-          meta={cap > 0 ? `${cap.toLocaleString()} minutes included` : "Not assigned yet"}
+          meta={
+            a.includedMinutes > 0
+              ? `${minutesLabel(a.includedMinutes)} included`
+              : "Choose one below"
+          }
         />
         <StatCard
           label="Minutes used"
-          value={used.toLocaleString()}
-          meta={cap > 0 ? `${pct}% of your allowance` : "No allowance set"}
+          value={a.minutesUsed.toLocaleString()}
+          meta={
+            a.includedMinutes > 0
+              ? `${a.usedPct}% of your allowance · ${minutesLabel(a.minutesRemaining)} left`
+              : "No allowance set"
+          }
         />
         <StatCard
           label="Overage"
-          value={overage > 0 ? `${overage.toLocaleString()} min` : "—"}
-          meta={overage > 0 ? `${usd(overageCost)} at ${usd(rate)}/min` : "Within allowance"}
+          value={a.overageMinutes > 0 ? minutesLabel(a.overageMinutes) : "—"}
+          meta={
+            a.overageMinutes > 0
+              ? `${usd(overageCost)} at ${usd(a.overageRateCents)}/min`
+              : "Within allowance"
+          }
         />
+        {/* Money and minutes together — "$1.30" alone tells nobody whether that
+            is an afternoon or a fortnight. */}
         <StatCard
           label="Balance"
-          value={usd(balance)}
-          meta={balance <= 0 ? "Calls paused" : "Available credit"}
+          value={usd(a.balanceCents)}
+          meta={
+            a.overageRateCents > 0
+              ? `about ${minutesLabel(a.balanceMinutes)} at your rate`
+              : "Available credit"
+          }
         />
+      </div>
+
+      <div className="mt-5">
+        <Card
+          title="Plans"
+          action={
+            a.totalMinutesLeft > 0 ? (
+              <span className="text-[12px] text-subtle">
+                {minutesLabel(a.totalMinutesLeft)} left in total
+              </span>
+            ) : undefined
+          }
+        >
+          <Plans
+            plans={plans}
+            currentId={tenant.packageId}
+            enabled={stripeConfigured() && tenant.status === "ACTIVE"}
+          />
+        </Card>
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_380px]">
@@ -175,7 +241,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
         </div>
 
         <Card title="Add credit" className="self-start">
-          <TopUp enabled={stripeConfigured() && tenant.status !== "BLOCKED"} />
+          <TopUp enabled={stripeConfigured() && tenant.status !== "BLOCKED"} rateCents={a.overageRateCents} />
         </Card>
       </div>
     </AppShell>
