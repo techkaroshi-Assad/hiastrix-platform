@@ -1,18 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "//": [
-    "Functions run next to the database, not next to the CDN.",
-    "",
-    "The Supabase project lives in ap-south-1 (Mumbai). Every page in this app",
-    "is a server component that makes several round trips — auth, then two or",
-    "three queries. Running functions in iad1 (Washington DC) put roughly",
-    "12,000 km between the function and the database on every single one of",
-    "those trips, which is why navigation felt slow.",
-    "",
-    "bom1 is Vercel's Mumbai region, the same city as the database. Static",
-    "assets still serve from the global edge network; only the functions move."
-  ],
-
   "regions": ["bom1"]
 }
