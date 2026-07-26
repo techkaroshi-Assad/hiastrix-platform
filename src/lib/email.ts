@@ -11,6 +11,7 @@
  */
 
 import { Resend } from "resend"
+import { prisma } from "@/lib/prisma"
 
 let cached: Resend | null = null
 
@@ -185,17 +186,20 @@ export async function sendAccountManagerInvite(opts: {
   )
 }
 
-/** Everyone who should hear about billing for a tenant. */
-export async function billingRecipients(
-  prismaClient: { tenantUser: { findMany: (args: unknown) => Promise<{ email: string }[]> } },
-  tenantId: string
-): Promise<string[]> {
+/**
+ * Everyone who should hear about billing for a tenant.
+ *
+ * Imports prisma directly rather than taking it as a parameter — Prisma's
+ * delegate methods are generic, so any hand-written structural type for them
+ * fails to accept the real client.
+ */
+export async function billingRecipients(tenantId: string): Promise<string[]> {
   try {
-    const users = await prismaClient.tenantUser.findMany({
+    const users = await prisma.tenantUser.findMany({
       where:  { tenantId, isActive: true },
       select: { email: true },
     })
-    return users.map(u => u.email)
+    return users.map((u: { email: string }) => u.email)
   } catch (error) {
     console.error("[email/recipients]", error)
     return []

@@ -119,7 +119,7 @@ export async function PATCH(
     }
 
     // ── Tell the tenant what changed ────────────────────────────────────
-    const recipients = await billingRecipients(prisma, id)
+    const recipients = await billingRecipients(id)
 
     if (recipients.length) {
       if (credit && credit.amountCents > 0) {

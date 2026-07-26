@@ -105,7 +105,7 @@ export async function processCallEnded(params: {
 
   if (costCents === 0) return
 
-  const recipients = await billingRecipients(prisma, tenantId)
+  const recipients = await billingRecipients(tenantId)
 
   if (updatedTenant.creditBalanceCents <= 0) {
     await disableAllTenantAgents(tenantId, updatedTenant.agents)

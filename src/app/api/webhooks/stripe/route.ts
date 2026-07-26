@@ -137,7 +137,7 @@ async function creditTenant({
     where:  { id: tenantId },
     select: { companyName: true, creditBalanceCents: true },
   })
-  const recipients = await billingRecipients(prisma, tenantId)
+  const recipients = await billingRecipients(tenantId)
 
   if (after && recipients.length) {
     await sendTopUpConfirmed({
