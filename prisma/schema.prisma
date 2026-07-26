@@ -1,5 +1,12 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Prisma schema for Hi-Astrix.
+//
+// The database was created from hand-written SQL using Postgres conventions:
+// snake_case columns, snake_case enum types, uuid primary keys and timestamptz
+// timestamps. The models below keep idiomatic camelCase TypeScript names and
+// bridge to those columns with @map / @@map, so application code is unchanged.
+//
+// Every scalar field carries an explicit @map where the column name differs,
+// every uuid column is @db.Uuid, and every timestamp is @db.Timestamptz(6).
 
 generator client {
   provider = "prisma-client-js"
@@ -12,13 +19,13 @@ datasource db {
 // ─── PACKAGES ────────────────────────────────────────────────────────────────
 
 model Package {
-  id                 String   @id @default(uuid())
+  id                 String   @id @default(uuid()) @db.Uuid
   name               String
-  minutesIncluded    Int
-  priceCents         Int      // USD cents
-  overageRateCents   Int      // per minute, USD cents (e.g. 35 = $0.35)
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
+  minutesIncluded    Int      @map("minutes_included")
+  priceCents         Int      @map("price_cents")          // USD cents
+  overageRateCents   Int      @map("overage_rate_cents")   // per minute, USD cents
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenants            Tenant[]
 
@@ -28,17 +35,17 @@ model Package {
 // ─── TENANTS ─────────────────────────────────────────────────────────────────
 
 model Tenant {
-  id                 String       @id @default(uuid())
-  companyName        String
+  id                 String       @id @default(uuid()) @db.Uuid
+  companyName        String       @map("company_name")
   email              String       @unique
   status             TenantStatus @default(PENDING)
-  stripeCustomerId   String?
-  packageId          String?
-  packageAssignedAt  DateTime?
-  minutesUsed        Int          @default(0)
-  creditBalanceCents Int          @default(0) // USD cents
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  stripeCustomerId   String?      @map("stripe_customer_id")
+  packageId          String?      @map("package_id") @db.Uuid
+  packageAssignedAt  DateTime?    @map("package_assigned_at") @db.Timestamptz(6)
+  minutesUsed        Int          @default(0) @map("minutes_used")
+  creditBalanceCents Int          @default(0) @map("credit_balance_cents") // USD cents
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   package            Package?       @relation(fields: [packageId], references: [id])
   users              TenantUser[]
@@ -56,19 +63,21 @@ enum TenantStatus {
   ACTIVE
   INACTIVE
   BLOCKED
+
+  @@map("tenant_status")
 }
 
 // ─── TENANT USERS ─────────────────────────────────────────────────────────────
 
 model TenantUser {
-  id           String         @id @default(uuid())
-  tenantId     String
-  supabaseId   String         @unique  // auth.users id from Supabase Auth
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @map("tenant_id") @db.Uuid
+  supabaseId   String         @unique @map("supabase_id") @db.Uuid // auth.users id
   email        String         @unique
   name         String
   type         TenantUserType
-  isActive     Boolean        @default(true)
-  createdAt    DateTime       @default(now())
+  isActive     Boolean        @default(true) @map("is_active")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -78,18 +87,20 @@ model TenantUser {
 enum TenantUserType {
   OWNER
   ACCOUNT_MANAGER
+
+  @@map("tenant_user_type")
 }
 
 // ─── ADMIN USERS ─────────────────────────────────────────────────────────────
 
 model AdminUser {
-  id          String        @id @default(uuid())
-  supabaseId  String        @unique  // auth.users id from Supabase Auth
-  email       String        @unique
+  id          String    @id @default(uuid()) @db.Uuid
+  supabaseId  String    @unique @map("supabase_id") @db.Uuid // auth.users id
+  email       String    @unique
   name        String
   role        AdminRole
-  isActive    Boolean       @default(true)
-  createdAt   DateTime      @default(now())
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("admin_users")
 }
@@ -97,28 +108,30 @@ model AdminUser {
 enum AdminRole {
   SUPER_ADMIN
   ADMIN
+
+  @@map("admin_role")
 }
 
 // ─── AGENTS ──────────────────────────────────────────────────────────────────
 
 model Agent {
-  id                  String      @id @default(uuid())
-  tenantId            String
-  vapiAssistantId     String      @unique
-  name                String
-  status              AgentStatus @default(ACTIVE)
-  voice               String?
-  model               String?
-  systemPrompt        String?
-  firstMessage        String?
-  recordingEnabled    Boolean     @default(true)
-  transcriptionEnabled Boolean    @default(true)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  id                   String        @id @default(uuid()) @db.Uuid
+  tenantId             String        @map("tenant_id") @db.Uuid
+  vapiAssistantId      String        @unique @map("vapi_assistant_id")
+  name                 String
+  status               AgentStatus   @default(ACTIVE)
+  voice                String?
+  model                String?
+  systemPrompt         String?       @map("system_prompt")
+  firstMessage         String?       @map("first_message")
+  recordingEnabled     Boolean       @default(true) @map("recording_enabled")
+  transcriptionEnabled Boolean       @default(true) @map("transcription_enabled")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant              Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  phoneNumbers        PhoneNumber[]
-  calls               Call[]
+  tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  phoneNumbers         PhoneNumber[]
+  calls                Call[]
 
   @@map("agents")
 }
@@ -126,22 +139,24 @@ model Agent {
 enum AgentStatus {
   ACTIVE
   INACTIVE
+
+  @@map("agent_status")
 }
 
 // ─── PHONE NUMBERS ────────────────────────────────────────────────────────────
 
 model PhoneNumber {
-  id                  String      @id @default(uuid())
-  tenantId            String?     // null = unallocated
-  agentId             String?     // null = unassigned to agent
-  vapiPhoneNumberId   String      @unique
-  phoneNumber         String
-  status              PhoneStatus @default(ACTIVE)
-  createdAt           DateTime    @default(now())
+  id                String      @id @default(uuid()) @db.Uuid
+  tenantId          String?     @map("tenant_id") @db.Uuid // null = unallocated
+  agentId           String?     @map("agent_id") @db.Uuid  // null = unassigned
+  vapiPhoneNumberId String      @unique @map("vapi_phone_number_id")
+  phoneNumber       String      @map("phone_number")
+  status            PhoneStatus @default(ACTIVE)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant              Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  agent               Agent?      @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  calls               Call[]
+  tenant            Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  agent             Agent?      @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  calls             Call[]
 
   @@map("phone_numbers")
 }
@@ -149,27 +164,29 @@ model PhoneNumber {
 enum PhoneStatus {
   ACTIVE
   INACTIVE
+
+  @@map("phone_status")
 }
 
 // ─── CALLS ───────────────────────────────────────────────────────────────────
 
 model Call {
-  id              String        @id @default(uuid())
-  tenantId        String
-  agentId         String?
-  phoneNumberId   String?
-  vapiCallId      String        @unique
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  agentId         String?       @map("agent_id") @db.Uuid
+  phoneNumberId   String?       @map("phone_number_id") @db.Uuid
+  vapiCallId      String        @unique @map("vapi_call_id")
   direction       CallDirection
-  callerNumber    String?
-  durationSeconds Int           @default(0)
-  minutesBilled   Int           @default(0) // ceiling of duration
-  costCents       Int           @default(0) // USD cents
+  callerNumber    String?       @map("caller_number")
+  durationSeconds Int           @default(0) @map("duration_seconds")
+  minutesBilled   Int           @default(0) @map("minutes_billed") // ceiling of duration
+  costCents       Int           @default(0) @map("cost_cents")     // USD cents
   status          CallStatus
-  recordingUrl    String?
+  recordingUrl    String?       @map("recording_url")
   transcript      String?
-  startedAt       DateTime?
-  endedAt         DateTime?
-  createdAt       DateTime      @default(now())
+  startedAt       DateTime?     @map("started_at") @db.Timestamptz(6)
+  endedAt         DateTime?     @map("ended_at") @db.Timestamptz(6)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenant          Tenant        @relation(fields: [tenantId], references: [id])
   agent           Agent?        @relation(fields: [agentId], references: [id])
@@ -182,28 +199,32 @@ enum CallDirection {
   INBOUND
   OUTBOUND
   WEB
+
+  @@map("call_direction")
 }
 
 enum CallStatus {
+  IN_PROGRESS
   COMPLETED
   FAILED
   NO_ANSWER
   BUSY
-  IN_PROGRESS
+
+  @@map("call_status")
 }
 
 // ─── CREDIT LEDGER ────────────────────────────────────────────────────────────
 
 model CreditLedger {
-  id           String          @id @default(uuid())
-  tenantId     String
-  type         LedgerEntryType
-  amountCents  Int             // positive = credit, negative = debit
-  description  String?
-  referenceId  String?         // call id or payment id
-  createdAt    DateTime        @default(now())
+  id          String          @id @default(uuid()) @db.Uuid
+  tenantId    String          @map("tenant_id") @db.Uuid
+  type        LedgerEntryType
+  amountCents Int             @map("amount_cents") // positive = credit, negative = debit
+  description String?
+  referenceId String?         @map("reference_id") @db.Uuid // call id or payment id
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant       Tenant          @relation(fields: [tenantId], references: [id])
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
 
   @@map("credit_ledger")
 }
@@ -215,20 +236,22 @@ enum LedgerEntryType {
   OVERAGE_CHARGE
   MANUAL_CREDIT
   MANUAL_DEDUCTION
+
+  @@map("ledger_entry_type")
 }
 
 // ─── PAYMENTS ────────────────────────────────────────────────────────────────
 
 model Payment {
-  id                       String        @id @default(uuid())
-  tenantId                 String
-  stripePaymentIntentId    String        @unique
-  amountCents              Int           // USD cents
-  type                     PaymentType
-  status                   PaymentStatus @default(PENDING)
-  createdAt                DateTime      @default(now())
+  id                    String        @id @default(uuid()) @db.Uuid
+  tenantId              String        @map("tenant_id") @db.Uuid
+  stripePaymentIntentId String        @unique @map("stripe_payment_intent_id")
+  amountCents           Int           @map("amount_cents") // USD cents
+  type                  PaymentType
+  status                PaymentStatus @default(PENDING)
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant                   Tenant        @relation(fields: [tenantId], references: [id])
+  tenant                Tenant        @relation(fields: [tenantId], references: [id])
 
   @@map("payments")
 }
@@ -236,10 +259,14 @@ model Payment {
 enum PaymentType {
   PACKAGE_PURCHASE
   TOP_UP
+
+  @@map("payment_type")
 }
 
 enum PaymentStatus {
   PENDING
   COMPLETED
   FAILED
+
+  @@map("payment_status")
 }
