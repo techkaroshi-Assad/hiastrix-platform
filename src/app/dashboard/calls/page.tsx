@@ -101,13 +101,14 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
               <TH>From</TH>
               <TH>Direction</TH>
               <TH>Status</TH>
+              <TH>Media</TH>
               <TH align="right">Duration</TH>
               <TH align="right">Cost</TH>
             </tr>
           </thead>
           <tbody>
             {calls.length === 0 ? (
-              <EmptyRow colSpan={7}>
+              <EmptyRow colSpan={8}>
                 No calls match this view yet.
               </EmptyRow>
             ) : (
@@ -126,6 +127,32 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
                   <TD muted>{titleCase(call.direction)}</TD>
                   <TD>
                     <Pill tone={callTone(call.status)}>{titleCase(call.status)}</Pill>
+                  </TD>
+                  <TD>
+                    {/* Recording and transcript live on the detail page; this
+                        just says whether there is anything to open. */}
+                    <span className="flex items-center gap-2 text-subtle">
+                      {call.recordingUrl && (
+                        <span title="Recording available" aria-label="Recording available">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 3v10.5" />
+                            <path d="M8.5 6.5v3.5M15.5 6.5v3.5" />
+                            <circle cx="12" cy="17" r="3.5" />
+                          </svg>
+                        </span>
+                      )}
+                      {call.transcript && (
+                        <span title="Transcript available" aria-label="Transcript available">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M5 4h14v16H5z" />
+                            <path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4" />
+                          </svg>
+                        </span>
+                      )}
+                      {!call.recordingUrl && !call.transcript && (
+                        <span className="text-[12px]">—</span>
+                      )}
+                    </span>
                   </TD>
                   <TD align="right">{duration(call.durationSeconds)}</TD>
                   <TD align="right">{usd(call.costCents)}</TD>

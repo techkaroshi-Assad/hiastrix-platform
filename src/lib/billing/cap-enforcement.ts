@@ -6,9 +6,21 @@ import {
   billingRecipients,
 } from "@/lib/email"
 
+/** Fallback when no platform_settings row exists yet. */
+const FALLBACK_RATE_CENTS = 35
+
 /**
  * Called on every call.ended webhook from Vapi.
- * Calculates cost, deducts from tenant balance, enforces cap.
+ *
+ * Two billing shapes, one code path:
+ *
+ *   With a package — minutes inside the allowance are free; only minutes
+ *   beyond the cap are charged, at the package's own rate.
+ *
+ *   Without a package — there is no allowance, so every minute is charged at
+ *   the platform default rate. This is the credit-funded case: a tenant who
+ *   has been granted balance for trials or testing still gets billed for what
+ *   they use, rather than calling for free until someone assigns a tier.
  */
 export async function processCallEnded(params: {
   tenantId: string
@@ -17,46 +29,39 @@ export async function processCallEnded(params: {
 }) {
   const { tenantId, callId, durationSeconds } = params
 
-  const tenant = await prisma.tenant.findUniqueOrThrow({
-    where: { id: tenantId },
-    include: { package: true },
-  })
+  const [tenant, settings] = await Promise.all([
+    prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      include: { package: true },
+    }),
+    prisma.platformSettings.findUnique({ where: { id: true } }),
+  ])
 
-  const minutesBilled = Math.ceil(durationSeconds / 60)
-
-  // No package means no allowance and no rate to charge against. Record the
-  // usage so the call is still visible and billable later, but do not guess
-  // at a price.
-  if (!tenant.package) {
-    console.warn(`Tenant ${tenantId} has no package assigned`)
-    await prisma.$transaction([
-      prisma.tenant.update({
-        where: { id: tenantId },
-        data:  { minutesUsed: { increment: minutesBilled } },
-      }),
-      prisma.call.update({
-        where: { id: callId },
-        data:  { minutesBilled, costCents: 0, status: "COMPLETED" },
-      }),
-    ])
-    return
-  }
-
+  const minutesBilled  = Math.ceil(durationSeconds / 60)
   const newMinutesUsed = tenant.minutesUsed + minutesBilled
-  const packageCap = tenant.package.minutesIncluded
 
-  let costCents = 0
-  let ledgerType: "CALL_DEDUCTION" | "OVERAGE_CHARGE" = "CALL_DEDUCTION"
+  const cap  = tenant.package?.minutesIncluded ?? 0
+  const rate = tenant.package?.overageRateCents
+    ?? settings?.overageRateCents
+    ?? FALLBACK_RATE_CENTS
 
-  if (newMinutesUsed > packageCap) {
-    // Some or all of this call is overage
-    const previousOverageMinutes = Math.max(0, tenant.minutesUsed - packageCap)
-    const totalOverageMinutes = newMinutesUsed - packageCap
-    const newOverageMinutes = totalOverageMinutes - previousOverageMinutes
+  // How many of this call's minutes are actually chargeable.
+  let chargeableMinutes: number
+  let ledgerType: "CALL_DEDUCTION" | "OVERAGE_CHARGE"
 
-    costCents = newOverageMinutes * tenant.package.overageRateCents
-    ledgerType = "OVERAGE_CHARGE"
+  if (cap > 0) {
+    // Only the portion that pushes past the cap costs anything, and only the
+    // part not already counted as overage on earlier calls.
+    const previousOverage = Math.max(0, tenant.minutesUsed - cap)
+    const totalOverage    = Math.max(0, newMinutesUsed - cap)
+    chargeableMinutes     = totalOverage - previousOverage
+    ledgerType            = "OVERAGE_CHARGE"
+  } else {
+    chargeableMinutes = minutesBilled
+    ledgerType        = "CALL_DEDUCTION"
   }
+
+  const costCents = chargeableMinutes * rate
 
   // Batch transaction (array form), not an interactive one.
   //
@@ -75,11 +80,7 @@ export async function processCallEnded(params: {
     }),
     prisma.call.update({
       where: { id: callId },
-      data: {
-        minutesBilled,
-        costCents,
-        status: "COMPLETED",
-      },
+      data: { minutesBilled, costCents, status: "COMPLETED" },
     }),
     // Only recorded when the call actually incurred a charge.
     ...(costCents > 0
@@ -89,7 +90,10 @@ export async function processCallEnded(params: {
               tenantId,
               type: ledgerType,
               amountCents: -costCents,
-              description: `Call charge — ${minutesBilled} overage min @ $${(tenant.package.overageRateCents / 100).toFixed(2)}/min`,
+              description:
+                cap > 0
+                  ? `Call charge — ${chargeableMinutes} overage min @ $${(rate / 100).toFixed(2)}/min`
+                  : `Call charge — ${chargeableMinutes} min @ $${(rate / 100).toFixed(2)}/min`,
               referenceId: callId,
             },
           }),
@@ -97,16 +101,16 @@ export async function processCallEnded(params: {
       : []),
   ])
 
-  // Check if balance is now zero or below — block all agents
+  if (costCents === 0) return
+
   const updatedTenant = await prisma.tenant.findUniqueOrThrow({
     where: { id: tenantId },
     include: { agents: true },
   })
 
-  if (costCents === 0) return
-
   const recipients = await billingRecipients(tenantId)
 
+  // Out of credit — stop answering and say so.
   if (updatedTenant.creditBalanceCents <= 0) {
     await disableAllTenantAgents(tenantId, updatedTenant.agents)
     if (recipients.length) {
@@ -115,15 +119,19 @@ export async function processCallEnded(params: {
     return
   }
 
-  // Warn once per crossing of the low-balance threshold, not on every call.
-  const settings = await prisma.platformSettings.findUnique({ where: { id: true } })
+  // Warn once, on the call that crosses the threshold — not on every call after.
   const pct = settings?.lowBalancePct ?? 20
-  const threshold = Math.round((tenant.package.priceCents * pct) / 100)
+  const threshold = tenant.package
+    ? Math.round((tenant.package.priceCents * pct) / 100)
+    : 0
 
-  const before = updatedTenant.creditBalanceCents + costCents
-  const crossed = before > threshold && updatedTenant.creditBalanceCents <= threshold
+  const balanceBefore = updatedTenant.creditBalanceCents + costCents
+  const crossed =
+    threshold > 0 &&
+    balanceBefore > threshold &&
+    updatedTenant.creditBalanceCents <= threshold
 
-  if (crossed && threshold > 0 && recipients.length) {
+  if (crossed && recipients.length) {
     await sendLowBalance({
       to: recipients,
       companyName: updatedTenant.companyName,
