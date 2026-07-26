@@ -1,11 +1,9 @@
 /**
  * Prisma Client Singleton (Prisma 7 + pg adapter)
  *
- * Prisma 7 requires an explicit database adapter — the connection string
- * is no longer set in schema.prisma. We use @prisma/adapter-pg for
- * standard PostgreSQL (Supabase).
- *
- * The singleton pattern prevents connection pool exhaustion in serverless.
+ * Uses a Proxy for lazy initialization — PrismaClient is only instantiated
+ * on first actual use (inside a request), never at module import time.
+ * This prevents build-time failures when DATABASE_URL is not yet available.
  */
 
 import { PrismaClient } from "@prisma/client"
@@ -15,19 +13,29 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-function createPrismaClient(): PrismaClient {
+function getPrismaClient(): PrismaClient {
+  if (globalForPrisma.prisma) return globalForPrisma.prisma
+
   const connectionString = process.env.DATABASE_URL
   if (!connectionString) {
-    // Build-time safety: DATABASE_URL not available during `next build`
-    // Runtime calls will throw — expected until env vars are set in Vercel
-    return new PrismaClient()
+    throw new Error(
+      "[Prisma] DATABASE_URL is not set. Add it to your Vercel environment variables."
+    )
   }
-  const adapter = new PrismaPg({ connectionString })
-  return new PrismaClient({ adapter })
+
+  const client = new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
+
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = client
+  }
+
+  return client
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient()
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma
-}
+// Lazy proxy — PrismaClient is only instantiated on first property access,
+// not at module import time. Importing this file is always safe at build time.
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_, prop: string | symbol) {
+    return (getPrismaClient() as unknown as Record<string | symbol, unknown>)[prop]
+  },
+})
