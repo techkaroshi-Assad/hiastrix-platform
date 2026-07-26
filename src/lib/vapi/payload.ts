@@ -12,6 +12,7 @@
  */
 
 import { splitOption } from "./options"
+import { transcriberPayload } from "./catalog"
 import type { AgentConfig } from "./config"
 
 export type AgentCore = {
@@ -46,7 +47,6 @@ export function buildAssistantPayload(
 ): Record<string, unknown> {
   const v = splitOption(core.voice)
   const m = splitOption(core.model)
-  const t = splitOption(config.transcriber)
 
   const payload: Record<string, unknown> = {
     name: core.name,
@@ -115,12 +115,12 @@ export function buildAssistantPayload(
   }
 
   // Transcription off means no transcriber is attached at all.
+  //
+  // The shape is provider-specific: deepgram takes `model`, assembly-ai
+  // rejects it outright ("transcriber.property model should not exist"), and
+  // only some accept `language`. transcriberPayload owns those differences.
   if (core.transcriptionEnabled) {
-    payload.transcriber = {
-      provider: t.provider,
-      model: t.id,
-      language: config.language,
-    }
+    payload.transcriber = transcriberPayload(config.transcriber, config.language)
   }
 
   if (config.backgroundDenoisingEnabled) {

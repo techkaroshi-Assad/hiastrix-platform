@@ -4,6 +4,7 @@ import { requireTenant } from "@/lib/tenant"
 import { tenantNav } from "@/lib/nav"
 import { AppShell } from "@/components/app/app-shell"
 import { readConfig } from "@/lib/vapi/config"
+import { getVoiceOptions, MODEL_OPTIONS, TRANSCRIBER_OPTIONS } from "@/lib/vapi/catalog"
 import { AgentsClient, type AgentRow, type NumberRow } from "./agents-client"
 
 export const metadata: Metadata = { title: "Agents" }
@@ -12,7 +13,10 @@ export const dynamic = "force-dynamic"
 export default async function AgentsPage() {
   const { tenant, email } = await requireTenant()
 
-  const [agents, numbers, callStats] = await Promise.all([
+  // Voices are fetched from the account and cached, because the provider
+  // retires them: half the list I first shipped had already been withdrawn.
+  const [voices, agents, numbers, callStats] = await Promise.all([
+    getVoiceOptions(),
     prisma.agent.findMany({
       where: { tenantId: tenant.id },
       orderBy: { createdAt: "desc" },
@@ -89,6 +93,13 @@ export default async function AgentsPage() {
         canCreate={canCreate}
         lockedReason={lockedReason}
         browserCallEnabled={Boolean(process.env.VAPI_PUBLIC_KEY)}
+        voices={voices}
+        models={MODEL_OPTIONS}
+        transcribers={TRANSCRIBER_OPTIONS.map(t => ({
+          value: t.value,
+          label: t.label,
+          note:  t.note,
+        }))}
       />
     </AppShell>
   )

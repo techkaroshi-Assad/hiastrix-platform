@@ -108,6 +108,18 @@
 
   html {
     scroll-behavior: smooth;
+    /* Tells the browser to render native controls with a dark palette.
+       Without this, a <select>'s dropdown list, date pickers and number
+       spinners are drawn by the OS in light mode — which rendered our white
+       option text on a white background, i.e. invisible. */
+    color-scheme: dark;
+  }
+
+  /* Belt and braces: some browsers ignore color-scheme for <option>. */
+  select option,
+  select optgroup {
+    background-color: #16161F;
+    color: #F0EEFF;
   }
 
   body {

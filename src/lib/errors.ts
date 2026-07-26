@@ -42,11 +42,55 @@ export type AppError = (typeof ERRORS)[keyof typeof ERRORS]
  * Maps a raw vendor error to a safe user-facing message.
  * Logs the original error server-side for debugging.
  */
+/**
+ * Voice/telephony provider validation failures.
+ *
+ * These are the user's own configuration being rejected — a retired voice, a
+ * property the chosen transcriber doesn't accept. Collapsing them into
+ * "Something went wrong" forces someone to read server logs to discover a
+ * fixable mistake, which is exactly what happened in practice.
+ *
+ * So we surface the meaning while stripping the vendor's name, URLs and
+ * internal field paths. The tenant learns what to change, never who we use.
+ */
+function providerRejection(raw: string): string | null {
+  const m = raw.toLowerCase()
+
+  if (!m.includes("400") && !m.includes("bad request")) return null
+
+  if (m.includes("legacy voice") || m.includes("phased out") || m.includes("retired")) {
+    return "That voice is no longer available. Please choose a different one and save again."
+  }
+  if (m.includes("voice")) {
+    return "That voice isn't available for this agent. Please choose a different one."
+  }
+  if (m.includes("transcriber")) {
+    return "That transcription option isn't compatible with the rest of this agent's setup. Try a different engine or language."
+  }
+  if (m.includes("tool") || m.includes("function")) {
+    return "One of this agent's tools was rejected. Check that the JSON is a valid tool definition."
+  }
+  if (m.includes("knowledgebase") || m.includes("knowledge base")) {
+    return "That knowledge base ID wasn't recognised. Check it and try again."
+  }
+  if (m.includes("model")) {
+    return "That language model isn't available. Please choose a different one."
+  }
+
+  return "Some of this agent's settings were rejected. Please review them and try again."
+}
+
 export function sanitiseError(error: unknown, context?: string): string {
   // Always log the real error server-side (never sent to client)
   console.error(`[${context ?? "error"}]`, error)
 
   if (!(error instanceof Error)) return ERRORS.FALLBACK
+
+  // Configuration rejections are the user's to fix, so say what's wrong.
+  if (context?.includes("provider")) {
+    const friendly = providerRejection(error.message)
+    if (friendly) return friendly
+  }
 
   const msg = error.message.toLowerCase()
 

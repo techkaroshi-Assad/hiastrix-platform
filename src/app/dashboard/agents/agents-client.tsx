@@ -26,12 +26,11 @@ import {
 } from "@/components/ui/form"
 import { EmptyState } from "@/components/app/app-shell"
 import { IconAgents } from "@/components/app/icons"
-import { VOICES, MODELS, DEFAULT_VOICE, DEFAULT_MODEL, labelFor } from "@/lib/vapi/options"
+import { labelFor, type Option } from "@/lib/vapi/options"
 import {
   DEFAULT_CONFIG,
   FIRST_MESSAGE_MODES,
   BACKGROUND_SOUNDS,
-  TRANSCRIBER_PROVIDERS,
   LANGUAGES,
   type AgentConfig,
 } from "@/lib/vapi/config"
@@ -73,16 +72,20 @@ type Draft = {
   config: AgentConfig
 }
 
-const BLANK: Draft = {
-  name: "",
-  systemPrompt:
-    "You are a helpful, concise voice assistant. Speak naturally, keep answers short, and ask clarifying questions when a request is ambiguous.",
-  firstMessage: "Hi, thanks for calling. How can I help you today?",
-  voice: DEFAULT_VOICE,
-  model: DEFAULT_MODEL,
-  recordingEnabled: true,
-  transcriptionEnabled: true,
-  config: DEFAULT_CONFIG,
+function blankDraft(voices: Option[], models: Option[]): Draft {
+  return {
+    name: "",
+    systemPrompt:
+      "You are a helpful, concise voice assistant. Speak naturally, keep answers short, and ask clarifying questions when a request is ambiguous.",
+    firstMessage: "Hi, thanks for calling. How can I help you today?",
+    // Defaults come from the live catalogue so a retired voice can never be
+    // pre-selected into a new agent.
+    voice: voices[0]?.value ?? "",
+    model: models.find(m => m.value.endsWith("mini"))?.value ?? models[0]?.value ?? "",
+    recordingEnabled: true,
+    transcriptionEnabled: true,
+    config: DEFAULT_CONFIG,
+  }
 }
 
 export function AgentsClient({
@@ -91,19 +94,26 @@ export function AgentsClient({
   canCreate,
   lockedReason,
   browserCallEnabled,
+  voices,
+  models,
+  transcribers,
 }: {
   agents: AgentRow[]
   numbers: NumberRow[]
   canCreate: boolean
   lockedReason?: string
   browserCallEnabled: boolean
+  /** Fetched live from the account — never hardcoded, since voices retire. */
+  voices: Option[]
+  models: Option[]
+  transcribers: Option[]
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
 
   const [panelOpen, setPanelOpen] = useState(false)
   const [editing, setEditing] = useState<AgentRow | null>(null)
-  const [draft, setDraft] = useState<Draft>(BLANK)
+  const [draft, setDraft] = useState<Draft>(() => blankDraft(voices, models))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rowBusy, setRowBusy] = useState<string | null>(null)
@@ -118,7 +128,7 @@ export function AgentsClient({
 
   function openCreate() {
     setEditing(null)
-    setDraft(BLANK)
+    setDraft(blankDraft(voices, models))
     setError(null)
     setPanelOpen(true)
   }
@@ -129,8 +139,8 @@ export function AgentsClient({
       name:                 agent.name,
       systemPrompt:         agent.systemPrompt ?? "",
       firstMessage:         agent.firstMessage ?? "",
-      voice:                agent.voice ?? DEFAULT_VOICE,
-      model:                agent.model ?? DEFAULT_MODEL,
+      voice:                agent.voice ?? voices[0]?.value ?? "",
+      model:                agent.model ?? models[0]?.value ?? "",
       recordingEnabled:     agent.recordingEnabled,
       transcriptionEnabled: agent.transcriptionEnabled,
       config:               { ...DEFAULT_CONFIG, ...agent.config },
@@ -234,6 +244,8 @@ export function AgentsClient({
               key={agent.id}
               agent={agent}
               numbers={numbers}
+              voices={voices}
+              models={models}
               busy={rowBusy === agent.id}
               onEdit={() => openEdit(agent)}
               onTest={() => setTesting(agent)}
@@ -326,14 +338,14 @@ export function AgentsClient({
 
           <Select
             label="Voice"
-            options={VOICES}
+            options={voices}
             value={draft.voice}
             onChange={e => setDraft({ ...draft, voice: e.target.value })}
           />
 
           <Select
             label="Language model"
-            options={MODELS}
+            options={models}
             value={draft.model}
             onChange={e => setDraft({ ...draft, model: e.target.value })}
             hint="Faster models cost less per minute and respond more quickly."
@@ -379,7 +391,7 @@ export function AgentsClient({
           >
             <Select
               label="Transcription engine"
-              options={TRANSCRIBER_PROVIDERS.map(t => ({ ...t }))}
+              options={transcribers}
               value={c.transcriber}
               onChange={e => setConfig({ transcriber: e.target.value })}
             />
@@ -623,6 +635,8 @@ export function AgentsClient({
 function AgentCard({
   agent,
   numbers,
+  voices,
+  models,
   busy,
   onEdit,
   onTest,
@@ -632,6 +646,8 @@ function AgentCard({
 }: {
   agent: AgentRow
   numbers: NumberRow[]
+  voices: Option[]
+  models: Option[]
   busy: boolean
   onEdit: () => void
   onTest: () => void
@@ -659,7 +675,7 @@ function AgentCard({
             <StatusPill active={active} />
           </div>
           <p className="mt-1 text-[12.5px] text-subtle">
-            {labelFor(VOICES, agent.voice)} · {labelFor(MODELS, agent.model)}
+            {labelFor(voices, agent.voice)} · {labelFor(models, agent.model)}
             {agent.phoneNumberLabel && <> · {agent.phoneNumberLabel}</>}
           </p>
         </div>
