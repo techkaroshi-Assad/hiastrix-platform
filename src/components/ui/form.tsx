@@ -8,7 +8,7 @@
  * flows. Styling mirrors Field so the two read as one system.
  */
 
-import { forwardRef, useId } from "react"
+import { forwardRef, useId, useState } from "react"
 import { cn } from "@/lib/utils"
 
 const CONTROL = [
@@ -204,6 +204,64 @@ export function DangerButton({ className, children, ...props }: BtnProps) {
     >
       {children}
     </button>
+  )
+}
+
+/* ── Collapsible section ───────────────────────────────────────────────── */
+
+/**
+ * Groups a dense form into disclosable blocks. The agent builder exposes most
+ * of Vapi's surface, and showing thirty fields at once would bury the six that
+ * matter for a first agent — so everything past the essentials starts closed.
+ */
+export function Section({
+  title,
+  description,
+  defaultOpen = false,
+  children,
+}: {
+  title: string
+  description?: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <div className="overflow-hidden rounded-field border border-white/[0.08]">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 bg-white/[0.02] px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
+      >
+        <span className="min-w-0">
+          <span className="block text-[13.5px] font-medium text-fg">{title}</span>
+          {description && (
+            <span className="mt-0.5 block text-xs leading-relaxed text-subtle">
+              {description}
+            </span>
+          )}
+        </span>
+        <svg
+          aria-hidden="true"
+          className={cn(
+            "h-4 w-4 shrink-0 text-subtle transition-transform duration-200",
+            open && "rotate-180"
+          )}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && <div className="space-y-4 border-t border-white/[0.06] px-4 py-4">{children}</div>}
+    </div>
   )
 }
 

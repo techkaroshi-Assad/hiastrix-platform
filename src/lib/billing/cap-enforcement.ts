@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import { vapiAssistants } from "@/lib/vapi/client"
+import {
+  sendLowBalance,
+  sendCallsPaused,
+  billingRecipients,
+} from "@/lib/email"
 
 /**
  * Called on every call.ended webhook from Vapi.
@@ -17,12 +22,26 @@ export async function processCallEnded(params: {
     include: { package: true },
   })
 
+  const minutesBilled = Math.ceil(durationSeconds / 60)
+
+  // No package means no allowance and no rate to charge against. Record the
+  // usage so the call is still visible and billable later, but do not guess
+  // at a price.
   if (!tenant.package) {
     console.warn(`Tenant ${tenantId} has no package assigned`)
+    await prisma.$transaction([
+      prisma.tenant.update({
+        where: { id: tenantId },
+        data:  { minutesUsed: { increment: minutesBilled } },
+      }),
+      prisma.call.update({
+        where: { id: callId },
+        data:  { minutesBilled, costCents: 0, status: "COMPLETED" },
+      }),
+    ])
     return
   }
 
-  const minutesBilled = Math.ceil(durationSeconds / 60)
   const newMinutesUsed = tenant.minutesUsed + minutesBilled
   const packageCap = tenant.package.minutesIncluded
 
@@ -70,7 +89,7 @@ export async function processCallEnded(params: {
               tenantId,
               type: ledgerType,
               amountCents: -costCents,
-              description: `Call deduction — ${minutesBilled} overage min @ $${(tenant.package!.overageRateCents / 100).toFixed(2)}/min`,
+              description: `Call charge — ${minutesBilled} overage min @ $${(tenant.package.overageRateCents / 100).toFixed(2)}/min`,
               referenceId: callId,
             },
           }),
@@ -84,8 +103,32 @@ export async function processCallEnded(params: {
     include: { agents: true },
   })
 
-  if (updatedTenant.creditBalanceCents <= 0 && costCents > 0) {
+  if (costCents === 0) return
+
+  const recipients = await billingRecipients(prisma, tenantId)
+
+  if (updatedTenant.creditBalanceCents <= 0) {
     await disableAllTenantAgents(tenantId, updatedTenant.agents)
+    if (recipients.length) {
+      await sendCallsPaused({ to: recipients, companyName: updatedTenant.companyName })
+    }
+    return
+  }
+
+  // Warn once per crossing of the low-balance threshold, not on every call.
+  const settings = await prisma.platformSettings.findUnique({ where: { id: true } })
+  const pct = settings?.lowBalancePct ?? 20
+  const threshold = Math.round((tenant.package.priceCents * pct) / 100)
+
+  const before = updatedTenant.creditBalanceCents + costCents
+  const crossed = before > threshold && updatedTenant.creditBalanceCents <= threshold
+
+  if (crossed && threshold > 0 && recipients.length) {
+    await sendLowBalance({
+      to: recipients,
+      companyName: updatedTenant.companyName,
+      balanceCents: updatedTenant.creditBalanceCents,
+    })
   }
 }
 
@@ -101,8 +144,6 @@ export async function disableAllTenantAgents(
     where: { tenantId },
     data: { status: "INACTIVE" },
   })
-
-  // TODO: send email to tenant and account manager
 }
 
 export async function enableAllTenantAgents(

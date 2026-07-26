@@ -23,7 +23,9 @@ async function vapiRequest<T>(
     throw new Error(`Vapi API error ${res.status}: ${error}`)
   }
 
-  return res.json()
+  // DELETE and some PATCH responses have no body.
+  const text = await res.text()
+  return (text ? JSON.parse(text) : {}) as T
 }
 
 // ─── Assistants ──────────────────────────────────────────────────────────────
@@ -77,6 +79,13 @@ export const vapiCalls = {
 
   get: (id: string) => vapiRequest(`/call/${id}`),
 
-  startWebCall: (data: { assistantId: string }) =>
-    vapiRequest("/call/web", { method: "POST", body: JSON.stringify(data) }),
+  /**
+   * Place an outbound call. Requires a number allocated to the tenant, since
+   * that is the caller ID the recipient sees.
+   */
+  create: (data: {
+    assistantId: string
+    phoneNumberId: string
+    customer: { number: string }
+  }) => vapiRequest("/call", { method: "POST", body: JSON.stringify(data) }),
 }

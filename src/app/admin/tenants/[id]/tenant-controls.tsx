@@ -8,10 +8,26 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Field, SubmitButton, ErrorNote, InfoNote } from "@/components/ui/field"
-import { Select } from "@/components/ui/form"
+import { Select, Toggle } from "@/components/ui/form"
 import { usd } from "@/lib/format"
 
 type Pkg = { id: string; name: string; minutesIncluded: number }
+
+const CUSTOM = "__custom__"
+
+/**
+ * Tenant-facing wording for a manual adjustment. Deliberately warm and
+ * branded — the client should read these as a gesture from Hi-Astrix, not as
+ * an internal bookkeeping entry.
+ */
+const LABEL_PRESETS = [
+  "Free credit from the Hi-Astrix team",
+  "Trial credit — no charge",
+  "Promotional discount applied by Hi-Astrix",
+  "Goodwill credit from the Hi-Astrix team",
+  "Balance correction by the Hi-Astrix team",
+  CUSTOM,
+]
 
 export function TenantControls({
   tenantId,
@@ -36,7 +52,9 @@ export function TenantControls({
   const [nextStatus, setNextStatus] = useState(status)
   const [nextPackage, setNextPackage] = useState(packageId ?? "")
   const [amount, setAmount] = useState("")
-  const [reason, setReason] = useState("")
+  const [preset, setPreset] = useState(LABEL_PRESETS[0])
+  const [label, setLabel] = useState(LABEL_PRESETS[0])
+  const [activate, setActivate] = useState(false)
 
   async function send(payload: Record<string, unknown>, message: string) {
     setError(null)
@@ -65,7 +83,11 @@ export function TenantControls({
   }
 
   const cents = Math.round(Number(amount) * 100)
-  const creditValid = Number.isFinite(cents) && cents !== 0 && reason.trim().length >= 2
+  const creditValid =
+    amount.trim() !== "" &&
+    Number.isFinite(cents) &&
+    cents !== 0 &&
+    label.trim().length >= 2
 
   return (
     <div className="space-y-6 px-5 py-5">
@@ -122,11 +144,11 @@ export function TenantControls({
       {/* Manual credit */}
       <div className="space-y-4 border-t border-white/[0.06] pt-6">
         <div>
-          <h3 className="text-[13.5px] font-semibold">Adjust credit</h3>
-          <p className="mt-1 text-xs text-subtle">
-            Current balance {usd(balanceCents)}. Use a negative amount to deduct.
-            Every adjustment is written to the tenant&rsquo;s credit history with
-            your reason and email.
+          <h3 className="text-[13.5px] font-semibold">Grant or adjust credit</h3>
+          <p className="mt-1 text-xs leading-relaxed text-subtle">
+            Current balance {usd(balanceCents)}. Credit granted here lands in the
+            tenant&rsquo;s balance immediately — no card, no Stripe. Use a negative
+            amount to deduct.
           </p>
         </div>
 
@@ -140,14 +162,36 @@ export function TenantControls({
           onChange={e => setAmount(e.target.value)}
         />
 
-        <Field
-          label="Reason"
-          placeholder="Goodwill credit for outage"
-          value={reason}
-          onChange={e => setReason(e.target.value)}
-          minLength={2}
-          maxLength={300}
+        <Select
+          label="How this appears to the tenant"
+          value={preset}
+          onChange={e => {
+            setPreset(e.target.value)
+            if (e.target.value !== CUSTOM) setLabel(e.target.value)
+          }}
+          options={LABEL_PRESETS.map(l => ({ value: l, label: l }))}
+          hint="This exact wording shows in their billing history. Your email is recorded for audit but never shown to them."
         />
+
+        {preset === CUSTOM && (
+          <Field
+            label="Custom wording"
+            placeholder="Launch promotion — 3 months free"
+            value={label}
+            onChange={e => setLabel(e.target.value)}
+            minLength={2}
+            maxLength={160}
+          />
+        )}
+
+        {status !== "ACTIVE" && cents > 0 && (
+          <Toggle
+            label="Activate this workspace too"
+            description="Lets them create agents straight away, without waiting on a package purchase."
+            checked={activate}
+            onChange={setActivate}
+          />
+        )}
 
         <SubmitButton
           type="button"
@@ -157,16 +201,21 @@ export function TenantControls({
           className="w-auto px-5"
           onClick={async () => {
             const ok = await send(
-              { credit: { amountCents: cents, reason: reason.trim() } },
-              `Balance adjusted by ${cents > 0 ? "+" : "−"}${usd(Math.abs(cents))}.`
+              {
+                credit: { amountCents: cents, label: label.trim() },
+                ...(activate && status !== "ACTIVE" ? { status: "ACTIVE" } : {}),
+              },
+              `${cents > 0 ? "Granted" : "Deducted"} ${usd(Math.abs(cents))}${
+                activate && status !== "ACTIVE" ? " and activated the workspace." : "."
+              }`
             )
             if (ok) {
               setAmount("")
-              setReason("")
+              setActivate(false)
             }
           }}
         >
-          Apply adjustment
+          {cents > 0 ? "Grant credit" : "Apply adjustment"}
         </SubmitButton>
       </div>
     </div>

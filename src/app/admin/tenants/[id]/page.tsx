@@ -8,6 +8,7 @@ import { AppShell, StatCard } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow, callTone } from "@/components/app/table"
 import { usd, duration, dateTime, dateOnly, titleCase } from "@/lib/format"
 import { TenantControls } from "./tenant-controls"
+import { AddAccountManager } from "./add-user"
 
 export const metadata: Metadata = { title: "Tenant" }
 export const dynamic = "force-dynamic"
@@ -131,6 +132,7 @@ export default async function AdminTenantDetailPage({
                 )}
               </tbody>
             </Table>
+            <AddAccountManager tenantId={tenant.id} />
           </Card>
 
           <Card title="Recent calls">
@@ -170,19 +172,23 @@ export default async function AdminTenantDetailPage({
                 <tr>
                   <TH>When</TH>
                   <TH>Type</TH>
-                  <TH>Description</TH>
+                  <TH>Tenant sees</TH>
+                  <TH>By</TH>
                   <TH align="right">Amount</TH>
                 </tr>
               </thead>
               <tbody>
                 {ledger.length === 0 ? (
-                  <EmptyRow colSpan={4}>No credit activity yet.</EmptyRow>
+                  <EmptyRow colSpan={5}>No credit activity yet.</EmptyRow>
                 ) : (
                   ledger.map(l => (
                     <tr key={l.id}>
                       <TD muted>{dateTime(l.createdAt)}</TD>
                       <TD muted>{titleCase(l.type)}</TD>
-                      <TD muted className="max-w-[260px] truncate">{l.description ?? "—"}</TD>
+                      <TD muted className="max-w-[240px] truncate">{l.description ?? "—"}</TD>
+                      <TD muted className="max-w-[160px] truncate">
+                        {l.createdBy ?? "System"}
+                      </TD>
                       <TD align="right" className={l.amountCents >= 0 ? "text-success" : undefined}>
                         {l.amountCents >= 0 ? "+" : "−"}
                         {usd(Math.abs(l.amountCents))}

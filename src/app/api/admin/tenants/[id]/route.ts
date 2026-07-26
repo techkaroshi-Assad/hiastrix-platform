@@ -14,6 +14,11 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { getAdminContext } from "@/lib/admin"
 import { enableAllTenantAgents, disableAllTenantAgents } from "@/lib/billing/cap-enforcement"
+import {
+  sendCreditGranted,
+  sendWorkspaceActivated,
+  billingRecipients,
+} from "@/lib/email"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
 const BodySchema = z.object({
@@ -22,7 +27,12 @@ const BodySchema = z.object({
   credit: z
     .object({
       amountCents: z.number().int().refine(n => n !== 0, "Amount cannot be zero"),
-      reason:      z.string().min(2).max(300),
+      /**
+       * Tenant-facing wording. This is exactly what the client reads in their
+       * billing history, so it must never carry internal detail. Operator
+       * identity goes to `createdBy`, which the tenant UI never renders.
+       */
+      label: z.string().min(2).max(160),
     })
     .optional(),
 })
@@ -39,7 +49,7 @@ export async function PATCH(
 
     const tenant = await prisma.tenant.findUnique({
       where:  { id },
-      select: { id: true, creditBalanceCents: true },
+      select: { id: true, creditBalanceCents: true, status: true, companyName: true },
     })
     if (!tenant) return apiError(ERRORS.NOT_FOUND, 404)
 
@@ -74,7 +84,8 @@ export async function PATCH(
             tenantId:    id,
             type:        credit.amountCents > 0 ? "MANUAL_CREDIT" : "MANUAL_DEDUCTION",
             amountCents: credit.amountCents,
-            description: `${credit.reason} — by ${admin.email}`,
+            description: credit.label,   // shown to the tenant
+            createdBy:   admin.email,    // audit only, never rendered tenant-side
           },
         }),
       ])
@@ -104,6 +115,28 @@ export async function PATCH(
           select: { id: true, vapiAssistantId: true },
         })
         if (agents.length) await disableAllTenantAgents(id, agents)
+      }
+    }
+
+    // ── Tell the tenant what changed ────────────────────────────────────
+    const recipients = await billingRecipients(prisma, id)
+
+    if (recipients.length) {
+      if (credit && credit.amountCents > 0) {
+        await sendCreditGranted({
+          to: recipients,
+          companyName:  tenant.companyName,
+          amountCents:  credit.amountCents,
+          label:        credit.label,
+          balanceCents: after?.creditBalanceCents ?? 0,
+        })
+      }
+
+      if (status === "ACTIVE" && tenant.status !== "ACTIVE") {
+        await sendWorkspaceActivated({
+          to: recipients,
+          companyName: tenant.companyName,
+        })
       }
     }
 

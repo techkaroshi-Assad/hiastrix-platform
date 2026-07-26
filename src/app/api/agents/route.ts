@@ -13,7 +13,8 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { getTenantContext } from "@/lib/tenant"
 import { vapiAssistants } from "@/lib/vapi/client"
-import { buildAssistantPayload } from "@/lib/vapi/options"
+import { AgentConfigSchema } from "@/lib/vapi/config"
+import { buildAssistantPayload } from "@/lib/vapi/payload"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
 const AgentSchema = z.object({
@@ -24,7 +25,7 @@ const AgentSchema = z.object({
   model:                z.string().min(1),
   recordingEnabled:     z.boolean(),
   transcriptionEnabled: z.boolean(),
-  endCallPhrases:       z.array(z.string().min(1)).max(10).optional(),
+  config:               AgentConfigSchema.optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -36,15 +37,20 @@ export async function POST(request: NextRequest) {
     if (ctx.tenant.status === "PENDING") return apiError(ERRORS.ACCOUNT_PENDING, 403)
 
     const parsed = AgentSchema.safeParse(await request.json())
-    if (!parsed.success) return apiError("Please check the agent details and try again.")
+    if (!parsed.success) {
+      return apiError(
+        parsed.error.issues[0]?.message ?? "Please check the agent details and try again."
+      )
+    }
 
-    const input = parsed.data
+    const { config: rawConfig, ...core } = parsed.data
+    const config = AgentConfigSchema.parse(rawConfig ?? {})
 
     // 1. Create on Vapi.
     let vapiAssistantId: string
     try {
       const created = (await vapiAssistants.create(
-        buildAssistantPayload(input)
+        buildAssistantPayload(core, config)
       )) as { id?: string }
 
       if (!created?.id) throw new Error("assistant created without an id")
@@ -57,16 +63,11 @@ export async function POST(request: NextRequest) {
     try {
       const agent = await prisma.agent.create({
         data: {
-          tenantId:             ctx.tenant.id,
+          tenantId: ctx.tenant.id,
           vapiAssistantId,
-          name:                 input.name,
-          status:               "ACTIVE",
-          voice:                input.voice,
-          model:                input.model,
-          systemPrompt:         input.systemPrompt,
-          firstMessage:         input.firstMessage,
-          recordingEnabled:     input.recordingEnabled,
-          transcriptionEnabled: input.transcriptionEnabled,
+          status:   "ACTIVE",
+          ...core,
+          config,
         },
         select: { id: true, name: true },
       })

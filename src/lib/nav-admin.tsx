@@ -6,10 +6,17 @@ import {
   IconPackages,
   IconNumbers,
   IconCalls,
+  IconSettings,
 } from "@/components/app/icons"
 import type { NavItem } from "@/components/app/app-shell"
 
-export type AdminNavKey = "overview" | "tenants" | "packages" | "numbers" | "calls"
+export type AdminNavKey =
+  | "overview"
+  | "tenants"
+  | "packages"
+  | "numbers"
+  | "calls"
+  | "settings"
 
 export function adminNav(active: AdminNavKey): NavItem[] {
   return [
@@ -18,5 +25,6 @@ export function adminNav(active: AdminNavKey): NavItem[] {
     { href: "/admin/packages", label: "Packages",      icon: <IconPackages />, active: active === "packages" },
     { href: "/admin/numbers",  label: "Phone numbers", icon: <IconNumbers />,  active: active === "numbers"  },
     { href: "/admin/calls",    label: "All calls",     icon: <IconCalls />,    active: active === "calls"    },
+    { href: "/admin/settings", label: "Settings",      icon: <IconSettings />, active: active === "settings" },
   ]
 }

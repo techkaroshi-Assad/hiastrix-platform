@@ -126,6 +126,8 @@ model Agent {
   firstMessage         String?       @map("first_message")
   recordingEnabled     Boolean       @default(true) @map("recording_enabled")
   transcriptionEnabled Boolean       @default(true) @map("transcription_enabled")
+  /// Extended Vapi options — see lib/vapi/config.ts. Server-side only.
+  config               Json          @default("{}")
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -184,6 +186,14 @@ model Call {
   status          CallStatus
   recordingUrl    String?       @map("recording_url")
   transcript      String?
+  /// Model-written summary from the end-of-call report.
+  summary         String?
+  /// Why the call ended, verbatim from the provider.
+  endedReason     String?       @map("ended_reason")
+  /// Structured data extraction and success evaluation.
+  analysis        Json?
+  /// Turn-by-turn transcript with roles and timings.
+  messages        Json?
   startedAt       DateTime?     @map("started_at") @db.Timestamptz(6)
   endedAt         DateTime?     @map("ended_at") @db.Timestamptz(6)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -220,8 +230,9 @@ model CreditLedger {
   tenantId    String          @map("tenant_id") @db.Uuid
   type        LedgerEntryType
   amountCents Int             @map("amount_cents") // positive = credit, negative = debit
-  description String?
+  description String?         // tenant-facing note — never contains staff identity
   referenceId String?         @map("reference_id") @db.Uuid // call id or payment id
+  createdBy   String?         @map("created_by") // operator email; admin UI only
   createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenant      Tenant          @relation(fields: [tenantId], references: [id])
@@ -269,4 +280,18 @@ enum PaymentStatus {
   FAILED
 
   @@map("payment_status")
+}
+
+// ─── PLATFORM SETTINGS ────────────────────────────────────────────────────────
+// Exactly one row, guarded by a boolean primary key with a CHECK constraint.
+
+model PlatformSettings {
+  id               Boolean  @id @default(true)
+  overageRateCents Int      @default(35) @map("overage_rate_cents")
+  lowBalancePct    Int      @default(20) @map("low_balance_pct")
+  supportEmail     String   @default("support@hiastrix.com") @map("support_email")
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy        String?  @map("updated_by")
+
+  @@map("platform_settings")
 }

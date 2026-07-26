@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
 import { tenantNav } from "@/lib/nav"
 import { AppShell } from "@/components/app/app-shell"
+import { readConfig } from "@/lib/vapi/config"
 import { AgentsClient, type AgentRow, type NumberRow } from "./agents-client"
 
 export const metadata: Metadata = { title: "Agents" }
@@ -54,6 +55,7 @@ export default async function AgentsPage() {
       firstMessage:         a.firstMessage,
       recordingEnabled:     a.recordingEnabled,
       transcriptionEnabled: a.transcriptionEnabled,
+      config:               readConfig(a.config),
       phoneNumberId:        assigned?.id ?? null,
       phoneNumberLabel:     assigned?.phoneNumber ?? null,
       calls:                s?.calls ?? 0,
@@ -86,6 +88,7 @@ export default async function AgentsPage() {
         numbers={numberRows}
         canCreate={canCreate}
         lockedReason={lockedReason}
+        browserCallEnabled={Boolean(process.env.VAPI_PUBLIC_KEY)}
       />
     </AppShell>
   )

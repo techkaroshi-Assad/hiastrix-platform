@@ -12,7 +12,8 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { getTenantContext } from "@/lib/tenant"
 import { vapiAssistants } from "@/lib/vapi/client"
-import { buildAssistantPayload } from "@/lib/vapi/options"
+import { AgentConfigSchema, readConfig } from "@/lib/vapi/config"
+import { buildAssistantPayload } from "@/lib/vapi/payload"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
 const UpdateSchema = z.object({
@@ -23,7 +24,7 @@ const UpdateSchema = z.object({
   model:                z.string().min(1).optional(),
   recordingEnabled:     z.boolean().optional(),
   transcriptionEnabled: z.boolean().optional(),
-  endCallPhrases:       z.array(z.string().min(1)).max(10).optional(),
+  config:               AgentConfigSchema.optional(),
   status:               z.enum(["ACTIVE", "INACTIVE"]).optional(),
 })
 
@@ -50,32 +51,40 @@ export async function PATCH(
     const { agent } = found
 
     const parsed = UpdateSchema.safeParse(await request.json())
-    if (!parsed.success) return apiError("Please check the agent details and try again.")
+    if (!parsed.success) {
+      return apiError(
+        parsed.error.issues[0]?.message ?? "Please check the agent details and try again."
+      )
+    }
 
     const patch = parsed.data
 
     // A status-only request is the enable/disable toggle.
     const isToggleOnly = Object.keys(patch).length === 1 && patch.status !== undefined
 
+    // Merge over the stored record so a partial edit never blanks a field the
+    // form did not send.
+    const nextConfig = patch.config ?? readConfig(agent.config)
+
     try {
       if (isToggleOnly) {
         if (patch.status === "ACTIVE") await vapiAssistants.enable(agent.vapiAssistantId)
         else await vapiAssistants.disable(agent.vapiAssistantId)
       } else {
-        // Merge over the stored record so a partial edit never blanks a field
-        // that the form did not send.
         await vapiAssistants.update(
           agent.vapiAssistantId,
-          buildAssistantPayload({
-            name:                 patch.name                 ?? agent.name,
-            systemPrompt:         patch.systemPrompt         ?? agent.systemPrompt ?? "",
-            firstMessage:         patch.firstMessage         ?? agent.firstMessage ?? "",
-            voice:                patch.voice                ?? agent.voice ?? "",
-            model:                patch.model                ?? agent.model ?? "",
-            recordingEnabled:     patch.recordingEnabled     ?? agent.recordingEnabled,
-            transcriptionEnabled: patch.transcriptionEnabled ?? agent.transcriptionEnabled,
-            endCallPhrases:       patch.endCallPhrases,
-          })
+          buildAssistantPayload(
+            {
+              name:                 patch.name                 ?? agent.name,
+              systemPrompt:         patch.systemPrompt         ?? agent.systemPrompt ?? "",
+              firstMessage:         patch.firstMessage         ?? agent.firstMessage ?? "",
+              voice:                patch.voice                ?? agent.voice ?? "",
+              model:                patch.model                ?? agent.model ?? "",
+              recordingEnabled:     patch.recordingEnabled     ?? agent.recordingEnabled,
+              transcriptionEnabled: patch.transcriptionEnabled ?? agent.transcriptionEnabled,
+            },
+            nextConfig
+          )
         )
       }
     } catch (err) {
@@ -93,6 +102,7 @@ export async function PATCH(
         recordingEnabled:     patch.recordingEnabled,
         transcriptionEnabled: patch.transcriptionEnabled,
         status:               patch.status,
+        ...(patch.config ? { config: patch.config } : {}),
       },
       select: { id: true, status: true },
     })

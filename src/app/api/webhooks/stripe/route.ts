@@ -14,6 +14,7 @@ import type Stripe from "stripe"
 import { prisma } from "@/lib/prisma"
 import { getStripe } from "@/lib/stripe"
 import { enableAllTenantAgents } from "@/lib/billing/cap-enforcement"
+import { sendTopUpConfirmed, billingRecipients } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
 
@@ -120,11 +121,31 @@ async function creditTenant({
   ])
 
   // Bring paused agents back online now that there is balance again.
+  let resumed = false
   if (wasEmpty) {
     const agents = await prisma.agent.findMany({
       where:  { tenantId, status: "INACTIVE" },
       select: { id: true, vapiAssistantId: true },
     })
-    if (agents.length) await enableAllTenantAgents(tenantId, agents)
+    if (agents.length) {
+      await enableAllTenantAgents(tenantId, agents)
+      resumed = true
+    }
+  }
+
+  const after = await prisma.tenant.findUnique({
+    where:  { id: tenantId },
+    select: { companyName: true, creditBalanceCents: true },
+  })
+  const recipients = await billingRecipients(prisma, tenantId)
+
+  if (after && recipients.length) {
+    await sendTopUpConfirmed({
+      to: recipients,
+      companyName:  after.companyName,
+      amountCents,
+      balanceCents: after.creditBalanceCents,
+      resumed,
+    })
   }
 }

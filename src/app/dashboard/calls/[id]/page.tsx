@@ -11,6 +11,27 @@ import { usd, duration, dateTime, titleCase } from "@/lib/format"
 export const metadata: Metadata = { title: "Call detail" }
 export const dynamic = "force-dynamic"
 
+/** A turn in the conversation, as the provider records it. */
+type Turn = {
+  role?: string
+  message?: string
+  time?: number
+  secondsFromStart?: number
+}
+
+function turnsFrom(raw: unknown): Turn[] {
+  if (!Array.isArray(raw)) return []
+  return (raw as Turn[]).filter(
+    t => typeof t?.message === "string" && t.message.trim() !== "" && t.role !== "system"
+  )
+}
+
+function speaker(role: string | undefined, agentName: string) {
+  if (role === "user") return "Caller"
+  if (role === "bot" || role === "assistant") return agentName
+  return titleCase(role ?? "System")
+}
+
 export default async function CallDetailPage({
   params,
 }: {
@@ -30,8 +51,22 @@ export default async function CallDetailPage({
 
   if (!call) notFound()
 
+  const agentName = call.agent?.name ?? "Agent"
+  const turns = turnsFrom(call.messages)
+
+  const analysis = (call.analysis ?? null) as
+    | { structuredData?: unknown; successEvaluation?: unknown }
+    | null
+
+  const structured =
+    analysis?.structuredData && typeof analysis.structuredData === "object"
+      ? (analysis.structuredData as Record<string, unknown>)
+      : null
+
+  const success = analysis?.successEvaluation ?? null
+
   const facts: [string, React.ReactNode][] = [
-    ["Agent",      call.agent?.name ?? "—"],
+    ["Agent",      agentName],
     ["Number",     call.phoneNumber?.phoneNumber ?? "—"],
     ["Caller",     call.callerNumber ?? "Web call"],
     ["Direction",  titleCase(call.direction)],
@@ -40,6 +75,9 @@ export default async function CallDetailPage({
     ["Duration",   duration(call.durationSeconds)],
     ["Billed",     `${call.minutesBilled} min`],
     ["Cost",       usd(call.costCents)],
+    ...(call.endedReason
+      ? ([["Ended because", titleCase(call.endedReason)]] as [string, React.ReactNode][])
+      : []),
   ]
 
   return (
@@ -59,6 +97,15 @@ export default async function CallDetailPage({
     >
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         <div className="space-y-5">
+          {/* Summary — the fastest way to know what happened */}
+          {call.summary && (
+            <Card title="Summary">
+              <p className="px-5 py-5 text-[13.5px] leading-relaxed text-muted">
+                {call.summary}
+              </p>
+            </Card>
+          )}
+
           {/* Recording */}
           <Card title="Recording">
             <div className="px-5 py-5">
@@ -85,11 +132,38 @@ export default async function CallDetailPage({
             </div>
           </Card>
 
-          {/* Transcript */}
+          {/* Transcript — turn by turn where we have it */}
           <Card title="Transcript">
             <div className="px-5 py-5">
-              {call.transcript ? (
-                <pre className="max-h-[520px] overflow-y-auto whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-muted">
+              {turns.length > 0 ? (
+                <div className="max-h-[560px] space-y-3 overflow-y-auto">
+                  {turns.map((t, i) => {
+                    const isCaller = t.role === "user"
+                    return (
+                      <div key={i} className="flex flex-col gap-1">
+                        <div className="flex items-baseline gap-2">
+                          <span
+                            className={
+                              isCaller
+                                ? "text-[11px] font-medium uppercase tracking-[0.1em] text-subtle"
+                                : "text-[11px] font-medium uppercase tracking-[0.1em] text-brand-300"
+                            }
+                          >
+                            {speaker(t.role, agentName)}
+                          </span>
+                          {typeof t.secondsFromStart === "number" && (
+                            <span className="text-[11px] tabular-nums text-subtle">
+                              {duration(Math.round(t.secondsFromStart))}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[13.5px] leading-relaxed text-muted">{t.message}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : call.transcript ? (
+                <pre className="max-h-[560px] overflow-y-auto whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-muted">
                   {call.transcript}
                 </pre>
               ) : (
@@ -99,28 +173,69 @@ export default async function CallDetailPage({
               )}
             </div>
           </Card>
+
+          {/* Extracted data */}
+          {structured && Object.keys(structured).length > 0 && (
+            <Card title="Extracted data">
+              <dl className="px-5 py-2">
+                {Object.entries(structured).map(([key, value]) => (
+                  <div
+                    key={key}
+                    className="flex items-start justify-between gap-4 border-b border-white/[0.04] py-3 last:border-b-0"
+                  >
+                    <dt className="shrink-0 text-[12.5px] text-subtle">{titleCase(key)}</dt>
+                    <dd className="text-right text-[13px] break-words">
+                      {typeof value === "object"
+                        ? JSON.stringify(value)
+                        : String(value ?? "—")}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Card>
+          )}
         </div>
 
         {/* Facts */}
-        <Card title="Details">
-          <dl className="px-5 py-2">
-            <div className="flex items-center justify-between border-b border-white/[0.04] py-3">
-              <dt className="text-[12.5px] text-subtle">Status</dt>
-              <dd>
-                <Pill tone={callTone(call.status)}>{titleCase(call.status)}</Pill>
-              </dd>
-            </div>
-            {facts.map(([label, value]) => (
-              <div
-                key={label}
-                className="flex items-center justify-between gap-4 border-b border-white/[0.04] py-3 last:border-b-0"
-              >
-                <dt className="shrink-0 text-[12.5px] text-subtle">{label}</dt>
-                <dd className="truncate text-right text-[13px]">{value}</dd>
+        <div className="space-y-5">
+          <Card title="Details">
+            <dl className="px-5 py-2">
+              <div className="flex items-center justify-between border-b border-white/[0.04] py-3">
+                <dt className="text-[12.5px] text-subtle">Status</dt>
+                <dd>
+                  <Pill tone={callTone(call.status)}>{titleCase(call.status)}</Pill>
+                </dd>
               </div>
-            ))}
-          </dl>
-        </Card>
+              {success !== null && success !== undefined && (
+                <div className="flex items-center justify-between border-b border-white/[0.04] py-3">
+                  <dt className="text-[12.5px] text-subtle">Outcome</dt>
+                  <dd>
+                    <Pill
+                      tone={
+                        success === true || success === "true" || success === "success"
+                          ? "success"
+                          : "neutral"
+                      }
+                    >
+                      {typeof success === "boolean"
+                        ? success ? "Successful" : "Unsuccessful"
+                        : String(success)}
+                    </Pill>
+                  </dd>
+                </div>
+              )}
+              {facts.map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between gap-4 border-b border-white/[0.04] py-3 last:border-b-0"
+                >
+                  <dt className="shrink-0 text-[12.5px] text-subtle">{label}</dt>
+                  <dd className="truncate text-right text-[13px]">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
+        </div>
       </div>
     </AppShell>
   )

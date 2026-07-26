@@ -131,13 +131,41 @@ export async function POST(request: NextRequest) {
           0,
           Math.round(Number(message.durationSeconds ?? 0))
         )
+
+        // Recording can arrive at the top level or nested under artifact,
+        // depending on the assistant's artifact plan.
+        const artifact = (message.artifact ?? {}) as Record<string, unknown>
         const recordingUrl =
           (message.recordingUrl as string | undefined) ??
           (message.stereoRecordingUrl as string | undefined) ??
+          (artifact.recordingUrl as string | undefined) ??
           null
 
-        const transcript = (message.transcript as string | undefined) ?? null
-        const status = mapStatus(message.endedReason as string | undefined)
+        const transcript =
+          (message.transcript as string | undefined) ??
+          (artifact.transcript as string | undefined) ??
+          null
+
+        const messages =
+          (artifact.messages as unknown[] | undefined) ??
+          (message.messages as unknown[] | undefined) ??
+          null
+
+        // Analysis is only present when the agent has analysisPlan enabled.
+        const analysis = (message.analysis ?? {}) as Record<string, unknown>
+        const summary = (analysis.summary as string | undefined) ?? null
+        const endedReason = (message.endedReason as string | undefined) ?? null
+
+        const analysisPayload =
+          analysis.structuredData !== undefined ||
+          analysis.successEvaluation !== undefined
+            ? {
+                structuredData:    analysis.structuredData ?? null,
+                successEvaluation: analysis.successEvaluation ?? null,
+              }
+            : null
+
+        const status = mapStatus(endedReason ?? undefined)
 
         const record = await prisma.call.upsert({
           where: { vapiCallId },
@@ -152,6 +180,10 @@ export async function POST(request: NextRequest) {
             durationSeconds,
             recordingUrl,
             transcript,
+            summary,
+            endedReason,
+            ...(analysisPayload ? { analysis: analysisPayload } : {}),
+            ...(messages ? { messages } : {}),
             startedAt: call.startedAt ? new Date(call.startedAt) : null,
             endedAt:   call.endedAt ? new Date(call.endedAt) : new Date(),
           },
@@ -160,6 +192,10 @@ export async function POST(request: NextRequest) {
             durationSeconds,
             recordingUrl,
             transcript,
+            summary,
+            endedReason,
+            ...(analysisPayload ? { analysis: analysisPayload } : {}),
+            ...(messages ? { messages } : {}),
             endedAt: call.endedAt ? new Date(call.endedAt) : new Date(),
           },
           select: { id: true, minutesBilled: true },

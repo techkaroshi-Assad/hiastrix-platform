@@ -1,12 +1,11 @@
 /**
  * Curated voice and model choices offered in the agent builder.
  *
- * Stored in our database as opaque "provider:id" strings, and expanded into
- * Vapi's nested payload shape server-side (see buildAssistantPayload). Keeping
- * the DB value flat means adding a provider later does not need a migration.
+ * Stored in our database as opaque "provider:id" strings and expanded into
+ * Vapi's nested payload server-side (see config.ts). Keeping the DB value flat
+ * means adding a provider later needs no migration.
  *
- * These lists are intentionally short and editable — they are presentation
- * choices, not a contract with Vapi.
+ * These lists are presentation choices, not a contract with Vapi — edit freely.
  */
 
 export type Option = { value: string; label: string; note?: string }
@@ -43,51 +42,7 @@ export function splitOption(value: string): { provider: string; id: string } {
   return { provider: value.slice(0, idx), id: value.slice(idx + 1) }
 }
 
-export function labelFor(list: Option[], value: string | null | undefined) {
+export function labelFor(list: readonly Option[], value: string | null | undefined) {
   if (!value) return "—"
   return list.find(o => o.value === value)?.label ?? value
-}
-
-/**
- * Translate our flat agent record into the nested payload Vapi expects.
- * Kept in one place so create and update can never drift apart.
- */
-export function buildAssistantPayload(input: {
-  name: string
-  systemPrompt: string
-  firstMessage: string
-  voice: string
-  model: string
-  recordingEnabled: boolean
-  transcriptionEnabled: boolean
-  endCallPhrases?: string[]
-}): Record<string, unknown> {
-  const v = splitOption(input.voice)
-  const m = splitOption(input.model)
-
-  const payload: Record<string, unknown> = {
-    name: input.name,
-    firstMessage: input.firstMessage,
-    model: {
-      provider: m.provider,
-      model: m.id,
-      messages: [{ role: "system", content: input.systemPrompt }],
-    },
-    voice: {
-      provider: v.provider,
-      voiceId: v.id,
-    },
-    recordingEnabled: input.recordingEnabled,
-  }
-
-  // Transcription off means we simply don't attach a transcriber.
-  if (input.transcriptionEnabled) {
-    payload.transcriber = { provider: "deepgram", model: "nova-2" }
-  }
-
-  if (input.endCallPhrases?.length) {
-    payload.endCallPhrases = input.endCallPhrases
-  }
-
-  return payload
 }

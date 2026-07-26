@@ -4,6 +4,14 @@
  * SECURITY: Uses server-side Supabase only.
  * No NEXT_PUBLIC_ Supabase variables — credentials never reach the browser.
  * Tenants see only app.hiastrix.com URLs, never any vendor URLs.
+ *
+ * Role is read from `app_metadata` first. That claim is settable only with the
+ * service-role key, whereas `user_metadata` is writable by the account holder,
+ * so app_metadata is the trustworthy one. The user_metadata fallback exists for
+ * accounts provisioned before this distinction was drawn.
+ *
+ * This is a routing guard, not the authorisation boundary — every /admin page
+ * independently re-checks the admin_users table, which is the source of truth.
  */
 
 import { NextResponse, type NextRequest } from "next/server"
@@ -37,13 +45,19 @@ export async function proxy(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const pathname = request.nextUrl.pathname
 
+  const role = user
+    ? ((user.app_metadata as Record<string, unknown> | undefined)?.role as string | undefined) ??
+      (user.user_metadata?.role as string | undefined)
+    : undefined
+
+  const isOperator = role === "super_admin" || role === "admin"
+
   // ── Protect /admin routes ──────────────────────────────────────────────
   if (pathname.startsWith("/admin")) {
     if (!user) {
       return NextResponse.redirect(new URL("/login", request.url))
     }
-    const role = user.user_metadata?.role as string | undefined
-    if (role !== "super_admin" && role !== "admin") {
+    if (!isOperator) {
       // Tenant trying to access admin — redirect silently, no error shown
       return NextResponse.redirect(new URL("/dashboard", request.url))
     }
@@ -58,9 +72,9 @@ export async function proxy(request: NextRequest) {
 
   // ── Redirect authenticated users away from login/signup ────────────────
   if ((pathname === "/login" || pathname === "/signup") && user) {
-    const role = user.user_metadata?.role as string | undefined
-    const dest = (role === "super_admin" || role === "admin") ? "/admin" : "/dashboard"
-    return NextResponse.redirect(new URL(dest, request.url))
+    return NextResponse.redirect(
+      new URL(isOperator ? "/admin" : "/dashboard", request.url)
+    )
   }
 
   return supabaseResponse
