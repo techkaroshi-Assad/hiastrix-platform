@@ -1,16 +1,15 @@
 "use client"
 
 /**
- * Auth layouts.
+ * Auth layouts — canvas-backed.
  *
- * AuthShell — centred glass card, Neural Mesh canvas backdrop.
- *             Used on: forgot-password, update-password.
+ * AuthShell — centred glass card over a live Neural Mesh canvas.
+ *             Used on: sign-in, forgot-password, update-password.
  *
- * AuthSplit — Magnetic Field left panel + Neural Mesh right panel.
- *             Used on: sign-in, sign-up.
+ * AuthSplit — Magnetic Field left panel + Neural Mesh right (mobile only).
+ *             Used on: sign-up.
  *
- * Vendor-free: no Supabase, no Prisma, no internal service names
- * appear anywhere in this file or its children.
+ * Vendor-free: no Supabase, no Prisma names appear here.
  */
 
 import Link from "next/link"
@@ -33,10 +32,10 @@ export function AuthShell({
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-ink px-5 py-12">
 
-      {/* Full-bleed canvas background */}
+      {/* Live canvas backdrop */}
       <NeuralMeshCanvas />
 
-      {/* Radial vignette — keeps card readable over the canvas */}
+      {/* Radial vignette — keeps the card readable over the canvas */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
@@ -47,7 +46,6 @@ export function AuthShell({
       />
 
       <div className="relative w-full max-w-[400px] animate-rise-in">
-
         <div className="glass rounded-card px-8 py-9">
           <div className="mb-7 flex justify-center">
             <Logo size={30} />
@@ -98,10 +96,10 @@ export function AuthSplit({
   footer?: React.ReactNode
 }) {
   return (
-    <main className="grid min-h-screen bg-ink lg:grid-cols-[1.05fr_0.95fr]">
+    <main className="flex min-h-screen flex-col bg-ink lg:flex-row">
 
       {/* ── Left — brand panel ──────────────────────────────── */}
-      <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-white/[0.065] p-12 lg:flex">
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-white/[0.065] p-12 lg:flex lg:w-[52%] lg:min-h-screen lg:shrink-0">
 
         {/* Magnetic field canvas */}
         <MagneticFieldCanvas />
@@ -112,7 +110,7 @@ export function AuthSplit({
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "linear-gradient(140deg, rgba(7,7,10,0.78) 0%, rgba(18,10,38,0.52) 55%, rgba(7,7,10,0.60) 100%)",
+              "linear-gradient(140deg, rgba(7,7,10,0.82) 0%, rgba(18,10,38,0.55) 55%, rgba(7,7,10,0.65) 100%)",
           }}
         />
 
@@ -146,14 +144,14 @@ export function AuthSplit({
       </aside>
 
       {/* ── Right — form ────────────────────────────────────── */}
-      <section className="relative flex items-center justify-center overflow-hidden px-5 py-12">
+      <section className="relative flex flex-1 items-center justify-center overflow-hidden px-5 py-12">
 
-        {/* Mobile background (Neural Mesh, hidden on lg+) */}
+        {/* Mobile canvas (hidden on lg+) */}
         <div className="pointer-events-none absolute inset-0 lg:hidden">
           <NeuralMeshCanvas />
         </div>
 
-        {/* Subtle violet bloom on the form side */}
+        {/* Subtle violet bloom on the form side (desktop) */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 hidden lg:block"
@@ -165,7 +163,7 @@ export function AuthSplit({
 
         <div className="relative w-full max-w-[340px] animate-rise-in">
 
-          {/* Logo visible only on mobile */}
+          {/* Logo — mobile only */}
           <div className="mb-8 flex justify-center lg:hidden">
             <Logo size={30} />
           </div>
