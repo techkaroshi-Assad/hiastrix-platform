@@ -36,6 +36,7 @@ export function NeuralMeshCanvas({ className }: { className?: string }) {
     let W = 0, H = 0
 
     function resize() {
+      if (!canvas) return
       const r = window.devicePixelRatio || 1
       W = canvas.offsetWidth
       H = canvas.offsetHeight
@@ -208,6 +209,7 @@ export function MagneticFieldCanvas({ className }: { className?: string }) {
     const STEP  = 3.6
 
     function resize() {
+      if (!canvas) return
       const r = window.devicePixelRatio || 1
       W = canvas.offsetWidth
       H = canvas.offsetHeight
