@@ -1,5 +1,5 @@
 /**
- * Auth Middleware
+ * Proxy (Next.js 16 — replaces middleware.ts)
  *
  * SECURITY: Uses server-side Supabase only.
  * No NEXT_PUBLIC_ Supabase variables — credentials never reach the browser.
@@ -9,7 +9,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   // Server-side only — SUPABASE_URL and SUPABASE_ANON_KEY are NOT NEXT_PUBLIC_

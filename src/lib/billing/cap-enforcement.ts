@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client"
+import { prisma } from "@/lib/prisma"
 import { vapiAssistants } from "@/lib/vapi/client"
-
-const prisma = new PrismaClient()
 
 /**
  * Called on every call.ended webhook from Vapi.
@@ -92,7 +90,7 @@ export async function disableAllTenantAgents(
     agents.map((agent) => vapiAssistants.disable(agent.vapiAssistantId))
   )
 
-  await new PrismaClient().agent.updateMany({
+  await prisma.agent.updateMany({
     where: { tenantId },
     data: { status: "INACTIVE" },
   })
@@ -108,7 +106,7 @@ export async function enableAllTenantAgents(
     agents.map((agent) => vapiAssistants.enable(agent.vapiAssistantId))
   )
 
-  await new PrismaClient().agent.updateMany({
+  await prisma.agent.updateMany({
     where: { tenantId },
     data: { status: "ACTIVE" },
   })

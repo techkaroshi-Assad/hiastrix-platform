@@ -8,7 +8,8 @@
 
 import { NextRequest } from "next/server"
 import { createServiceClient } from "@/lib/supabase/server"
-import { sanitiseError, apiError, ERRORS } from "@/lib/errors"
+import { prisma } from "@/lib/prisma"
+import { sanitiseError, apiError } from "@/lib/errors"
 import { z } from "zod"
 
 const SignupSchema = z.object({
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient()
 
-    // Create auth user
+    // Create auth user (server-side only — Supabase never touched by browser)
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -43,11 +44,7 @@ export async function POST(request: NextRequest) {
       return apiError(sanitiseError(authError, "signup/auth"))
     }
 
-    // Create tenant + user_profile records in DB
-    // (Using Prisma in a separate DB call — Supabase only used for auth)
-    const { PrismaClient } = await import("@prisma/client")
-    const prisma = new PrismaClient()
-
+    // Create tenant + user records in DB
     await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
@@ -68,9 +65,10 @@ export async function POST(request: NextRequest) {
       })
     })
 
-    await prisma.$disconnect()
-
-    return Response.json({ message: "Account created. Please check your email to verify your address." }, { status: 201 })
+    return Response.json(
+      { message: "Account created. Please check your email to verify your address." },
+      { status: 201 }
+    )
 
   } catch (error) {
     return apiError(sanitiseError(error, "signup"))
