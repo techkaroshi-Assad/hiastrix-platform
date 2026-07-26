@@ -36,6 +36,7 @@ import {
   type CrmToolSpec,
   type ToolParameter,
 } from "@/lib/vapi/tools"
+import { enforcedRules, suggestedFlow } from "@/lib/crm/guidance"
 import { cn } from "@/lib/utils"
 
 /* ── What the tenant's own sub-account contains ────────────────────────── */
@@ -79,15 +80,21 @@ const clean = (s: string) =>
 export function ToolsEditor({
   value,
   onChange,
+  onAddGuidance,
 }: {
   value: AgentTool[]
   onChange: (next: AgentTool[]) => void
+  /** Appends a draft call flow to the agent's instructions. Optional so the
+   *  editor still works anywhere the prompt is not in reach. */
+  onAddGuidance?: (text: string) => void
 }) {
   const [note, setNote] = useState<string | null>(null)
   const { options, loading } = useCrmOptions()
 
   const issues = toolIssues(value)
   const functions = value.filter(t => t.type === "function")
+  const crmOn = value.some(t => t.type.startsWith("crm."))
+  const [added, setAdded] = useState(false)
 
   /* ── CRM actions ─────────────────────────────────────────────────── */
 
@@ -235,6 +242,52 @@ export function ToolsEditor({
           ))
         )}
       </div>
+
+      {/* ── Behaviour ────────────────────────────────────────────── */}
+      {crmOn && (
+        <div className="space-y-3 rounded-field border border-line bg-field-soft p-4">
+          <div>
+            <h5 className="text-[12.5px] font-semibold">Making the agent actually use these</h5>
+            <p className="mt-1 text-xs leading-relaxed text-subtle">
+              Switching an action on gives the agent the ability to do it. What it
+              does on a call, and in what order, comes from its instructions.
+            </p>
+          </div>
+
+          <details className="group">
+            <summary className="cursor-pointer list-none text-xs text-muted underline-offset-4 hover:underline">
+              Hi-Astrix already enforces a few rules — see them
+            </summary>
+            <pre className="mt-2 whitespace-pre-wrap rounded-field border border-line bg-field px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-subtle">
+              {enforcedRules(value).replace(/^\n+/, "")}
+            </pre>
+            <p className="mt-1.5 text-xs leading-relaxed text-subtle">
+              These are added to every call automatically and can&rsquo;t be removed —
+              they&rsquo;re what stops duplicate contacts and appointments that were
+              never really free.
+            </p>
+          </details>
+
+          {onAddGuidance && (
+            <div className="space-y-2">
+              <SecondaryButton
+                type="button"
+                onClick={() => {
+                  onAddGuidance(suggestedFlow(value))
+                  setAdded(true)
+                }}
+              >
+                {added ? "Added to instructions" : "Add a suggested call flow"}
+              </SecondaryButton>
+              <p className="text-xs leading-relaxed text-subtle">
+                Drops a step-by-step outline into this agent&rsquo;s instructions, built
+                from the actions above. Edit it freely afterwards — it&rsquo;s a
+                starting point, not a rule.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Custom ───────────────────────────────────────────────── */}
       <div className="space-y-3 border-t border-line pt-6">

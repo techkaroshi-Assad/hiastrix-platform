@@ -641,7 +641,20 @@ export function AgentsClient({
               placeholder="Leave blank for none"
               hint="Attaches an existing knowledge base so the agent can answer from your documents."
             />
-            <ToolsEditor value={c.tools} onChange={tools => setConfig({ tools })} />
+            <ToolsEditor
+              value={c.tools}
+              onChange={tools => setConfig({ tools })}
+              onAddGuidance={text =>
+                setDraft(d => ({
+                  ...d,
+                  // Appended, never replacing — whatever they have written about
+                  // tone and scope matters more than our outline.
+                  systemPrompt: d.systemPrompt.trimEnd()
+                    ? `${d.systemPrompt.trimEnd()}\n\n${text}`
+                    : text,
+                }))
+              }
+            />
 
             {/* Only shown when an older agent still carries raw JSON. New
                 agents never see this; it exists so a pre-builder tool keeps

@@ -14,6 +14,7 @@
 import { splitOption } from "./options"
 import { transcriberPayload } from "./catalog"
 import { crmToolParameters } from "@/lib/crm/tool-schema"
+import { enforcedRules } from "@/lib/crm/guidance"
 import type { AgentConfig } from "./config"
 import type { AgentTool } from "./tools"
 
@@ -194,7 +195,20 @@ export function buildAssistantPayload(
       model: m.id,
       temperature: config.temperature,
       maxTokens: config.maxTokens,
-      messages: [{ role: "system", content: core.systemPrompt }],
+      /*
+       * The tenant's prompt, plus the handful of CRM rules that are ours to set.
+       *
+       * Enabling a tool grants a capability; it does not produce a behaviour.
+       * Without an explicit instruction an agent will happily create a contact
+       * it never looked up, or re-search for someone it made moments ago and
+       * find nothing — the search index lags a write by about seven seconds.
+       * Both make duplicates in a customer's CRM, so the ordering rules are
+       * appended here rather than left to whoever wrote the prompt.
+       *
+       * Appended at send, not stored: the prompt the tenant sees and edits stays
+       * theirs, and the rules stay current if we change them.
+       */
+      messages: [{ role: "system", content: core.systemPrompt + enforcedRules(config.tools) }],
       ...(config.knowledgeBaseId
         ? { knowledgeBaseId: config.knowledgeBaseId }
         : {}),

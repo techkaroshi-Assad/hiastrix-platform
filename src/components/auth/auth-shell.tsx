@@ -78,8 +78,16 @@ export function AuthShell({
 
 /* ── Split layout ─────────────────────────────────────────── */
 
+/*
+ * Product claims, not business-model claims.
+ *
+ * This panel used to describe reselling — "under your own brand", "your logo on
+ * every screen your customers see". That is how Astrix sells Hi-Astrix, not what
+ * a tenant is buying: they are a business that wants their phone answered. The
+ * copy speaks to that instead.
+ */
 const STATS = [
-  { value: "99.9%",  label: "uptime" },
+  { value: "24/7",   label: "answered" },
   { value: "<400ms", label: "response" },
   { value: "40+",    label: "languages" },
 ]
@@ -117,11 +125,11 @@ export function AuthSplit({
           <p className="max-w-[390px] text-[28px] font-light leading-[1.32] tracking-[-0.022em]">
             Voice agents that{" "}
             <span className="text-gradient-brand font-semibold">sound human</span>,
-            deployed under your own brand.
+            answering every call.
           </p>
           <p className="mt-5 max-w-[360px] text-[13.5px] font-light leading-relaxed text-muted">
-            Launch, monitor and bill AI calling agents from one workspace — with
-            your logo on every screen your customers ever see.
+            Hi-Astrix picks up, qualifies the caller and books the appointment — then
+            writes it all into your CRM before they hang up.
           </p>
         </div>
 
