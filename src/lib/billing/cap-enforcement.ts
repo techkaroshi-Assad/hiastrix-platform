@@ -1,4 +1,4 @@
-import { prisma, type TransactionClient } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { vapiAssistants } from "@/lib/vapi/client"
 
 /**
@@ -39,37 +39,44 @@ export async function processCallEnded(params: {
     ledgerType = "OVERAGE_CHARGE"
   }
 
-  // Update tenant balance and usage in a transaction
-  await prisma.$transaction(async (tx: TransactionClient) => {
-    await tx.tenant.update({
+  // Batch transaction (array form), not an interactive one.
+  //
+  // The array form ships every statement in a single round trip on one pooled
+  // connection, so it stays atomic while remaining compatible with Supabase's
+  // transaction-mode pooler. An interactive `$transaction(async tx => …)`
+  // holds a connection open across round trips, which transaction-mode
+  // pooling cannot support.
+  await prisma.$transaction([
+    prisma.tenant.update({
       where: { id: tenantId },
       data: {
         minutesUsed: newMinutesUsed,
         creditBalanceCents: { decrement: costCents },
       },
-    })
-
-    await tx.call.update({
+    }),
+    prisma.call.update({
       where: { id: callId },
       data: {
         minutesBilled,
         costCents,
         status: "COMPLETED",
       },
-    })
-
-    if (costCents > 0) {
-      await tx.creditLedger.create({
-        data: {
-          tenantId,
-          type: ledgerType,
-          amountCents: -costCents,
-          description: `Call deduction — ${minutesBilled} overage min @ $${(tenant.package!.overageRateCents / 100).toFixed(2)}/min`,
-          referenceId: callId,
-        },
-      })
-    }
-  })
+    }),
+    // Only recorded when the call actually incurred a charge.
+    ...(costCents > 0
+      ? [
+          prisma.creditLedger.create({
+            data: {
+              tenantId,
+              type: ledgerType,
+              amountCents: -costCents,
+              description: `Call deduction — ${minutesBilled} overage min @ $${(tenant.package!.overageRateCents / 100).toFixed(2)}/min`,
+              referenceId: callId,
+            },
+          }),
+        ]
+      : []),
+  ])
 
   // Check if balance is now zero or below — block all agents
   const updatedTenant = await prisma.tenant.findUniqueOrThrow({

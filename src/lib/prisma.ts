@@ -6,7 +6,7 @@
  * This prevents build-time failures when DATABASE_URL is not yet available.
  *
  * Pool is capped at 5 connections per function instance — safe for serverless
- * (Supabase free tier allows 60 direct connections; 5 × ≤12 warm instances = 60).
+ * on Supabase's direct connection.
  */
 
 import { PrismaClient } from "@prisma/client"
@@ -16,6 +16,19 @@ import { Pool } from "pg"
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
+
+/**
+ * The client handed to an interactive `prisma.$transaction(async (tx) => …)`
+ * callback. Mirrors Prisma's internal ITXClientDenyList — the transactional
+ * client exposes every model delegate but none of the lifecycle methods.
+ *
+ * Kept exported here so route handlers import their transaction type from one
+ * place rather than reaching into Prisma's generated namespace.
+ */
+export type TransactionClient = Omit<
+  PrismaClient,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>
 
 function getPrismaClient(): PrismaClient {
   if (globalForPrisma.prisma) return globalForPrisma.prisma
