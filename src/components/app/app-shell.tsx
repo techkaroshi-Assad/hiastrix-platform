@@ -4,12 +4,21 @@
  * Deliberately provider-agnostic: it renders brand and navigation only.
  * White-label theming will later swap `Logo` and the accent token per tenant
  * without touching this file.
+ *
+ * Layout contract: the sidebar is a fixed 248px rail; the main column is
+ * `min-w-0 flex-1` so long content can never push the page sideways. Header
+ * and content share one `max-w-[1400px]` measure and are centred, so the UI
+ * stays a readable column on ultrawide displays instead of stretching to
+ * both corners.
  */
 
 import Link from "next/link"
 import { Logo } from "@/components/brand/logo"
 import { SignOutButton } from "@/components/app/sign-out-button"
 import { cn } from "@/lib/utils"
+
+/** Shared measure for header and content so their left edges line up exactly. */
+const MEASURE = "mx-auto w-full max-w-[1400px]"
 
 export type NavItem = {
   href: string
@@ -47,6 +56,7 @@ export function AppShell({
             <Link
               key={item.href}
               href={item.href}
+              aria-current={item.active ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] transition-colors",
                 item.active
@@ -75,7 +85,7 @@ export function AppShell({
       {/* ── Main ────────────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-ink/80 px-6 py-5 backdrop-blur-xl lg:px-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className={cn(MEASURE, "flex flex-wrap items-center justify-between gap-4")}>
             <div className="min-w-0">
               <div className="mb-4 lg:hidden">
                 <Logo size={24} />
@@ -85,11 +95,34 @@ export function AppShell({
                 <p className="mt-1 text-[13.5px] font-light text-muted">{description}</p>
               )}
             </div>
-            {actions && <div className="flex items-center gap-2.5">{actions}</div>}
+            {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}
           </div>
         </header>
 
-        <div className="flex-1 px-6 py-8 lg:px-10">{children}</div>
+        {/* Horizontal rail replaces the sidebar below `lg`, where it is hidden. */}
+        <nav className="border-b border-white/[0.07] bg-ink-2/40 lg:hidden">
+          <div className="flex gap-1 overflow-x-auto px-4 py-2.5">
+            {nav.map(item => (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={item.active ? "page" : undefined}
+                className={cn(
+                  "shrink-0 rounded-lg px-3 py-1.5 text-[13px] whitespace-nowrap transition-colors",
+                  item.active
+                    ? "bg-white/[0.06] font-medium text-fg"
+                    : "text-muted hover:text-fg"
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </nav>
+
+        <div className="flex-1 px-6 py-8 lg:px-10">
+          <div className={MEASURE}>{children}</div>
+        </div>
       </div>
     </div>
   )

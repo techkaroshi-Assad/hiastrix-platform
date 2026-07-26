@@ -1,7 +1,21 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────
-   Hi-Astrix  ·  Design Token System  v1.0
+   Hi-Astrix  ·  Design Token System  v1.1
+
+   CASCADE NOTE — read before editing.
+
+   Tailwind v4 emits every utility inside `@layer utilities`. In the CSS
+   cascade, *unlayered* rules always win over *layered* ones, no matter the
+   specificity or source order. So any bare rule written in this file will
+   silently override every Tailwind utility that sets the same property.
+
+   That is exactly what a top-level `* { margin: 0; padding: 0 }` reset did
+   here: it beat px-*, py-*, m-*, and space-y-* on every element in the app,
+   which is why pages rendered flush against the viewport edges.
+
+   Therefore: everything below lives in an explicit layer. Never add a
+   top-level rule to this file.
    ───────────────────────────────────────────────────────────── */
 
 :root {
@@ -44,7 +58,9 @@
   --subtle: var(--fg-3);
 }
 
-/* Tailwind custom properties */
+/* Tailwind token map — these generate real utilities
+   (bg-ink, text-muted, rounded-card, …), so they do not need
+   to be hand-written further down. */
 @theme inline {
   --color-background: var(--bg);
   --color-foreground: var(--fg);
@@ -56,9 +72,6 @@
   --color-muted:      var(--muted);
   --color-subtle:     var(--subtle);
   --color-fg:         var(--fg);
-  --color-brand-500:  var(--brand);
-  --color-brand-400:  var(--brand-mid);
-  --color-brand-300:  var(--brand-hi);
   --color-danger:     var(--danger);
   --color-warning:    var(--warning);
   --color-success:    var(--success);
@@ -71,7 +84,7 @@
   --radius-xs:     5px;
   --radius-field:  9px;
 
-  /* Extended color map */
+  /* Brand scale */
   --color-brand-200:  var(--brand-200);
   --color-brand-300:  var(--brand-hi);
   --color-brand-400:  var(--brand-mid);
@@ -80,63 +93,60 @@
   --color-brand-700:  var(--brand-700);
 
   /* Ink tints */
-  --ink-2: #0D0D14;
+  --ink-2:       #0D0D14;
   --color-ink-2: var(--ink-2);
 }
 
-/* ── Reset ────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--font-sans, "Inter", system-ui), sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ── Base ─────────────────────────────────────────────────────
+   Layered, so every Tailwind spacing utility still overrides it. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans, "Inter", system-ui), sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Nothing should ever push the document sideways. */
+    overflow-x: hidden;
+  }
 }
 
-/* ── Glass card ───────────────────────────────────────────── */
-.glass {
-  background: rgba(13,13,20,0.70);
-  backdrop-filter: blur(28px) saturate(1.35);
-  -webkit-backdrop-filter: blur(28px) saturate(1.35);
-  border: 1px solid var(--border);
-}
+/* ── Components ───────────────────────────────────────────────
+   Sits below `utilities`, so a utility class can always override
+   one of these (e.g. `hover:text-fg` beats `.text-muted`). */
+@layer components {
+  .glass {
+    background: rgba(13,13,20,0.70);
+    backdrop-filter: blur(28px) saturate(1.35);
+    -webkit-backdrop-filter: blur(28px) saturate(1.35);
+    border: 1px solid var(--border);
+  }
 
-/* ── Radius ───────────────────────────────────────────────── */
-.rounded-card    { border-radius: var(--radius-card); }
-.rounded-sm-card { border-radius: var(--radius-sm); }
-.rounded-field   { border-radius: var(--radius-field); }
+  .rounded-sm-card {
+    border-radius: var(--radius-sm);
+  }
 
-/* ── Brand gradient text ──────────────────────────────────── */
-.text-gradient-brand {
-  background: linear-gradient(135deg, #C4B5FD 0%, #A78BFA 30%, #7C3AED 65%, #5B21B6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
+  .text-gradient-brand {
+    background: linear-gradient(135deg, #C4B5FD 0%, #A78BFA 30%, #7C3AED 65%, #5B21B6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
 
-/* ── Color utilities ──────────────────────────────────────── */
-.bg-ink           { background: var(--ink); }
-.bg-surface       { background: var(--surface); }
-.bg-card          { background: var(--card); }
-.text-fg          { color: var(--fg); }
-.text-muted       { color: var(--muted); }
-.text-subtle      { color: var(--subtle); }
-
-.bg-brand-500\/12 { background: rgba(124,58,237,0.12); }
-.bg-brand-500\/8  { background: rgba(124,58,237,0.08); }
-.text-brand-300   { color: var(--brand-hi); }
-.text-brand-400   { color: var(--brand-mid); }
-
-.bg-danger  { background: var(--danger); }
-.bg-warning { background: var(--warning); }
-.bg-success { background: var(--success); }
-
-/* ── Grain overlay ────────────────────────────────────────── */
-.grain {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
-  background-size: 200px;
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    background-size: 200px;
+  }
 }
 
 /* ── Keyframes ────────────────────────────────────────────── */
@@ -199,29 +209,31 @@ body {
 }
 
 /* ── Animation utilities ──────────────────────────────────── */
-.animate-rise-in        { animation: rise-in 0.48s cubic-bezier(0.22,1,0.36,1) both; }
-.animate-fade-in        { animation: fade-in 0.4s ease both; }
-.animate-silk-a         { animation: silk-a 18s ease-in-out infinite; }
-.animate-silk-b         { animation: silk-b 22s ease-in-out infinite; }
-.animate-silk-c         { animation: silk-c 14s ease-in-out infinite; }
-.animate-orbit          { animation: orbit 12s linear infinite; }
-.animate-orbit-rev      { animation: orbit-rev 18s linear infinite; }
-.animate-eq             { animation: eq 1.2s ease-in-out infinite; }
-.animate-aurora-a       { animation: aurora-a 22s ease-in-out infinite; }
-.animate-aurora-b       { animation: aurora-b 18s ease-in-out infinite; }
-.animate-slow-spin      { animation: slow-spin 34s linear infinite; }
-.animate-glow-path      { animation: glow-path 14s ease-in-out infinite; }
-.animate-star-rise      { animation: star-rise 40s linear infinite; }
-.animate-star-rise-slow { animation: star-rise-slow 60s linear infinite; }
-.animate-pulse-dot      { animation: pulse-dot 2s ease-in-out infinite; }
-.animate-spin           { animation: spin 0.9s linear infinite; }
-.animate-sheen          { animation: sheen 2.4s ease infinite; }
+@layer utilities {
+  .animate-rise-in        { animation: rise-in 0.48s cubic-bezier(0.22,1,0.36,1) both; }
+  .animate-fade-in        { animation: fade-in 0.4s ease both; }
+  .animate-silk-a         { animation: silk-a 18s ease-in-out infinite; }
+  .animate-silk-b         { animation: silk-b 22s ease-in-out infinite; }
+  .animate-silk-c         { animation: silk-c 14s ease-in-out infinite; }
+  .animate-orbit          { animation: orbit 12s linear infinite; }
+  .animate-orbit-rev      { animation: orbit-rev 18s linear infinite; }
+  .animate-eq             { animation: eq 1.2s ease-in-out infinite; }
+  .animate-aurora-a       { animation: aurora-a 22s ease-in-out infinite; }
+  .animate-aurora-b       { animation: aurora-b 18s ease-in-out infinite; }
+  .animate-slow-spin      { animation: slow-spin 34s linear infinite; }
+  .animate-glow-path      { animation: glow-path 14s ease-in-out infinite; }
+  .animate-star-rise      { animation: star-rise 40s linear infinite; }
+  .animate-star-rise-slow { animation: star-rise-slow 60s linear infinite; }
+  .animate-pulse-dot      { animation: pulse-dot 2s ease-in-out infinite; }
+  .animate-spin           { animation: spin 0.9s linear infinite; }
+  .animate-sheen          { animation: sheen 2.4s ease infinite; }
+}
 
 /* ── Reduced motion ───────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration:       0.01ms !important;
+    animation-duration:        0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration:      0.01ms !important;
+    transition-duration:       0.01ms !important;
   }
 }

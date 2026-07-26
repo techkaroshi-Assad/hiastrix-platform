@@ -20,7 +20,9 @@ export const metadata: Metadata = {
     template: "%s · Hi-Astrix",
   },
   description: "AI voice calling platform — deploy agents under your own brand.",
-  icons: { icon: "/brand/mark.svg" },
+  // No `icons` key on purpose: Next's file convention picks up
+  // `src/app/icon.svg` (the Signal Arc mark) automatically. An explicit path
+  // here would override that and win even if the file it points at is missing.
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
