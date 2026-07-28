@@ -1,81 +1,20 @@
 /**
- * PUT /api/agents/[id]/number — attach or detach a phone number.
+ * Gone. Number assignment moved to PUT /api/numbers/[id].
  *
- * Body: { phoneNumberId: string | null }
+ * This route assumed one number per agent: it detached whatever else pointed at
+ * the agent before attaching, and it attached regardless of the agent's status —
+ * so calling it on a paused agent put that agent back on the air, which is the
+ * billing hole `applyOneAgentAvailability` exists to close.
  *
- * Only numbers Astrix has allocated to this tenant are selectable. A number
- * belonging to another tenant reads as "not found", so allocation is never
- * discoverable across tenant boundaries.
+ * The file survives only so a stale client gets a clear answer instead of a
+ * silent 404 from the new route tree. Delete the folder when convenient:
+ *
+ *   git rm -r "src/app/api/agents/[id]/number"
  */
 
-import { NextRequest } from "next/server"
-import { z } from "zod"
-import { prisma } from "@/lib/prisma"
-import { getTenantContext } from "@/lib/tenant"
-import { vapiPhoneNumbers } from "@/lib/vapi/client"
-import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
-
-const BodySchema = z.object({
-  phoneNumberId: z.string().uuid().nullable(),
-})
-
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params
-
-    const ctx = await getTenantContext()
-    if (!ctx) return apiError(ERRORS.UNAUTHORIZED, 401)
-
-    const agent = await prisma.agent.findFirst({
-      where: { id, tenantId: ctx.tenant.id },
-    })
-    if (!agent) return apiError(ERRORS.NOT_FOUND, 404)
-
-    const parsed = BodySchema.safeParse(await request.json())
-    if (!parsed.success) return apiError(ERRORS.FALLBACK)
-
-    const { phoneNumberId } = parsed.data
-
-    // Detach whatever is currently pointing at this agent.
-    const current = await prisma.phoneNumber.findFirst({
-      where: { agentId: agent.id, tenantId: ctx.tenant.id },
-    })
-
-    if (current && current.id !== phoneNumberId) {
-      try {
-        await vapiPhoneNumbers.assignAssistant(current.vapiPhoneNumberId, null)
-      } catch (err) {
-        return apiError(sanitiseError(err, "agents/number/detach"))
-      }
-      await prisma.phoneNumber.update({
-        where: { id: current.id },
-        data: { agentId: null },
-      })
-    }
-
-    if (phoneNumberId === null) return Response.json({ ok: true })
-
-    const next = await prisma.phoneNumber.findFirst({
-      where: { id: phoneNumberId, tenantId: ctx.tenant.id },
-    })
-    if (!next) return apiError(ERRORS.NOT_FOUND, 404)
-
-    try {
-      await vapiPhoneNumbers.assignAssistant(next.vapiPhoneNumberId, agent.vapiAssistantId)
-    } catch (err) {
-      return apiError(sanitiseError(err, "agents/number/attach"))
-    }
-
-    await prisma.phoneNumber.update({
-      where: { id: next.id },
-      data: { agentId: agent.id },
-    })
-
-    return Response.json({ ok: true })
-  } catch (error) {
-    return apiError(sanitiseError(error, "agents/number"))
-  }
+export async function PUT() {
+  return Response.json(
+    { error: "This endpoint has moved to PUT /api/numbers/{numberId}." },
+    { status: 410 }
+  )
 }

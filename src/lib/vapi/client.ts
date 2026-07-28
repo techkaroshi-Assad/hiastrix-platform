@@ -5,18 +5,58 @@
 
 const VAPI_BASE_URL = "https://api.vapi.ai"
 
+/**
+ * Every request is bounded.
+ *
+ * Without this a hung provider request waits forever. Inside a page request
+ * that is merely slow — the platform eventually kills the function. Inside the
+ * dialer's tick loop it is fatal: one hung POST consumes the whole tick, the
+ * leads it claimed sit unreachable until their lease expires, and the campaign
+ * stalls for a minute at a time.
+ */
+const DEFAULT_TIMEOUT_MS = 20_000
+
+/** Thrown for 404 specifically, so callers can tell "gone" from "broken". */
+export class VapiNotFound extends Error {
+  constructor(path: string) {
+    super(`Vapi API error 404: ${path}`)
+    this.name = "VapiNotFound"
+  }
+}
+
 async function vapiRequest<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit & { timeoutMs?: number } = {}
 ): Promise<T> {
-  const res = await fetch(`${VAPI_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  })
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init } = options
+
+  // A caller-supplied signal wins; otherwise every request gets the default
+  // deadline. AbortSignal.any means a caller's cancellation and the timeout
+  // both work, rather than one replacing the other.
+  const deadline = AbortSignal.timeout(timeoutMs)
+  const combined = signal ? AbortSignal.any([signal, deadline]) : deadline
+
+  let res: Response
+  try {
+    res = await fetch(`${VAPI_BASE_URL}${path}`, {
+      ...init,
+      signal: combined,
+      headers: {
+        Authorization: `Bearer ${process.env.VAPI_API_KEY}`,
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  } catch (err) {
+    // Keep the "Vapi API error <n>" shape so sanitiseError keeps working, and
+    // so a timeout is distinguishable from a rejection in the logs.
+    if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      throw new Error(`Vapi API error 408: request timed out after ${timeoutMs}ms`)
+    }
+    throw err
+  }
+
+  if (res.status === 404) throw new VapiNotFound(path)
 
   if (!res.ok) {
     const error = await res.text()
@@ -72,21 +112,59 @@ export const vapiPhoneNumbers = {
 
 // ─── Calls ───────────────────────────────────────────────────────────────────
 
+/** What we get back from placing a call. Only `id` is relied on. */
+export type VapiCallCreated = {
+  id: string
+  status?: string
+}
+
+/**
+ * A call as read back from the provider.
+ *
+ * This is the reaper's tiebreaker: when a lease expires we do not know whether
+ * the call is dead or merely slow to report, and this is what tells us.
+ */
+export type VapiCallRead = {
+  id: string
+  status?: "queued" | "ringing" | "in-progress" | "forwarding" | "ended"
+  endedReason?: string
+  startedAt?: string
+  endedAt?: string
+  customer?: { number?: string }
+  metadata?: Record<string, string>
+}
+
 export const vapiCalls = {
-  list: (params: Record<string, string> = {}) => {
+  list: (params: Record<string, string> = {}, opts: { signal?: AbortSignal } = {}) => {
     const query = new URLSearchParams(params).toString()
-    return vapiRequest(`/call${query ? `?${query}` : ""}`)
+    return vapiRequest<VapiCallRead[]>(`/call${query ? `?${query}` : ""}`, opts)
   },
 
-  get: (id: string) => vapiRequest(`/call/${id}`),
+  /** Throws VapiNotFound when the call does not exist — which is information. */
+  get: (id: string, opts: { signal?: AbortSignal } = {}) =>
+    vapiRequest<VapiCallRead>(`/call/${id}`, opts),
 
   /**
    * Place an outbound call. Requires a number allocated to the tenant, since
    * that is the caller ID the recipient sees.
+   *
+   * `metadata` is how a dial is correlated back to the queue row that made it.
+   * The provider echoes it on every server message for the call, so a webhook
+   * can attribute a call even when the create response never reached us.
    */
-  create: (data: {
-    assistantId: string
-    phoneNumberId: string
-    customer: { number: string }
-  }) => vapiRequest("/call", { method: "POST", body: JSON.stringify(data) }),
+  create: (
+    data: {
+      assistantId: string
+      phoneNumberId: string
+      customer: { number: string }
+      metadata?: Record<string, string>
+      assistantOverrides?: Record<string, unknown>
+    },
+    opts: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ) =>
+    vapiRequest<VapiCallCreated>("/call", {
+      ...opts,
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 }

@@ -48,6 +48,10 @@ model Tenant {
   /// maps one, which is also the signal the agent builder uses to hide the CRM
   /// tools rather than show dropdowns with nothing in them.
   crmLocationId      String?      @map("crm_location_id")
+  /// Per-tenant outbound concurrency. Null falls back to the platform default.
+  maxConcurrentCalls Int?         @map("max_concurrent_calls")
+  /// Dialling code used to normalise bare numbers in an uploaded lead list.
+  defaultCountryCode String       @default("1") @map("default_country_code")
   createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -59,6 +63,10 @@ model Tenant {
   creditLedger       CreditLedger[]
   payments           Payment[]
   invitations        TenantInvitation[]
+  campaigns          Campaign[]
+  campaignLeads      CampaignLead[]
+  dialAttempts       DialAttempt[]
+  suppressions       Suppression[]
 
   @@map("tenants")
 }
@@ -170,6 +178,7 @@ model Agent {
   tenant               Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   phoneNumbers         PhoneNumber[]
   calls                Call[]
+  campaigns            Campaign[]
 
   @@map("agents")
 }
@@ -195,6 +204,8 @@ model PhoneNumber {
   tenant            Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   agent             Agent?      @relation(fields: [agentId], references: [id], onDelete: SetNull)
   calls             Call[]
+  campaigns         Campaign[]
+  dialAttempts      DialAttempt[]
 
   @@map("phone_numbers")
 }
@@ -344,8 +355,243 @@ model PlatformSettings {
   overageRateCents Int      @default(35) @map("overage_rate_cents")
   lowBalancePct    Int      @default(20) @map("low_balance_pct")
   supportEmail     String   @default("support@hiastrix.com") @map("support_email")
+
+  // ── Outbound dialler ──────────────────────────────────────────────────
+  /// The 2am switch. False stops every claim on the platform at once.
+  dialerEnabled       Boolean @default(true) @map("dialer_enabled")
+  /// Platform-wide live outbound calls. Set to ~85% of the provider's own
+  /// limit: this tier is bounded best-effort rather than exact, and the
+  /// headroom absorbs the slack. See lib/dialer/claim.ts.
+  maxConcurrentCalls  Int     @default(40)  @map("max_concurrent_calls")
+  /// Default per-tenant cap, overridable on the tenant.
+  tenantMaxConcurrent Int     @default(10)  @map("tenant_max_concurrent")
+  /// Calls one number may place in 24h before it drops out of rotation —
+  /// carriers spam-label a number that dials all day.
+  numberDailyCallCap  Int     @default(200) @map("number_daily_call_cap")
+  /// Times one person may be dialled in 24h across all of a tenant's campaigns.
+  contactDailyCap     Int     @default(2)   @map("contact_daily_cap")
+  /// Forced into the system prompt of any agent running a campaign, the same
+  /// way the CRM rules are, so a tenant cannot edit it out.
+  consentLine         String  @default("Let the person know this call may be recorded, in your first sentence, before anything else.") @map("consent_line")
+
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy        String?  @map("updated_by")
 
   @@map("platform_settings")
+}
+
+// ─── OUTBOUND CAMPAIGNS ───────────────────────────────────────────────────────
+// The dialler. Its moving parts are documented in lib/dialer/, and the reasoning
+// behind the table split is in sql/2026-07-28-dialer.sql.
+
+model Campaign {
+  id               String        @id @default(uuid()) @db.Uuid
+  tenantId         String        @map("tenant_id") @db.Uuid
+  agentId          String        @map("agent_id") @db.Uuid
+  /// Null rotates round-robin across every number attached to the agent, which
+  /// is what keeps one caller ID from being spam-labelled. Set it only when a
+  /// campaign must always present the same number.
+  phoneNumberId    String?       @map("phone_number_id") @db.Uuid
+
+  name             String
+  state            CampaignState @default(DRAFT)
+  source           LeadSource    @default(CSV)
+  /// For a CRM_TAG campaign, the tag it was pulled from. Kept for the record —
+  /// the lead set is snapshotted at creation and never re-read.
+  sourceRef        String?       @map("source_ref")
+
+  maxConcurrent    Int           @default(3) @map("max_concurrent")
+  maxAttempts      Int           @default(3) @map("max_attempts")
+
+  /// Calling window, in the campaign's own timezone. Enforced inside the claim
+  /// statement, so no code path can dial around it.
+  timezone         String        @default("America/New_York")
+  windowStart      String        @default("09:00") @map("window_start")
+  windowEnd        String        @default("19:00") @map("window_end")
+  /// ISO day of week, Monday = 1.
+  windowDays       Int[]         @default([1, 2, 3, 4, 5]) @map("window_days")
+
+  voicemailPolicy  VoicemailPolicy @default(HANG_UP_RETRY) @map("voicemail_policy")
+  voicemailMessage String?         @map("voicemail_message")
+
+  /// Set on a provider 429. The claim refuses while it is in the future, so a
+  /// throttled campaign stops without any in-memory state.
+  throttledUntil   DateTime?     @map("throttled_until") @db.Timestamptz(6)
+  /// Round-robin fairness across campaigns within one heartbeat tick.
+  lastTickedAt     DateTime?     @map("last_ticked_at") @db.Timestamptz(6)
+
+  pausedReason     String?       @map("paused_reason")
+  createdBy        String?       @map("created_by")
+  startedAt        DateTime?     @map("started_at") @db.Timestamptz(6)
+  completedAt      DateTime?     @map("completed_at") @db.Timestamptz(6)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agent            Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  phoneNumber      PhoneNumber?  @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  leads            CampaignLead[]
+  attempts         DialAttempt[]
+
+  @@map("campaigns")
+}
+
+enum CampaignState {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+  ARCHIVED
+
+  @@map("campaign_state")
+}
+
+enum LeadSource {
+  CSV
+  CRM_TAG
+  MANUAL
+
+  @@map("lead_source")
+}
+
+enum VoicemailPolicy {
+  LEAVE_MESSAGE
+  HANG_UP_RETRY
+  HANG_UP_DONE
+
+  @@map("voicemail_policy")
+}
+
+/// The queue. One row per person per campaign, reused across retries.
+///
+/// This is also where outbound concurrency is counted from — the claim statement
+/// is what moves a row to DIALING, so the count and the claim are the same
+/// statement and there is no window between them.
+model CampaignLead {
+  id              String     @id @default(uuid()) @db.Uuid
+  campaignId      String     @map("campaign_id") @db.Uuid
+  /// Denormalised so the per-tenant concurrency count and the contact-frequency
+  /// cap never need a join.
+  tenantId        String     @map("tenant_id") @db.Uuid
+
+  phoneE164       String     @map("phone_e164")
+  contactName     String?    @map("contact_name")
+  crmContactId    String?    @map("crm_contact_id")
+  /// Merge values for the agent's opening line. Server-side only.
+  fields          Json       @default("{}")
+
+  priority        Int        @default(0) @db.SmallInt
+  state           LeadState  @default(PENDING)
+
+  /// Two budgets, deliberately separate. A provider fault spends `faultNo`, not
+  /// `attemptNo`, so an outage cannot quietly burn a whole list's real attempts.
+  attemptNo       Int        @default(0) @map("attempt_no")
+  faultNo         Int        @default(0) @map("fault_no")
+
+  nextAttemptAt   DateTime   @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  leaseExpiresAt  DateTime?  @map("lease_expires_at") @db.Timestamptz(6)
+  lastOutcome     String?    @map("last_outcome")
+  /// Why this lead ended where it did, in words a tenant can read.
+  note            String?
+
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  campaign        Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  tenant          Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempts        DialAttempt[]
+
+  @@unique([campaignId, phoneE164])
+  @@map("campaign_leads")
+}
+
+enum LeadState {
+  PENDING
+  RETRY_WAIT
+  DEFERRED
+  DIALING
+  IN_PROGRESS
+  COMPLETED
+  EXHAUSTED
+  FAILED
+  SUPPRESSED
+  CANCELLED
+
+  @@map("lead_state")
+}
+
+/// The ledger. One row per dial, written BEFORE the provider is called.
+///
+/// That ordering is what makes a lost create-response recoverable: a row with no
+/// provider call id means "we may have dialled this person and we do not know",
+/// which the reaper can resolve. It also makes the partial unique index on
+/// (tenantId, phoneE164) a real guard — a second campaign dialling the same
+/// person while a call is live is rejected by the database before it can reach
+/// the provider.
+model DialAttempt {
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  campaignId      String        @map("campaign_id") @db.Uuid
+  campaignLeadId  String        @map("campaign_lead_id") @db.Uuid
+
+  attemptNo       Int           @map("attempt_no")
+  phoneE164       String        @map("phone_e164")
+  /// Which of the agent's numbers presented as caller ID, for the per-number
+  /// daily volume cap.
+  phoneNumberId   String?       @map("phone_number_id") @db.Uuid
+
+  /// Null only while PLACING, or permanently when LOST.
+  providerCallId  String?       @map("provider_call_id")
+  state           AttemptState  @default(PLACING)
+  leaseExpiresAt  DateTime      @map("lease_expires_at") @db.Timestamptz(6)
+
+  endedReason     String?       @map("ended_reason")
+  durationSeconds Int           @default(0) @map("duration_seconds")
+  /// Server-side only. Never rendered to a tenant.
+  error           String?
+
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign        Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead            CampaignLead  @relation(fields: [campaignLeadId], references: [id], onDelete: Cascade)
+  phoneNumber     PhoneNumber?  @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+
+  @@map("dial_attempts")
+}
+
+enum AttemptState {
+  PLACING
+  DIALING
+  IN_PROGRESS
+  RECONCILING
+  ENDED
+  LOST
+
+  @@map("attempt_state")
+}
+
+/// Do not call. Checked at import and again before every dial.
+model Suppression {
+  id         String            @id @default(uuid()) @db.Uuid
+  tenantId   String            @map("tenant_id") @db.Uuid
+  phoneE164  String            @map("phone_e164")
+  source     SuppressionSource @default(MANUAL)
+  note       String?
+  createdBy  String?           @map("created_by")
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, phoneE164])
+  @@map("suppressions")
+}
+
+enum SuppressionSource {
+  UPLOAD
+  MANUAL
+  CALLER_REQUEST
+
+  @@map("suppression_source")
 }

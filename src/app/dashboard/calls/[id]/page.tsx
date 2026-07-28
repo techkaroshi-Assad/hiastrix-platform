@@ -146,7 +146,7 @@ export default async function CallDetailPage({
                             className={
                               isCaller
                                 ? "text-[11px] font-medium uppercase tracking-[0.1em] text-subtle"
-                                : "text-[11px] font-medium uppercase tracking-[0.1em] text-brand-300"
+                                : "text-[11px] font-medium uppercase tracking-[0.1em] text-brand-on-tint"
                             }
                           >
                             {speaker(t.role, agentName)}

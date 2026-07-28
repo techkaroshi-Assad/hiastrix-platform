@@ -36,15 +36,12 @@ export function NumberAssign({
     setBusy(true)
     setError(null)
     try {
-      // Assignment is expressed agent-side: PUT the number onto an agent, or
-      // clear whatever agent currently holds it.
-      const target = agentId || number.agentId
-      if (!target) return
-
-      const res = await fetch(`/api/agents/${target}/number`, {
+      // Assignment is expressed number-side, which is the shape of the thing:
+      // this number routes to one agent. Several numbers may name the same one.
+      const res = await fetch(`/api/numbers/${number.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumberId: agentId ? number.id : null }),
+        body: JSON.stringify({ agentId: agentId || null }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {

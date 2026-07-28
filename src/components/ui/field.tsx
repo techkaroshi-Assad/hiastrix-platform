@@ -159,7 +159,7 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
 
 export function InfoNote({ children }: { children: React.ReactNode }) {
   return (
-    <p className="flex items-start gap-2 rounded-field border border-brand-500/25 bg-brand-500/10 px-3.5 py-2.5 text-[13px] text-brand-200">
+    <p className="flex items-start gap-2 rounded-field border border-brand-500/25 bg-brand-500/10 px-3.5 py-2.5 text-[13px] text-brand-on-tint">
       <svg className="mt-px h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
         <circle cx="12" cy="12" r="9" />
         <path d="M12 16v-4.5M12 8h.01" />

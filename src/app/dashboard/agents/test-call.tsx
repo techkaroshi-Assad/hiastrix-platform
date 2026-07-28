@@ -160,14 +160,14 @@ export function TestCallPanel({
           <SecondaryButton
             type="button"
             onClick={() => { setMode("phone"); reset() }}
-            className={cn(mode === "phone" && "border-brand-500/60 bg-brand-500/12 text-brand-200")}
+            className={cn(mode === "phone" && "border-brand-500/60 bg-brand-500/12 text-brand-on-tint")}
           >
             Call my phone
           </SecondaryButton>
           <SecondaryButton
             type="button"
             onClick={() => { setMode("browser"); reset() }}
-            className={cn(mode === "browser" && "border-brand-500/60 bg-brand-500/12 text-brand-200")}
+            className={cn(mode === "browser" && "border-brand-500/60 bg-brand-500/12 text-brand-on-tint")}
           >
             Talk in browser
           </SecondaryButton>
@@ -227,7 +227,7 @@ export function TestCallPanel({
                       liveState === "live" ? "bg-success animate-pulse-dot" : "bg-warning"
                     )}
                   />
-                  <span className="text-[13px] text-brand-200">
+                  <span className="text-[13px] text-brand-on-tint">
                     {liveState === "live" ? "Connected — start talking" : "Connecting…"}
                   </span>
                 </div>

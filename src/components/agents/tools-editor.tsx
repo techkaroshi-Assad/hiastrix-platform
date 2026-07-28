@@ -485,7 +485,7 @@ function CheckList({
                 className={cn(
                   "rounded-full border px-3 py-1 text-[12px] transition-colors",
                   on
-                    ? "border-brand-500/60 bg-brand-500/12 text-brand-200"
+                    ? "border-brand-500/60 bg-brand-500/12 text-brand-on-tint"
                     : "border-line text-subtle hover:border-line-strong hover:text-fg"
                 )}
               >

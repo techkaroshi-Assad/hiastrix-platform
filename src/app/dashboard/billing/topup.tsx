@@ -68,7 +68,7 @@ export function TopUp({
               setCustom("")
             }}
             className={cn(
-              !custom && amount === p && "border-brand-500/60 bg-brand-500/12 text-brand-200"
+              !custom && amount === p && "border-brand-500/60 bg-brand-500/12 text-brand-on-tint"
             )}
           >
             {usd(p)}

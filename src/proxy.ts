@@ -88,6 +88,11 @@ export const config = {
     // carries no session, so proxying it would redirect the provider to the sign-in
     // page and the caller would hear silence where an answer should be. It
     // authenticates on the shared secret instead, in the route itself.
-    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|api/tools|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    //
+    // api/cron is the dialer heartbeat. Same reasoning, plus one more: proxying
+    // it would make every tick call the auth provider to resolve a session that
+    // does not exist, so outbound calling would stop whenever sign-in was having
+    // a bad day. It authenticates on CRON_SECRET.
+    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|api/tools|api/cron|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }

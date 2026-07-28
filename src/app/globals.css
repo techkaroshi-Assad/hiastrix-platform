@@ -76,6 +76,13 @@
   --brand-700: #5B21B6;
   --on-brand:  #FFFFFF;
 
+  /* Brand text sitting on a brand tint — selected chips, active tabs, pills.
+     A fixed step from the scale cannot work for this: measured against a 12%
+     brand tint, brand-200 is 13.5:1 here and 1.4:1 in light, while brand-300 is
+     6.9:1 here and 3.4:1 there. Nothing in the scale clears AA in both. So the
+     step itself flips, and every call site uses this name instead of a number. */
+  --brand-on-tint: #DDD6FE;
+
   /* Status */
   --danger:   #EF4444;
   --warning:  #F59E0B;
@@ -154,9 +161,18 @@
   --brand-700: #3B1670;
   --on-brand:  #FFFFFF;
 
-  --danger:   #DC2626;
-  --warning:  #B45309;
-  --success:  #059669;
+  /* 8.6:1 on a 12% brand tint. See the note in the dark block. */
+  --brand-on-tint: #4C1D95;
+
+  /* Darkened one step from the obvious Tailwind shades.
+     These are read as text AND as the label on a 12% tint of themselves, and the
+     tint is the harder case — it darkens the background under dark text. At the
+     previous values the status pills measured 3.15 (success), 3.87 (danger) and
+     4.11 (warning) against white, all below AA, which meant the outcome of every
+     call was the least readable thing on the page in daylight. */
+  --danger:   #C81E1E;
+  --warning:  #A2470A;
+  --success:  #046C4E;
 
   --mark-hi:       #8B6DFF;
   --mark-mid:      #6A45F5;
@@ -240,6 +256,7 @@
   --color-brand-500:  var(--brand-500);
   --color-brand-600:  var(--brand-600);
   --color-brand-700:  var(--brand-700);
+  --color-brand-on-tint: var(--brand-on-tint);
 }
 
 /* ── Base ─────────────────────────────────────────────────────

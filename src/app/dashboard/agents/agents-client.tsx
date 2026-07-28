@@ -50,8 +50,8 @@ export type AgentRow = {
   recordingEnabled: boolean
   transcriptionEnabled: boolean
   config: AgentConfig
-  phoneNumberId: string | null
-  phoneNumberLabel: string | null
+  /** Every number routing to this agent. An agent may answer on several. */
+  numbers: { id: string; phoneNumber: string }[]
   calls: number
   minutes: number
   avgSeconds: number
@@ -202,13 +202,15 @@ export function AgentsClient({
     }
   }
 
-  async function assignNumber(agent: AgentRow, phoneNumberId: string | null) {
-    setRowBusy(agent.id)
+  /** `owner` is only for the busy indicator — detaching passes a null agentId,
+   *  so the row still needs to know which card to grey out. */
+  async function assignNumber(numberId: string, agentId: string | null, owner: string) {
+    setRowBusy(owner)
     try {
-      const res = await fetch(`/api/agents/${agent.id}/number`, {
+      const res = await fetch(`/api/numbers/${numberId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumberId }),
+        body: JSON.stringify({ agentId }),
       })
       if (res.ok) refresh()
     } finally {
@@ -260,7 +262,7 @@ export function AgentsClient({
               onEdit={() => openEdit(agent)}
               onTest={() => setTesting(agent)}
               onToggle={() => toggleStatus(agent)}
-              onAssign={id => assignNumber(agent, id)}
+              onAssign={(numberId, agentId) => assignNumber(numberId, agentId, agent.id)}
               onDelete={() => remove(agent)}
             />
           ))}
@@ -317,14 +319,14 @@ export function AgentsClient({
             type="button"
             onClick={() => setTab("form")}
             disabled={!jsonValid}
-            className={cn(tab === "form" && "border-brand-500/60 bg-brand-500/12 text-brand-200")}
+            className={cn(tab === "form" && "border-brand-500/60 bg-brand-500/12 text-brand-on-tint")}
           >
             Form
           </SecondaryButton>
           <SecondaryButton
             type="button"
             onClick={() => setTab("json")}
-            className={cn(tab === "json" && "border-brand-500/60 bg-brand-500/12 text-brand-200")}
+            className={cn(tab === "json" && "border-brand-500/60 bg-brand-500/12 text-brand-on-tint")}
           >
             JSON
           </SecondaryButton>
@@ -713,14 +715,13 @@ function AgentCard({
   onEdit: () => void
   onTest: () => void
   onToggle: () => void
-  onAssign: (phoneNumberId: string | null) => void
+  onAssign: (numberId: string, agentId: string | null) => void
   onDelete: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
   const active = agent.status === "ACTIVE"
 
-  // A number is selectable if it is unassigned, or already on this agent.
-  const selectable = numbers.filter(n => n.agentId === null || n.agentId === agent.id)
+  const free = numbers.filter(n => n.agentId === null)
 
   return (
     <div
@@ -737,8 +738,16 @@ function AgentCard({
           </div>
           <p className="mt-1 text-[12.5px] text-subtle">
             {labelFor(voices, agent.voice)} · {labelFor(models, agent.model)}
-            {agent.phoneNumberLabel && <> · {agent.phoneNumberLabel}</>}
+            {agent.numbers.length > 0 && <> · {agent.numbers.map(n => n.phoneNumber).join(", ")}</>}
           </p>
+          {/* An agent with no number looked identical to a live one. It can
+              still be tested in the browser — it just cannot be rung. */}
+          {agent.numbers.length === 0 && (
+            <p className="mt-1 text-[12px] text-warning">
+              No number yet — nobody can call this agent. You can still test it in
+              your browser.
+            </p>
+          )}
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -764,14 +773,42 @@ function AgentCard({
       </dl>
 
       <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-line-soft pt-4">
-        <div className="w-full max-w-[280px]">
+        <div className="w-full max-w-[380px] space-y-2">
+          <span className="block text-xs font-medium text-muted">
+            Numbers answering as this agent
+          </span>
+
+          {agent.numbers.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {agent.numbers.map(n => (
+                <button
+                  key={n.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onAssign(n.id, null)}
+                  title="Remove this number from the agent"
+                  className={cn(
+                    "group inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] transition-colors",
+                    "border-brand-500/60 bg-brand-500/12 text-brand-on-tint",
+                    "hover:border-danger/60 hover:text-danger disabled:opacity-50"
+                  )}
+                >
+                  {n.phoneNumber}
+                  <span aria-hidden="true" className="opacity-60 group-hover:opacity-100">×</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Only unassigned numbers are offered — taking one from another agent
+              silently would be a surprise, and the other agent would go quiet. */}
           <Select
-            label="Phone number"
-            placeholder={selectable.length ? "Not assigned" : "None allocated yet"}
-            options={selectable.map(n => ({ value: n.id, label: n.phoneNumber }))}
-            value={agent.phoneNumberId ?? ""}
-            disabled={busy || selectable.length === 0}
-            onChange={e => onAssign(e.target.value === "" ? null : e.target.value)}
+            label=""
+            placeholder={free.length ? "Add a number…" : "No spare numbers"}
+            options={free.map(n => ({ value: n.id, label: n.phoneNumber }))}
+            value=""
+            disabled={busy || free.length === 0}
+            onChange={e => e.target.value && onAssign(e.target.value, agent.id)}
           />
         </div>
 

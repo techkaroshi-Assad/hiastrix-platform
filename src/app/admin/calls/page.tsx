@@ -66,7 +66,7 @@ export default async function AdminCallsPage({ searchParams }: { searchParams: S
           className={
             sp.tenant
               ? "rounded-field border border-line-strong bg-field px-3.5 py-2 text-[12.5px] transition-colors hover:bg-field-hover"
-              : "rounded-field border border-brand-500/50 bg-brand-500/12 px-3.5 py-2 text-[12.5px] text-brand-200"
+              : "rounded-field border border-brand-500/50 bg-brand-500/12 px-3.5 py-2 text-[12.5px] text-brand-on-tint"
           }
         >
           All tenants
@@ -77,7 +77,7 @@ export default async function AdminCallsPage({ searchParams }: { searchParams: S
             href={link({ tenant: t.id })}
             className={
               sp.tenant === t.id
-                ? "rounded-field border border-brand-500/50 bg-brand-500/12 px-3.5 py-2 text-[12.5px] text-brand-200"
+                ? "rounded-field border border-brand-500/50 bg-brand-500/12 px-3.5 py-2 text-[12.5px] text-brand-on-tint"
                 : "rounded-field border border-line-strong bg-field px-3.5 py-2 text-[12.5px] transition-colors hover:bg-field-hover"
             }
           >

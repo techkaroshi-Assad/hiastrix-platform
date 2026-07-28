@@ -35,7 +35,7 @@ export function RangePicker() {
     cn(
       "rounded-field border px-3.5 py-2 text-[12.5px] transition-colors",
       active
-        ? "border-brand-500/50 bg-brand-500/12 text-brand-300"
+        ? "border-brand-500/50 bg-brand-500/12 text-brand-on-tint"
         : "border-line bg-field text-muted hover:bg-field-hover hover:text-fg"
     )
 

@@ -26,7 +26,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
             [&_p]:mt-3.5 [&_p]:text-[14.5px] [&_p]:font-light [&_p]:leading-[1.75] [&_p]:text-muted
             [&_ul]:mt-3.5 [&_ul]:space-y-2 [&_ul]:pl-5
             [&_li]:list-disc [&_li]:text-[14.5px] [&_li]:font-light [&_li]:leading-[1.7] [&_li]:text-muted
-            [&_a]:text-brand-300 [&_a]:underline-offset-4 hover:[&_a]:underline
+            [&_a]:text-brand-on-tint [&_a]:underline-offset-4 hover:[&_a]:underline
           "
         >
           {children}

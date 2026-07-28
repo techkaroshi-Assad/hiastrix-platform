@@ -48,7 +48,7 @@ export default async function AgentsPage() {
 
   const rows: AgentRow[] = agents.map(a => {
     const s = statsByAgent.get(a.id)
-    const assigned = a.phoneNumbers[0] ?? null
+
     return {
       id:                   a.id,
       name:                 a.name,
@@ -60,8 +60,9 @@ export default async function AgentsPage() {
       recordingEnabled:     a.recordingEnabled,
       transcriptionEnabled: a.transcriptionEnabled,
       config:               readConfig(a.config),
-      phoneNumberId:        assigned?.id ?? null,
-      phoneNumberLabel:     assigned?.phoneNumber ?? null,
+      // Every number pointing here, not just the first. An agent may answer a
+      // main line and a campaign line at once.
+      numbers:              a.phoneNumbers,
       calls:                s?.calls ?? 0,
       minutes:              s?.minutes ?? 0,
       avgSeconds:           s && s.calls > 0 ? Math.round(s.seconds / s.calls) : 0,

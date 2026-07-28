@@ -14,6 +14,7 @@ import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { getTenantContext } from "@/lib/tenant"
 import { vapiCalls } from "@/lib/vapi/client"
+import { verdictFor } from "@/lib/billing/can-call"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
 const BodySchema = z.object({
@@ -30,7 +31,15 @@ export async function POST(
 
     const ctx = await getTenantContext()
     if (!ctx) return apiError(ERRORS.UNAUTHORIZED, 401)
-    if (ctx.tenant.status !== "ACTIVE") return apiError(ERRORS.ACCOUNT_PENDING, 403)
+
+    // A test call bills like any other, so it faces the same gate as one — and
+    // that gate is asked in exactly one place. See lib/billing/can-call.ts.
+    const verdict = verdictFor(ctx.tenant)
+    if (!verdict.ok) {
+      return verdict.reason === "suspended"
+        ? apiError(ERRORS.ACCOUNT_PENDING, 403)
+        : apiError(verdict.allowance.stoppedReason ?? ERRORS.PAYMENT_REQUIRED, 402)
+    }
 
     const agent = await prisma.agent.findFirst({
       where: { id, tenantId: ctx.tenant.id },
@@ -44,12 +53,6 @@ export async function POST(
     const parsed = BodySchema.safeParse(await request.json())
     if (!parsed.success) {
       return apiError(parsed.error.issues[0]?.message ?? ERRORS.FALLBACK)
-    }
-
-    // A test call bills like any other, so the same gate applies.
-    if (ctx.tenant.creditBalanceCents <= 0 && ctx.tenant.package) {
-      const cap = ctx.tenant.package.minutesIncluded
-      if (ctx.tenant.minutesUsed >= cap) return apiError(ERRORS.PAYMENT_REQUIRED, 402)
     }
 
     // Outbound needs one of the tenant's own numbers as the caller ID.

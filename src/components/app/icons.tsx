@@ -73,3 +73,12 @@ export const IconAnalytics = () => (
     <path d="M6 20v-6M11 20V6M16 20v-9M21 20v-4" />
   </svg>
 )
+
+/** Outbound: a handset with a call going out of it. */
+export const IconCampaigns = () => (
+  <svg {...base}>
+    <path d="M5.5 3.5h2l1.4 3.7-1.9 1.4a11 11 0 0 0 5 5l1.4-1.9 3.7 1.4v2a2.4 2.4 0 0 1-2.6 2.4C8.6 16.8 5.2 13.4 3.3 6.1A2.4 2.4 0 0 1 5.5 3.5z" />
+    <path d="M15 9.5 21 3.5" />
+    <path d="M16.5 3.5H21v4.5" />
+  </svg>
+)

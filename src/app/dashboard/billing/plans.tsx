@@ -90,7 +90,7 @@ export function Plans({
               <div className="flex items-start justify-between gap-2">
                 <span className="text-[13.5px] font-semibold">{plan.name}</span>
                 {current && (
-                  <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] text-brand-200">
+                  <span className="rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] text-brand-on-tint">
                     Current
                   </span>
                 )}

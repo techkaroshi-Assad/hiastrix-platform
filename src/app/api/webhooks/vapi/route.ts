@@ -13,13 +13,21 @@
  * twice. Every write keys off the unique vapiCallId.
  */
 
-import { NextRequest } from "next/server"
+import { NextRequest, after } from "next/server"
 import type { InputJsonValue } from "@prisma/client/runtime/client"
 import { prisma } from "@/lib/prisma"
 import { processCallEnded } from "@/lib/billing/cap-enforcement"
 import { authorisedByVapiSecret as authorised } from "@/lib/vapi/webhook-auth"
+import { releaseAttempt, markAttemptConnected, advanceCampaign } from "@/lib/dialer/advance"
 
 export const dynamic = "force-dynamic"
+
+/**
+ * Declared rather than inherited, because this route now does more than record.
+ * Work handed to `after()` counts against the function's duration, and under a
+ * live campaign this is the busiest route in the application.
+ */
+export const maxDuration = 30
 
 /** Vapi's endedReason vocabulary → our CallStatus enum. */
 function mapStatus(endedReason?: string): "COMPLETED" | "FAILED" | "NO_ANSWER" | "BUSY" {
@@ -45,6 +53,12 @@ type VapiCall = {
   assistantId?: string
   startedAt?: string
   endedAt?: string
+  /**
+   * Whatever we sent when placing the call, echoed back. The dialer puts its
+   * attempt id here, which is how a call is recognised as ours even when the
+   * response to `POST /call` never reached us. Absent on inbound.
+   */
+  metadata?: Record<string, unknown>
 }
 
 export async function POST(request: NextRequest) {
@@ -107,6 +121,19 @@ export async function POST(request: NextRequest) {
             startedAt:     call.startedAt ? new Date(call.startedAt) : new Date(),
           },
           update: { status: "IN_PROGRESS" },
+        })
+
+        /*
+         * Swap the dialer's connect lease for a talk lease.
+         *
+         * Without this, any conversation longer than ninety seconds looks
+         * abandoned to the reaper, which then starts asking the provider about a
+         * call that is going perfectly well. A no-op for inbound and test calls,
+         * which have no attempt behind them.
+         */
+        await markAttemptConnected({
+          providerCallId: vapiCallId,
+          metadata: (call.metadata ?? null) as Record<string, unknown> | null,
         })
         break
       }
@@ -190,12 +217,48 @@ export async function POST(request: NextRequest) {
           select: { id: true, minutesBilled: true },
         })
 
+        /*
+         * ── Order matters here, and it is not the obvious one ──────────
+         *
+         * 1. Close the dialer's attempt. One indexed UPDATE, and it frees a
+         *    concurrency slot. It goes FIRST — ahead of billing — because
+         *    processCallEnded awaits email sends, and a campaign's next call
+         *    should not wait on an SMTP round trip.
+         *
+         * 2. Bill. Inline and unchanged: it is money, and it keeps the
+         *    provider's retry-on-500 behind it.
+         *
+         * 3. Start the next call, in after(). This makes up to eight provider
+         *    requests; on the critical path it is the likeliest cause of a
+         *    timeout, and a webhook timeout means a retry, which means a second
+         *    advance, which is how a retry storm starts. after() swallowing an
+         *    error is survivable here and nowhere else — the worst case is a
+         *    campaign idle for a minute until the heartbeat notices.
+         */
+        const released = await releaseAttempt({
+          providerCallId:  vapiCallId,
+          endedReason,
+          durationSeconds,
+          metadata: (call.metadata ?? null) as Record<string, unknown> | null,
+        })
+
         // Idempotency guard: a retried report must not bill a second time.
         if (record.minutesBilled === 0 && durationSeconds > 0) {
           await processCallEnded({
             tenantId: agent.tenantId,
             callId:   record.id,
             durationSeconds,
+          })
+        }
+
+        if (released) {
+          const campaignId = released.campaignId
+          after(async () => {
+            try {
+              await advanceCampaign(campaignId)
+            } catch (err) {
+              console.error("[webhooks/vapi] advance", err)
+            }
           })
         }
         break

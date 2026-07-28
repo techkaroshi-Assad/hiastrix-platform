@@ -14,6 +14,7 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getTenantContext } from "@/lib/tenant"
+import { verdictFor } from "@/lib/billing/can-call"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
 export async function POST(
@@ -25,7 +26,14 @@ export async function POST(
 
     const ctx = await getTenantContext()
     if (!ctx) return apiError(ERRORS.UNAUTHORIZED, 401)
-    if (ctx.tenant.status !== "ACTIVE") return apiError(ERRORS.ACCOUNT_PENDING, 403)
+
+    // Browser calls bill like any other. Same single gate. See can-call.ts.
+    const verdict = verdictFor(ctx.tenant)
+    if (!verdict.ok) {
+      return verdict.reason === "suspended"
+        ? apiError(ERRORS.ACCOUNT_PENDING, 403)
+        : apiError(verdict.allowance.stoppedReason ?? ERRORS.PAYMENT_REQUIRED, 402)
+    }
 
     const publicKey = process.env.VAPI_PUBLIC_KEY
     if (!publicKey) {
@@ -40,11 +48,6 @@ export async function POST(
 
     if (agent.status !== "ACTIVE") {
       return apiError("Enable this agent before starting a browser call.")
-    }
-
-    if (ctx.tenant.creditBalanceCents <= 0 && ctx.tenant.package) {
-      const cap = ctx.tenant.package.minutesIncluded
-      if (ctx.tenant.minutesUsed >= cap) return apiError(ERRORS.PAYMENT_REQUIRED, 402)
     }
 
     return Response.json({ publicKey, assistantId: agent.vapiAssistantId })

@@ -361,6 +361,67 @@ export const crmContacts = {
     )
     return res.tagsRemoved ?? []
   },
+
+  /**
+   * Everyone carrying a tag. The lead source for a campaign built from the CRM.
+   *
+   * Tags rather than smart lists, because smart lists are not in the public API
+   * and tags are — and because tags are already how this platform divides a
+   * sub-account up, so a tenant is choosing from something we built for them.
+   *
+   * Paged with `searchAfter`, which is the only way this endpoint will go past
+   * its first few hundred: the cursor comes back on each page and the next
+   * request replays it. Falling back to page numbers when it is absent, because
+   * a list that stops silently at 100 is worse than one that pages clumsily.
+   *
+   * Capped, deliberately. A tag matching thirty thousand contacts is a mistake
+   * somebody is about to make expensive, and stopping at the cap gives them a
+   * number they can look at before any of it rings.
+   */
+  async byTag(locationId: string, tag: string, max = 5000): Promise<CrmContact[]> {
+    const out: CrmContact[] = []
+    let searchAfter: unknown[] | null = null
+    let page = 1
+
+    while (out.length < max) {
+      const body: Record<string, unknown> = {
+        locationId,
+        pageLimit: Math.min(100, max - out.length),
+        filters: [{ field: "tags", operator: "contains", value: tag.toLowerCase() }],
+      }
+      if (searchAfter) body.searchAfter = searchAfter
+      else if (page > 1) body.page = page
+
+      const res = await atLocation<{
+        contacts?: Record<string, unknown>[]
+        total?: number
+      }>(locationId, "/contacts/search", { method: "POST", body })
+
+      const batch = res.contacts ?? []
+      if (!batch.length) break
+
+      for (const c of batch) {
+        out.push({
+          id:        String(c.id ?? c._id ?? ""),
+          firstName: c.firstName ? String(c.firstName) : undefined,
+          lastName:  c.lastName ? String(c.lastName) : undefined,
+          email:     c.email ? String(c.email) : undefined,
+          phone:     c.phone ? String(c.phone) : undefined,
+          tags:      Array.isArray(c.tags) ? c.tags.map(String) : undefined,
+        })
+      }
+
+      const last = batch[batch.length - 1] as { searchAfter?: unknown[] }
+      searchAfter = Array.isArray(last?.searchAfter) ? last.searchAfter : null
+      page += 1
+
+      // No cursor and no growth means we are re-reading page one. Stop rather
+      // than loop.
+      if (!searchAfter && batch.length < 100) break
+    }
+
+    return out.filter(c => c.id).slice(0, max)
+  },
 }
 
 /* ── Opportunities ─────────────────────────────────────────────────────── */
