@@ -30,13 +30,23 @@
 import { NextRequest } from "next/server"
 import { runHeartbeat } from "@/lib/dialer/tick"
 import { authorisedByCronSecret } from "@/lib/vapi/webhook-auth"
-import { TICK_MAX_DURATION_SECONDS } from "@/lib/dialer/config"
 
 export const dynamic = "force-dynamic"
 
-// Declared rather than inherited. The tick holds its own deadline well inside
-// this, so it finishes tidily instead of being killed holding claimed work.
-export const maxDuration = TICK_MAX_DURATION_SECONDS
+/**
+ * Declared rather than inherited: the tick holds its own deadline well inside
+ * this, so it finishes tidily instead of being killed holding claimed work.
+ *
+ * Written as a literal on purpose. Route segment config is read by statically
+ * analysing this file at build time, before any module is evaluated, so an
+ * imported constant here is not a constant as far as Next is concerned — it
+ * fails the build with "Invalid segment configuration export detected", which
+ * TypeScript cannot see because the types are perfectly fine.
+ *
+ * Keep it equal to TICK_MAX_DURATION_SECONDS in lib/dialer/config.ts, which is
+ * what the tick actually paces itself against.
+ */
+export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
   if (!authorisedByCronSecret(request)) {

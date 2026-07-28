@@ -30,7 +30,14 @@ export const RECONCILE_LEASE_SECONDS = 120
  * these bound a cold start and a repair, not throughput.
  */
 
-/** Declared on the cron route. The tick stops well before it. */
+/**
+ * The cron route's function timeout. The tick stops well before it.
+ *
+ * Mirrored as a literal in `app/api/cron/dialer/route.ts` rather than imported
+ * there: route segment config is read by statically analysing that file at
+ * build time, before any module runs, so importing this one fails the build
+ * with "Invalid segment configuration export detected". Change both together.
+ */
 export const TICK_MAX_DURATION_SECONDS = 60
 
 /** Internal deadline, leaving room to finish tidily rather than be killed. */
