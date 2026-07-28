@@ -7,7 +7,19 @@
  * reopening, and anything the pump dropped.
  *
  * Authenticated on CRON_SECRET, compared in constant time and failing closed
- * when unset — see lib/vapi/webhook-auth.ts. Vercel sends it as a bearer token.
+ * when unset — see lib/vapi/webhook-auth.ts. The caller sends it as a bearer
+ * token.
+ *
+ * ── WHO CALLS THIS ────────────────────────────────────────────────────
+ *
+ * pg_cron, from inside Supabase — not a Vercel cron. Vercel's Hobby plan caps
+ * cron jobs at once a day, and an every-minute schedule in vercel.json is
+ * rejected during configuration validation, which stops the deployment from
+ * being *created* rather than failing the build. A push that appears to have
+ * vanished. Scheduling it in Postgres instead costs nothing, runs in the same
+ * region as the database, and survives a plan change.
+ *
+ * See sql/2026-07-28-dialer-heartbeat.sql.
  *
  * `api/cron` is excluded from the proxy matcher in src/proxy.ts. Without that
  * exclusion every tick would call the auth provider to resolve a session that
