@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { vapiAssistants } from "@/lib/vapi/client"
+import { applyAgentAvailability } from "@/lib/agents/availability"
 import {
   sendLowBalance,
   sendCallsPaused,
@@ -151,26 +151,29 @@ export async function disableAllTenantAgents(
   tenantId: string,
   agents: { id: string; vapiAssistantId: string }[]
 ) {
-  await Promise.allSettled(
-    agents.map((agent) => vapiAssistants.disable(agent.vapiAssistantId))
-  )
-
   await prisma.agent.updateMany({
     where: { tenantId },
     data: { status: "INACTIVE" },
   })
+
+  // Our record first, then make the provider agree. In that order, a failure
+  // upstream leaves an agent we believe is off and can retry, rather than one
+  // we believe is on while it quietly keeps answering.
+  await applyAgentAvailability(
+    agents.map((agent) => ({ ...agent, status: "INACTIVE" as const }))
+  )
 }
 
 export async function enableAllTenantAgents(
   tenantId: string,
   agents: { id: string; vapiAssistantId: string }[]
 ) {
-  await Promise.allSettled(
-    agents.map((agent) => vapiAssistants.enable(agent.vapiAssistantId))
-  )
-
   await prisma.agent.updateMany({
     where: { tenantId },
     data: { status: "ACTIVE" },
   })
+
+  await applyAgentAvailability(
+    agents.map((agent) => ({ ...agent, status: "ACTIVE" as const }))
+  )
 }

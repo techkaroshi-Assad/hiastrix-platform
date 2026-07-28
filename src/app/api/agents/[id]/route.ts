@@ -13,6 +13,7 @@ import { getTenantContext } from "@/lib/tenant"
 import { vapiAssistants } from "@/lib/vapi/client"
 import { AgentConfigInputSchema, readConfig } from "@/lib/vapi/config"
 import { AgentPatchSchema, firstIssue } from "@/lib/vapi/agent"
+import { applyAgentAvailability } from "@/lib/agents/availability"
 import { buildAssistantPayload } from "@/lib/vapi/payload"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
@@ -62,8 +63,15 @@ export async function PATCH(
 
     try {
       if (isToggleOnly) {
-        if (patch.status === "ACTIVE") await vapiAssistants.enable(agent.vapiAssistantId)
-        else await vapiAssistants.disable(agent.vapiAssistantId)
+        // Availability lives on the phone number, not the assistant — the
+        // assistant has no on/off switch. See lib/agents/availability.ts.
+        await applyAgentAvailability([
+          {
+            id:              agent.id,
+            vapiAssistantId: agent.vapiAssistantId,
+            status:          patch.status as "ACTIVE" | "INACTIVE",
+          },
+        ])
       } else {
         await vapiAssistants.update(
           agent.vapiAssistantId,

@@ -42,17 +42,18 @@ export const vapiAssistants = {
   delete: (id: string) =>
     vapiRequest(`/assistant/${id}`, { method: "DELETE" }),
 
-  disable: (id: string) =>
-    vapiRequest(`/assistant/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ isActive: false }),
-    }),
-
-  enable: (id: string) =>
-    vapiRequest(`/assistant/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ isActive: true }),
-    }),
+  /*
+   * There is deliberately no enable/disable here.
+   *
+   * An assistant has no on/off switch — no isActive, no status, no enabled.
+   * This module used to PATCH `isActive`, which the provider rejected outright
+   * ("property isActive should not exist"), so every toggle failed and the
+   * billing rule that pauses agents at zero credit never actually paused
+   * anything.
+   *
+   * Availability is a property of the phone number pointing at the assistant.
+   * See lib/agents/availability.ts.
+   */
 }
 
 // ─── Phone Numbers ────────────────────────────────────────────────────────────
