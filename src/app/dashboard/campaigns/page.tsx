@@ -6,36 +6,22 @@ import { tenantNav } from "@/lib/nav"
 import { AppShell, EmptyState } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill } from "@/components/app/table"
 import { IconCampaigns } from "@/components/app/icons"
-import { CampaignsHeader, campaignTone, type AgentOption } from "./campaigns-client"
+import { CampaignsHeader } from "./campaigns-client"
+import { campaignTone, CAMPAIGN_LABEL } from "./tones"
 
 export const metadata: Metadata = { title: "Campaigns" }
 export const dynamic = "force-dynamic"
 
-const STATE_LABEL: Record<string, string> = {
-  DRAFT: "Draft",
-  RUNNING: "Calling",
-  PAUSED: "Paused",
-  COMPLETED: "Finished",
-  ARCHIVED: "Archived",
-}
-
 export default async function CampaignsPage() {
   const { tenant, email } = await requireTenant()
 
-  const [campaigns, agents, suppressions] = await Promise.all([
+  const [campaigns, agentCount, suppressions] = await Promise.all([
     prisma.campaign.findMany({
       where:   { tenantId: tenant.id, state: { not: "ARCHIVED" } },
       orderBy: [{ state: "asc" }, { createdAt: "desc" }],
       include: { agent: { select: { name: true } } },
     }),
-    prisma.agent.findMany({
-      where:   { tenantId: tenant.id },
-      orderBy: { name: "asc" },
-      select: {
-        id: true, name: true, status: true,
-        phoneNumbers: { where: { status: "ACTIVE" }, select: { id: true, phoneNumber: true } },
-      },
-    }),
+    prisma.agent.count({ where: { tenantId: tenant.id } }),
     prisma.suppression.findMany({
       where:   { tenantId: tenant.id },
       orderBy: { createdAt: "desc" },
@@ -68,16 +54,6 @@ export default async function CampaignsPage() {
     return { total, done, talked }
   }
 
-  const agentOptions: AgentOption[] = agents.map(a => ({
-    id: a.id,
-    name: a.name,
-    active: a.status === "ACTIVE",
-    numbers: a.phoneNumbers.map((n: { id: string; phoneNumber: string }) => ({
-      id: n.id,
-      phoneNumber: n.phoneNumber,
-    })),
-  }))
-
   return (
     <AppShell
       nav={tenantNav("campaigns")}
@@ -86,7 +62,6 @@ export default async function CampaignsPage() {
       userEmail={email}
       actions={
         <CampaignsHeader
-          agents={agentOptions}
           suppressions={suppressions.map(s => ({
             id: s.id,
             phoneE164: s.phoneE164,
@@ -94,11 +69,11 @@ export default async function CampaignsPage() {
             note: s.note,
             addedAt: s.createdAt.toISOString(),
           }))}
-          canCreate={tenant.status === "ACTIVE" && agents.length > 0}
+          canCreate={tenant.status === "ACTIVE" && agentCount > 0}
           lockedReason={
             tenant.status !== "ACTIVE"
               ? "Your workspace isn't active yet."
-              : agents.length === 0
+              : agentCount === 0
                 ? "Create an agent first — a campaign is something an agent does."
                 : null
           }
@@ -142,7 +117,7 @@ export default async function CampaignsPage() {
                     </TD>
                     <TD muted>{c.agent.name}</TD>
                     <TD>
-                      <Pill tone={campaignTone(c.state)}>{STATE_LABEL[c.state] ?? c.state}</Pill>
+                      <Pill tone={campaignTone(c.state)}>{CAMPAIGN_LABEL[c.state] ?? c.state}</Pill>
                     </TD>
                     <TD align="right">
                       <div className="flex items-center justify-end gap-2.5">

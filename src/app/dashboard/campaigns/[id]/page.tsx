@@ -7,23 +7,11 @@ import { tenantNav } from "@/lib/nav"
 import { AppShell, StatCard } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { campaignReadiness } from "@/lib/dialer/readiness"
-import { CampaignControls, LeadImport, LiveRefresh, leadTone } from "./campaign-client"
+import { CampaignControls, LeadImport, LiveRefresh } from "./campaign-client"
+import { leadTone, LEAD_LABEL } from "../tones"
 
 export const metadata: Metadata = { title: "Campaign" }
 export const dynamic = "force-dynamic"
-
-const LEAD_LABEL: Record<string, string> = {
-  PENDING:     "Waiting",
-  RETRY_WAIT:  "Trying again later",
-  DEFERRED:    "Outside calling hours",
-  DIALING:     "Calling",
-  IN_PROGRESS: "On the call",
-  COMPLETED:   "Spoke to them",
-  EXHAUSTED:   "No answer",
-  FAILED:      "Couldn't reach",
-  SUPPRESSED:  "Do not call",
-  CANCELLED:   "Cancelled",
-}
 
 const PAGE_SIZE = 50
 

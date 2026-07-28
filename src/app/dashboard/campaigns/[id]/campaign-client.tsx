@@ -18,19 +18,6 @@ import { Select, SecondaryButton, DangerButton, Panel } from "@/components/ui/fo
 import { parseCsv, guessColumns, toImportRows, type ColumnGuess } from "@/lib/dialer/csv"
 import { cn } from "@/lib/utils"
 
-export function leadTone(state: string): "neutral" | "success" | "warning" | "danger" | "brand" {
-  switch (state) {
-    case "COMPLETED":   return "success"
-    case "DIALING":
-    case "IN_PROGRESS": return "brand"
-    case "RETRY_WAIT":
-    case "DEFERRED":    return "warning"
-    case "FAILED":
-    case "SUPPRESSED":  return "danger"
-    default:            return "neutral"
-  }
-}
-
 /* ── Live refresh ──────────────────────────────────────────────────────── */
 
 /**
