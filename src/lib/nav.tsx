@@ -14,6 +14,7 @@ import {
   IconNumbers,
   IconBilling,
   IconSettings,
+  IconHelp,
 } from "@/components/app/icons"
 import type { NavItem } from "@/components/app/app-shell"
 
@@ -26,6 +27,7 @@ export type NavKey =
   | "numbers"
   | "billing"
   | "settings"
+  | "help"
 
 export function tenantNav(active: NavKey): NavItem[] {
   return [
@@ -39,5 +41,8 @@ export function tenantNav(active: NavKey): NavItem[] {
     { href: "/dashboard/numbers",  label: "Phone numbers", icon: <IconNumbers />,  active: active === "numbers"  },
     { href: "/dashboard/billing",  label: "Billing",       icon: <IconBilling />,  active: active === "billing"  },
     { href: "/dashboard/settings", label: "Settings",      icon: <IconSettings />, active: active === "settings" },
+    // Last, and always present. Somebody looking for help is not going to guess
+    // that it lives inside Settings.
+    { href: "/dashboard/help",     label: "Help",          icon: <IconHelp />,     active: active === "help"     },
   ]
 }

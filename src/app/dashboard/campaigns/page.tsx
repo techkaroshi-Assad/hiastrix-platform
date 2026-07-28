@@ -103,11 +103,14 @@ export default async function CampaignsPage() {
                 const p = progressOf(c.id)
                 const pct = p.total ? Math.round((p.done / p.total) * 100) : 0
                 return (
-                  <tr key={c.id} className="transition-colors hover:bg-field-soft">
+                  /* The whole row is the link target, not just the name: a
+                     table of campaigns you can only enter by hitting six
+                     characters of text is a table people think is read-only. */
+                  <tr key={c.id} className="group relative cursor-pointer transition-colors hover:bg-field-soft">
                     <TD>
                       <Link
                         href={`/dashboard/campaigns/${c.id}`}
-                        className="font-medium text-fg transition-colors hover:text-brand-on-tint"
+                        className="font-medium text-fg transition-colors group-hover:text-brand-on-tint after:absolute after:inset-0 after:content-['']"
                       >
                         {c.name}
                       </Link>
@@ -141,6 +144,7 @@ export default async function CampaignsPage() {
                     </TD>
                     <TD align="right" className="tabular-nums">
                       {p.talked.toLocaleString()}
+                      <span aria-hidden="true" className="ml-3 text-subtle transition-colors group-hover:text-fg">›</span>
                     </TD>
                   </tr>
                 )

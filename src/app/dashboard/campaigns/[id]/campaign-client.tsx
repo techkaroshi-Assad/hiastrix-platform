@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Field, SubmitButton, ErrorNote, InfoNote } from "@/components/ui/field"
 import { Select, SecondaryButton, DangerButton, Panel } from "@/components/ui/form"
 import { parseCsv, guessColumns, toImportRows, type ColumnGuess } from "@/lib/dialer/csv"
@@ -70,21 +71,23 @@ export function CampaignControls({
   state,
   notReadyReason,
   hasLeads,
+  canDelete,
 }: {
   id: string
   state: string
   notReadyReason: string | null
   hasLeads: boolean
+  /** False once anybody has actually been dialled — then it can only be archived. */
+  canDelete: boolean
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [confirmArchive, setConfirmArchive] = useState(false)
+  const [confirming, setConfirming] = useState<"archive" | "delete" | null>(null)
 
   async function act(action: "start" | "pause" | "archive") {
-    setError(null)
-    setBusy(action)
+    setError(null); setBusy(action)
     try {
       const res = await fetch(`/api/campaigns/${id}`, {
         method: "PATCH",
@@ -96,7 +99,7 @@ export function CampaignControls({
         setError(body.error ?? "Something went wrong. Please try again.")
         return
       }
-      setConfirmArchive(false)
+      setConfirming(null)
       startTransition(() => router.refresh())
     } catch {
       setError("Something went wrong. Please try again.")
@@ -105,22 +108,50 @@ export function CampaignControls({
     }
   }
 
+  async function remove() {
+    setError(null); setBusy("delete")
+    try {
+      const res = await fetch(`/api/campaigns/${id}`, { method: "DELETE" })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(body.error ?? "Something went wrong. Please try again.")
+        return
+      }
+      setConfirming(null)
+      startTransition(() => router.push("/dashboard/campaigns"))
+    } catch {
+      setError("Something went wrong. Please try again.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const canStart = hasLeads && !notReadyReason && state !== "ARCHIVED"
+  const live = state === "RUNNING"
 
   return (
     <div className="flex flex-col items-end gap-1.5">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {state !== "ARCHIVED" && (
+          <Link
+            href={`/dashboard/campaigns/${id}/edit`}
+            className="rounded-field border border-line bg-field px-3.5 py-2 text-[13px] text-muted transition-colors hover:border-line-strong hover:text-fg"
+          >
+            Edit settings
+          </Link>
+        )}
+
         {state !== "ARCHIVED" && (
           <SecondaryButton
             type="button"
-            onClick={() => setConfirmArchive(true)}
+            onClick={() => setConfirming(canDelete ? "delete" : "archive")}
             disabled={busy !== null}
           >
-            Archive
+            {canDelete ? "Delete" : "Archive"}
           </SecondaryButton>
         )}
 
-        {state === "RUNNING" ? (
+        {live ? (
           <SecondaryButton
             type="button"
             onClick={() => act("pause")}
@@ -129,35 +160,29 @@ export function CampaignControls({
           >
             {busy === "pause" ? "Pausing…" : "Pause"}
           </SecondaryButton>
-        ) : (
+        ) : state !== "ARCHIVED" ? (
           <SubmitButton
-            type="button"
-            sheen={false}
-            className="w-auto px-5"
+            type="button" sheen={false} className="w-auto px-5"
             loading={busy === "start"}
             disabled={!canStart || busy !== null}
-            title={
-              !hasLeads ? "Add some people first." : notReadyReason ?? undefined
-            }
+            title={!hasLeads ? "Add some people first." : notReadyReason ?? undefined}
             onClick={() => act("start")}
           >
             {state === "PAUSED" ? "Resume" : "Start calling"}
           </SubmitButton>
-        )}
+        ) : null}
       </div>
 
-      {error && <span className="text-[11.5px] text-danger">{error}</span>}
+      {error && <span className="max-w-[380px] text-right text-[11.5px] text-danger">{error}</span>}
 
       <Panel
-        open={confirmArchive}
+        open={confirming === "archive"}
         title="Archive this campaign?"
-        subtitle="Anyone still waiting to be called is cancelled. Calls already connected will finish. This can't be undone."
-        onClose={() => setConfirmArchive(false)}
+        subtitle="It stays in your history, but stops for good."
+        onClose={() => setConfirming(null)}
         footer={
           <div className="flex justify-end gap-2">
-            <SecondaryButton type="button" onClick={() => setConfirmArchive(false)}>
-              Keep it
-            </SecondaryButton>
+            <SecondaryButton type="button" onClick={() => setConfirming(null)}>Keep it</SecondaryButton>
             <DangerButton type="button" onClick={() => act("archive")} disabled={busy !== null}>
               {busy === "archive" ? "Archiving…" : "Archive"}
             </DangerButton>
@@ -165,8 +190,29 @@ export function CampaignControls({
         }
       >
         <p className="text-[13px] font-light text-muted">
-          The record of who was called and what happened stays in your call history.
-          What goes is the queue of people it had not got to yet.
+          Anyone still waiting to be called is cancelled, and calls already connected will
+          finish. The record of who was called and what happened stays in your call
+          history. This can&rsquo;t be undone.
+        </p>
+      </Panel>
+
+      <Panel
+        open={confirming === "delete"}
+        title="Delete this campaign?"
+        subtitle="Nobody has been called yet, so there's nothing to keep."
+        onClose={() => setConfirming(null)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <SecondaryButton type="button" onClick={() => setConfirming(null)}>Keep it</SecondaryButton>
+            <DangerButton type="button" onClick={remove} disabled={busy !== null}>
+              {busy === "delete" ? "Deleting…" : "Delete"}
+            </DangerButton>
+          </div>
+        }
+      >
+        <p className="text-[13px] font-light text-muted">
+          The campaign and everyone on its list are removed. Your do-not-call list is not
+          affected. This can&rsquo;t be undone.
         </p>
       </Panel>
     </div>

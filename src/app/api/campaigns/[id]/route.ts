@@ -152,3 +152,47 @@ export async function PATCH(
     return apiError(sanitiseError(error, "campaigns/update"))
   }
 }
+
+/**
+ * DELETE /api/campaigns/[id] — remove a campaign entirely.
+ *
+ * Only one that has never dialled anybody. Once a campaign has run, its leads
+ * are the record of who was called and what happened, and a dialer should not
+ * offer to erase that — the call log would still show the calls with nothing to
+ * attribute them to. Archiving is the answer there, and the error says so.
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+
+    const ctx = await getTenantContext()
+    if (!ctx) return apiError(ERRORS.UNAUTHORIZED, 401)
+
+    const campaign = await prisma.campaign.findFirst({
+      where:  { id, tenantId: ctx.tenant.id },
+      select: { id: true, startedAt: true },
+    })
+    if (!campaign) return apiError(ERRORS.NOT_FOUND, 404)
+
+    // `startedAt` alone is not enough: a campaign can be started and stopped
+    // before the first call connects. Attempts are the honest test of whether
+    // anybody's phone rang.
+    const dialled = await prisma.dialAttempt.count({ where: { campaignId: id } })
+
+    if (dialled > 0) {
+      return apiError(
+        "This campaign has already made calls, so it can't be deleted — archive it instead and it stays in your history."
+      )
+    }
+
+    // Leads and attempts go with it, by the cascade on the foreign keys.
+    await prisma.campaign.delete({ where: { id } })
+
+    return Response.json({ ok: true })
+  } catch (error) {
+    return apiError(sanitiseError(error, "campaigns/delete"))
+  }
+}

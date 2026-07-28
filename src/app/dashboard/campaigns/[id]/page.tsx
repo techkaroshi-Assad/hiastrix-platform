@@ -45,7 +45,7 @@ export default async function CampaignPage({
   const where: Record<string, unknown> = { campaignId: campaign.id }
   if (sp.state) where.state = sp.state
 
-  const [counts, leads, total, readiness] = await Promise.all([
+  const [counts, leads, total, dialled, readiness] = await Promise.all([
     prisma.campaignLead.groupBy({
       by: ["state"],
       where: { campaignId: campaign.id },
@@ -63,6 +63,7 @@ export default async function CampaignPage({
       },
     }),
     prisma.campaignLead.count({ where }),
+    prisma.dialAttempt.count({ where: { campaignId: campaign.id } }),
     // Shown as a warning before anyone presses start, rather than as an error
     // afterwards.
     campaign.state === "RUNNING" ? Promise.resolve({ ok: true as const }) : campaignReadiness(campaign.id),
@@ -104,6 +105,7 @@ export default async function CampaignPage({
           state={campaign.state}
           notReadyReason={readiness.ok ? null : readiness.reason}
           hasLeads={all > 0}
+          canDelete={dialled === 0}
         />
       }
     >

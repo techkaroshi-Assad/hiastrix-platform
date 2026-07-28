@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
 import { tenantNav } from "@/lib/nav"
 import { AppShell } from "@/components/app/app-shell"
-import { NewCampaignForm, type AgentOption } from "./new-campaign-form"
+import { CampaignForm, type AgentOption } from "../campaign-form"
 
 export const metadata: Metadata = { title: "New campaign" }
 export const dynamic = "force-dynamic"
@@ -63,7 +63,7 @@ export default async function NewCampaignPage() {
       description="It starts empty and paused. You'll add people next, then start it when you're ready — nothing is dialled before that."
       userEmail={email}
     >
-      <NewCampaignForm agents={options} />
+      <CampaignForm agents={options} />
     </AppShell>
   )
 }
