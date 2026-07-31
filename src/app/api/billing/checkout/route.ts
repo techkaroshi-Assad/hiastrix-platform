@@ -82,8 +82,16 @@ export async function POST(request: NextRequest) {
       metadata: {
         tenantId: ctx.tenant.id,
       },
+      /*
+       * `tenantId` on the intent is what tells the webhook this charge is a
+       * top-up and not a plan renewal. Subscription charges arrive on the same
+       * `payment_intent.succeeded` event carrying no metadata of ours, and
+       * without this marker the webhook would have no way to tell the two
+       * apart — which would mean crediting every monthly plan payment to the
+       * balance as if it were a top-up.
+       */
       payment_intent_data: {
-        metadata: { tenantId: ctx.tenant.id },
+        metadata: { tenantId: ctx.tenant.id, kind: "topup" },
       },
     })
 

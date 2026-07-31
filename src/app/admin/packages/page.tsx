@@ -22,6 +22,7 @@ export default async function AdminPackagesPage() {
     name:             p.name,
     minutesIncluded:  p.minutesIncluded,
     priceCents:       p.priceCents,
+    stripePriceId:    p.stripePriceId,
     overageRateCents: p.overageRateCents,
     isActive:         p.isActive,
     tenants:          p._count.tenants,

@@ -25,6 +25,16 @@ model Package {
   priceCents         Int      @map("price_cents")          // USD cents
   overageRateCents   Int      @map("overage_rate_cents")   // per minute, USD cents
   isActive           Boolean  @default(true) @map("is_active")
+  /// Stripe's copy of this plan — a product and a monthly recurring price,
+  /// created on demand the first time somebody subscribes and cached here.
+  /// Nobody builds these by hand in the Stripe dashboard; the plan defined in
+  /// the admin area is the single source of truth and Stripe follows it.
+  ///
+  /// A price in Stripe is immutable once created, so changing `priceCents` here
+  /// cannot update it — `syncPackagePrice` notices the mismatch and creates a
+  /// replacement, leaving existing subscribers on the price they agreed to.
+  stripeProductId    String?  @map("stripe_product_id")
+  stripePriceId      String?  @map("stripe_price_id")
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenants            Tenant[]
@@ -42,6 +52,17 @@ model Tenant {
   stripeCustomerId   String?      @map("stripe_customer_id")
   packageId          String?      @map("package_id") @db.Uuid
   packageAssignedAt  DateTime?    @map("package_assigned_at") @db.Timestamptz(6)
+  /// The live subscription behind `packageId`, if the plan was bought rather
+  /// than granted by an operator. Null with a package set is a legitimate
+  /// state — that is a comped plan — so the subscription columns are read as
+  /// "how the plan is paid for", never as "whether there is a plan".
+  stripeSubscriptionId String?    @unique @map("stripe_subscription_id")
+  subscriptionStatus   SubscriptionStatus? @map("subscription_status")
+  /// End of the period already paid for. The renewal date while the
+  /// subscription is running, and the date the allowance runs out once it has
+  /// been cancelled — cancelling never takes minutes away mid-month.
+  currentPeriodEnd     DateTime?  @map("current_period_end") @db.Timestamptz(6)
+  cancelAtPeriodEnd    Boolean    @default(false) @map("cancel_at_period_end")
   minutesUsed        Int          @default(0) @map("minutes_used")
   creditBalanceCents Int          @default(0) @map("credit_balance_cents") // USD cents
   /// Which CRM sub-account this tenant's agents act on. Null until an operator
@@ -78,6 +99,26 @@ enum TenantStatus {
   BLOCKED
 
   @@map("tenant_status")
+}
+
+/// Stripe's own subscription states, mirrored rather than reinterpreted.
+///
+/// Collapsing these into a boolean was tempting and wrong: `past_due` and
+/// `canceled` both mean "not paying", but the first is a card that failed and
+/// is being retried — the customer still has their allowance and needs telling —
+/// while the second is over. Only the allowance rules read this; the question
+/// "can this tenant call" is still answered in one place, by `verdictFor`.
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+  PAUSED
+
+  @@map("subscription_status")
 }
 
 // ─── TENANT USERS ─────────────────────────────────────────────────────────────
@@ -294,6 +335,10 @@ enum LedgerEntryType {
   OVERAGE_CHARGE
   MANUAL_CREDIT
   MANUAL_DEDUCTION
+  /// Credit taken back because the payment that granted it was refunded.
+  REFUND
+  /// The same, for a disputed payment.
+  CHARGEBACK
 
   @@map("ledger_entry_type")
 }
@@ -303,8 +348,19 @@ enum LedgerEntryType {
 model Payment {
   id                    String        @id @default(uuid()) @db.Uuid
   tenantId              String        @map("tenant_id") @db.Uuid
-  stripePaymentIntentId String        @unique @map("stripe_payment_intent_id")
+  /// Nullable since subscriptions arrived. A one-off charge is identified by
+  /// its payment intent; a subscription charge is identified by its invoice,
+  /// because the newer Stripe API no longer puts a payment intent on the
+  /// invoice object at all. Exactly one of the two is set, and each is unique,
+  /// so a replayed webhook of either kind still finds the row it already wrote.
+  stripePaymentIntentId String?       @unique @map("stripe_payment_intent_id")
+  stripeInvoiceId       String?       @unique @map("stripe_invoice_id")
   amountCents           Int           @map("amount_cents") // USD cents
+  /// Running total refunded against this payment. Stripe sends the whole
+  /// refunded amount on every `charge.refunded`, not the delta, so partial
+  /// refunds are applied as the difference against this column and a replay
+  /// finds nothing left to do.
+  refundedCents         Int           @default(0) @map("refunded_cents")
   type                  PaymentType
   status                PaymentStatus @default(PENDING)
   createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -315,8 +371,12 @@ model Payment {
 }
 
 enum PaymentType {
+  /// Legacy: a plan bought outright, before plans became monthly. Kept so old
+  /// rows still read correctly.
   PACKAGE_PURCHASE
   TOP_UP
+  /// A monthly plan invoice — the first one and every renewal after it.
+  SUBSCRIPTION
 
   @@map("payment_type")
 }
@@ -325,6 +385,12 @@ enum PaymentStatus {
   PENDING
   COMPLETED
   FAILED
+  /// Money given back, in whole or in part. `refundedCents` says which.
+  REFUNDED
+  /// The cardholder went to their bank instead of to us. Distinct from
+  /// REFUNDED because it carries a fee, a deadline and a fraud signal, and
+  /// because the workspace is suspended when one lands.
+  DISPUTED
 
   @@map("payment_status")
 }

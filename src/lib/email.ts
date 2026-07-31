@@ -172,6 +172,113 @@ export async function sendPackageActivated(opts: {
   )
 }
 
+/**
+ * A renewal, which is a different message from an activation.
+ *
+ * "Your plan is active" arriving every month reads like a mistake and trains
+ * people to ignore billing mail. This one says what actually changed: money
+ * left, minutes came back.
+ */
+export async function sendPlanRenewed(opts: {
+  to: string[]
+  companyName: string
+  packageName: string
+  minutesIncluded: number
+  amountCents: number
+  renewsOn: Date | null
+}) {
+  const next = opts.renewsOn
+    ? opts.renewsOn.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })
+    : null
+
+  await send(
+    opts.to,
+    `Your ${opts.packageName} plan has renewed`,
+    wrap(
+      "Your plan has renewed",
+      `<p style="margin:0 0 12px;">We've charged <strong style="color:#F0EEFF;">${usd(opts.amountCents)}</strong> for the <strong style="color:#F0EEFF;">${opts.packageName}</strong> plan on <strong style="color:#F0EEFF;">${opts.companyName}</strong>.</p>
+       <p style="margin:0 0 12px;">Your <strong style="color:#F0EEFF;">${opts.minutesIncluded.toLocaleString()} minutes</strong> have started again from zero.</p>
+       ${next ? `<p style="margin:0;">Next renewal: ${next}.</p>` : `<p style="margin:0;">Nothing to do.</p>`}`,
+      { label: "View billing", href: `${APP}/dashboard/billing` }
+    )
+  )
+}
+
+/**
+ * A renewal that did not go through.
+ *
+ * Sent while the plan is still working, because that is the whole point: Stripe
+ * retries a failed card for days, and telling someone early is the difference
+ * between them updating a card and them finding out when calls stop.
+ */
+export async function sendPaymentFailed(opts: {
+  to: string[]
+  companyName: string
+  amountCents: number
+}) {
+  await send(
+    opts.to,
+    "We couldn't take your plan payment",
+    wrap(
+      "We couldn't take your payment",
+      `<p style="margin:0 0 12px;">The <strong style="color:#F0EEFF;">${usd(opts.amountCents)}</strong> payment for <strong style="color:#F0EEFF;">${opts.companyName}</strong> didn't go through — usually an expired card, or a bank declining a recurring charge.</p>
+       <p style="margin:0 0 12px;">Nothing has stopped. We'll try again over the next few days, and your calls carry on in the meantime.</p>
+       <p style="margin:0;">Updating your card now means you won't have to think about it again.</p>`,
+      { label: "Update payment method", href: `${APP}/dashboard/billing` }
+    )
+  )
+}
+
+/**
+ * The plan has ended — cancelled, or given up on after repeated failures.
+ *
+ * Says plainly what survives, because the fear at this moment is "have I lost
+ * everything". Credit and configuration both survive; only the monthly
+ * allowance stops.
+ */
+export async function sendPlanEnded(opts: {
+  to: string[]
+  companyName: string
+  packageName: string
+  balanceCents: number
+}) {
+  await send(
+    opts.to,
+    "Your Hi-Astrix plan has ended",
+    wrap(
+      "Your plan has ended",
+      `<p style="margin:0 0 12px;">The <strong style="color:#F0EEFF;">${opts.packageName}</strong> plan on <strong style="color:#F0EEFF;">${opts.companyName}</strong> has come to an end, so there are no more included minutes each month.</p>
+       <p style="margin:0 0 12px;">Everything else is exactly where you left it — your agents, numbers, campaigns and contacts are untouched, and your remaining balance of <strong style="color:#F0EEFF;">${usd(opts.balanceCents)}</strong> still pays for calls at your usual per-minute rate.</p>
+       <p style="margin:0;">You can start a plan again whenever you like.</p>`,
+      { label: "View plans", href: `${APP}/dashboard/billing` }
+    )
+  )
+}
+
+/** Money given back — sent for a refund we initiated, or one Stripe processed. */
+export async function sendRefundProcessed(opts: {
+  to: string[]
+  companyName: string
+  amountCents: number
+  creditRemovedCents: number
+  balanceCents: number
+}) {
+  await send(
+    opts.to,
+    "Your refund has been processed",
+    wrap(
+      "Your refund has been processed",
+      `<p style="margin:0 0 12px;">We've refunded <strong style="color:#F0EEFF;">${usd(opts.amountCents)}</strong> to <strong style="color:#F0EEFF;">${opts.companyName}</strong>. It usually reaches your statement within five to ten working days.</p>
+       ${
+         opts.creditRemovedCents > 0
+           ? `<p style="margin:0;">The matching <strong style="color:#F0EEFF;">${usd(opts.creditRemovedCents)}</strong> of calling credit has been taken back off your balance, which now stands at <strong style="color:#F0EEFF;">${usd(opts.balanceCents)}</strong>.</p>`
+           : `<p style="margin:0;">Your calling balance is unchanged at <strong style="color:#F0EEFF;">${usd(opts.balanceCents)}</strong>.</p>`
+       }`,
+      { label: "View billing", href: `${APP}/dashboard/billing` }
+    )
+  )
+}
+
 export async function sendWorkspaceActivated(opts: {
   to: string[]
   companyName: string

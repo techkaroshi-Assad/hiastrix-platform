@@ -5,22 +5,24 @@ import { tenantNav } from "@/lib/nav"
 import { AppShell, StatCard } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { InfoNote, ErrorNote } from "@/components/ui/field"
-import { usd, dateTime, titleCase } from "@/lib/format"
+import { usd, dateTime, dateOnly, titleCase } from "@/lib/format"
 import { stripeConfigured } from "@/lib/stripe"
 import { readAllowance, minutesLabel } from "@/lib/billing/allowance"
+import { subscriptionIsLive } from "@/lib/billing/subscription"
 import { TopUp } from "./topup"
 import { Plans } from "./plans"
+import { SubscriptionControls } from "./subscription-card"
 
 export const metadata: Metadata = { title: "Billing" }
 export const dynamic = "force-dynamic"
 
-type Search = Promise<{ topup?: string; plan?: string }>
+type Search = Promise<{ topup?: string; plan?: string; card?: string }>
 
 export default async function BillingPage({ searchParams }: { searchParams: Search }) {
   const { tenant, email } = await requireTenant()
   const sp = await searchParams
 
-  const [ledger, payments, plans] = await Promise.all([
+  const [ledger, payments, plans, settings] = await Promise.all([
     prisma.creditLedger.findMany({
       where: { tenantId: tenant.id },
       orderBy: { createdAt: "desc" },
@@ -39,6 +41,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
         priceCents: true, overageRateCents: true,
       },
     }),
+    prisma.platformSettings.findUnique({ where: { id: true } }),
   ])
 
   /*
@@ -55,11 +58,44 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
   })
   const overageCost = a.overageMinutes * a.overageRateCents
 
+  /*
+   * A subscription is *how the plan is paid for*, never *whether there is a
+   * plan*. An operator can grant a package outright, and that tenant has no
+   * subscription and must still see a working billing page — so everything
+   * below reads `tenant.package` for the allowance and the subscription fields
+   * only for the parts that are genuinely about the payment arrangement.
+   */
+  const live      = subscriptionIsLive(tenant.subscriptionStatus)
+  const renewsOn  = tenant.currentPeriodEnd ? dateOnly(tenant.currentPeriodEnd) : null
+  const cancelling = live && tenant.cancelAtPeriodEnd
+  const pastDue   = tenant.subscriptionStatus === "PAST_DUE"
+
+  /*
+   * The low-balance warning: it warns, and that is all it does.
+   *
+   * There is no auto top-up anywhere in this platform, by choice. A dialer that
+   * can charge a card on its own is a dialer that can spend an unbounded amount
+   * of somebody's money while they sleep, and no amount of convenience is worth
+   * being the company that did that.
+   *
+   * Only meaningful once there is a rate to convert against — with no plan and
+   * no rate, "$4 left" cannot be turned into an amount of calling and a warning
+   * would be guesswork.
+   */
+  const lowPct = settings?.lowBalancePct ?? 20
+  const threshold = tenant.package ? Math.round((tenant.package.priceCents * lowPct) / 100) : 0
+  const lowBalance =
+    a.canCall &&
+    threshold > 0 &&
+    a.minutesRemaining === 0 &&
+    a.balanceCents > 0 &&
+    a.balanceCents <= threshold
+
   return (
     <AppShell
       nav={tenantNav("billing")}
       heading="Billing"
-      description="Your package, balance and payment history."
+      description="Your plan, balance and payment history."
       userEmail={email}
     >
       {sp.topup === "success" && (
@@ -88,6 +124,20 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
           <InfoNote>Nothing was charged and your plan is unchanged.</InfoNote>
         </div>
       )}
+      {sp.card === "success" && (
+        <div className="mb-5">
+          <InfoNote>
+            Card saved. Your next renewal will be taken from it.
+          </InfoNote>
+        </div>
+      )}
+      {sp.card === "cancelled" && (
+        <div className="mb-5">
+          <InfoNote>Your payment method is unchanged.</InfoNote>
+        </div>
+      )}
+
+      {/* Calls actually stopped. The loudest thing on the page. */}
       {a.stoppedReason && (
         <div className="mb-5">
           <ErrorNote>
@@ -97,14 +147,51 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
         </div>
       )}
 
+      {/* A renewal that failed. Said plainly, while nothing has stopped yet —
+          that is the whole value of telling them now rather than later. */}
+      {pastDue && (
+        <div className="mb-5">
+          <ErrorNote>
+            We couldn&rsquo;t take your last plan payment. Nothing has stopped and
+            we&rsquo;ll keep trying over the next few days — updating your card now
+            means you won&rsquo;t have to think about it again.
+          </ErrorNote>
+        </div>
+      )}
+
+      {cancelling && (
+        <div className="mb-5">
+          <InfoNote>
+            Your plan is set to end{renewsOn ? ` on ${renewsOn}` : ""}. You keep
+            every included minute until then, and you can change your mind at any
+            point before it.
+          </InfoNote>
+        </div>
+      )}
+
+      {lowBalance && (
+        <div className="mb-5">
+          <InfoNote>
+            You&rsquo;ve used this month&rsquo;s included minutes and your balance is
+            down to {usd(a.balanceCents)} — about {minutesLabel(a.balanceMinutes)} of
+            calling. Nothing is charged automatically, so top up when you&rsquo;re
+            ready.
+          </InfoNote>
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Plan"
           value={tenant.package?.name ?? "None"}
           meta={
-            a.includedMinutes > 0
-              ? `${minutesLabel(a.includedMinutes)} included`
-              : "Choose one below"
+            a.includedMinutes === 0
+              ? "Choose one below"
+              : cancelling
+                ? renewsOn ? `Ends ${renewsOn}` : "Ends at the end of this month"
+                : live && renewsOn
+                  ? `Renews ${renewsOn}`
+                  : `${minutesLabel(a.includedMinutes)} included`
           }
         />
         <StatCard
@@ -112,7 +199,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
           value={a.minutesUsed.toLocaleString()}
           meta={
             a.includedMinutes > 0
-              ? `${a.usedPct}% of your allowance · ${minutesLabel(a.minutesRemaining)} left`
+              ? `${a.usedPct}% of this month · ${minutesLabel(a.minutesRemaining)} left`
               : "No allowance set"
           }
         />
@@ -142,7 +229,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
         <Card
           title="Plans"
           action={
-            a.totalMinutesLeft > 0 ? (
+            live || tenant.stripeCustomerId ? (
+              <SubscriptionControls
+                cancelAtPeriodEnd={tenant.cancelAtPeriodEnd}
+                periodEndLabel={renewsOn}
+                canManage={live && stripeConfigured()}
+              />
+            ) : a.totalMinutesLeft > 0 ? (
               <span className="text-[12px] text-subtle">
                 {minutesLabel(a.totalMinutesLeft)} left in total
               </span>
@@ -152,6 +245,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
           <Plans
             plans={plans}
             currentId={tenant.packageId}
+            subscribed={live}
             enabled={stripeConfigured() && tenant.status === "ACTIVE"}
           />
         </Card>
@@ -178,7 +272,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                     <tr key={entry.id} className="transition-colors hover:bg-field-soft">
                       <TD muted>{dateTime(entry.createdAt)}</TD>
                       <TD>
-                        <Pill tone={entry.amountCents >= 0 ? "success" : "neutral"}>
+                        <Pill tone={entry.amountCents > 0 ? "success" : "neutral"}>
                           {titleCase(entry.type)}
                         </Pill>
                       </TD>
@@ -187,10 +281,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                       </TD>
                       <TD
                         align="right"
-                        className={entry.amountCents >= 0 ? "text-success" : undefined}
+                        className={entry.amountCents > 0 ? "text-success" : undefined}
                       >
-                        {entry.amountCents >= 0 ? "+" : "−"}
-                        {usd(Math.abs(entry.amountCents))}
+                        {/* A plan renewal is a real event with no credit
+                            movement. Showing it as "+$0.00" reads like a bug. */}
+                        {entry.amountCents === 0
+                          ? "—"
+                          : `${entry.amountCents > 0 ? "+" : "−"}${usd(Math.abs(entry.amountCents))}`}
                       </TD>
                     </tr>
                   ))
@@ -217,13 +314,19 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                   payments.map(p => (
                     <tr key={p.id} className="transition-colors hover:bg-field-soft">
                       <TD muted>{dateTime(p.createdAt)}</TD>
-                      <TD muted>{titleCase(p.type)}</TD>
+                      <TD muted>
+                        {p.type === "SUBSCRIPTION"
+                          ? "Monthly plan"
+                          : p.type === "TOP_UP"
+                            ? "Top-up"
+                            : "Plan"}
+                      </TD>
                       <TD>
                         <Pill
                           tone={
                             p.status === "COMPLETED"
                               ? "success"
-                              : p.status === "FAILED"
+                              : p.status === "FAILED" || p.status === "DISPUTED"
                                 ? "danger"
                                 : "warning"
                           }
@@ -231,7 +334,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                           {titleCase(p.status)}
                         </Pill>
                       </TD>
-                      <TD align="right">{usd(p.amountCents)}</TD>
+                      <TD align="right">
+                        {usd(p.amountCents)}
+                        {/* A partial refund leaves the row COMPLETED, which is
+                            honest but incomplete on its own. */}
+                        {p.refundedCents > 0 && p.refundedCents < p.amountCents && (
+                          <span className="block text-[11.5px] text-subtle">
+                            {usd(p.refundedCents)} refunded
+                          </span>
+                        )}
+                      </TD>
                     </tr>
                   ))
                 )}

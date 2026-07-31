@@ -10,6 +10,10 @@ export type PackageRow = {
   name: string
   minutesIncluded: number
   priceCents: number
+  /** Null until somebody subscribes — that is when the provider's copy of this
+   *  plan is created. Shown so an operator can tell a plan nobody has ever
+   *  bought from one that is quietly broken. */
+  stripePriceId: string | null
   overageRateCents: number
   isActive: boolean
   tenants: number
@@ -117,15 +121,17 @@ export function PackagesClient({ packages }: { packages: PackageRow[] }) {
 
             <p className="mt-3 text-[26px] font-semibold tracking-[-0.03em]">
               ${(p.priceCents / 100).toLocaleString()}
+              <span className="ml-1 text-[13px] font-normal text-muted">/ month</span>
             </p>
             <p className="mt-1 text-[12.5px] text-muted">
-              {p.minutesIncluded.toLocaleString()} minutes included
+              {p.minutesIncluded.toLocaleString()} minutes included each month
             </p>
             <p className="mt-0.5 text-[12.5px] text-subtle">
               ${(p.overageRateCents / 100).toFixed(2)}/min beyond the cap
             </p>
             <p className="mt-3 text-[12px] text-subtle">
               {p.tenants} tenant{p.tenants === 1 ? "" : "s"} on this tier
+              {p.stripePriceId ? "" : " · not yet live with the payment provider"}
             </p>
 
             <div className="mt-4">
@@ -177,13 +183,18 @@ export function PackagesClient({ packages }: { packages: PackageRow[] }) {
             required
           />
           <Field
-            label="Price (USD)"
+            label="Price (USD per month)"
             type="number"
             min={0}
             step="1"
             value={draft.price}
             onChange={e => setDraft({ ...draft, price: e.target.value })}
             required
+            hint={
+              editing
+                ? "Changing this only affects new subscribers. Anyone already on this plan keeps the price they agreed to until they switch plans themselves — a price, once someone is paying it, cannot be edited underneath them."
+                : "Charged monthly. The payment provider's copy of this plan is created the first time somebody subscribes."
+            }
           />
           <Field
             label="Overage rate (USD per minute)"
@@ -193,12 +204,12 @@ export function PackagesClient({ packages }: { packages: PackageRow[] }) {
             value={draft.overage}
             onChange={e => setDraft({ ...draft, overage: e.target.value })}
             required
-            hint="Charged only for minutes beyond the included allowance."
+            hint="Charged only for minutes beyond the included allowance, taken from the tenant's credit balance."
           />
 
           <Toggle
             label="Published"
-            description="Retired tiers stay attached to existing tenants but can't be newly assigned."
+            description="Retired tiers stay attached to existing subscribers and keep renewing, but nobody new can choose one."
             checked={draft.isActive}
             onChange={v => setDraft({ ...draft, isActive: v })}
           />

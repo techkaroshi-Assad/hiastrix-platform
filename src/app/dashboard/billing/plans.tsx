@@ -7,11 +7,18 @@
  * reasons in minutes and we charge in dollars. A card showing only "$200" makes
  * them do arithmetic we already know the answer to.
  *
- * Buying assigns nothing on its own — the webhook does that once the payment
- * settles. Reaching the success page is not evidence anyone paid.
+ * Two different things happen behind one button. Somebody with no plan is sent
+ * to checkout to enter a card. Somebody already subscribed is switched in
+ * place — no checkout, no card re-entry, no leaving the app to authorise
+ * something they have already authorised. The endpoint decides which, and
+ * answers with either a URL to follow or a plain acknowledgement.
+ *
+ * Neither path assigns anything on its own. The webhook does that once the
+ * money has actually moved.
  */
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { SecondaryButton } from "@/components/ui/form"
 import { SubmitButton, ErrorNote } from "@/components/ui/field"
 import { usd } from "@/lib/format"
@@ -29,34 +36,55 @@ export type Plan = {
 export function Plans({
   plans,
   currentId,
+  subscribed,
   enabled,
 }: {
   plans: Plan[]
   currentId: string | null
+  /** Whether a live subscription is paying for the current plan, which decides
+   *  whether choosing another one is a purchase or a switch. */
+  subscribed: boolean
   /** False when payments aren't configured, or the workspace can't transact. */
   enabled: boolean
 }) {
+  const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
 
   async function choose(planId: string) {
     setError(null)
     setBusy(planId)
     try {
-      const res = await fetch("/api/billing/package", {
+      const res = await fetch("/api/billing/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ packageId: planId }),
       })
       const body = await res.json().catch(() => ({}))
-      if (!res.ok || !body.url) {
+
+      if (!res.ok) {
         setError(body.error ?? "Something went wrong. Please try again.")
+        setBusy(null)
         return
       }
+
+      // Switched in place — nothing to redirect to, so re-read the page.
+      if (body.switched) {
+        startTransition(() => router.refresh())
+        setBusy(null)
+        return
+      }
+
+      if (!body.url) {
+        setError("Something went wrong. Please try again.")
+        setBusy(null)
+        return
+      }
+
       window.location.href = body.url
     } catch {
       setError("Something went wrong. Please try again.")
-    } finally {
       setBusy(null)
     }
   }
@@ -96,13 +124,17 @@ export function Plans({
                 )}
               </div>
 
-              {/* Money and minutes together, always. */}
+              {/* Money and minutes together, always — and the period, because
+                  "$200" and "$200 a month" are very different offers. */}
               <div className="mt-3">
-                <div className="text-[24px] font-semibold tracking-[-0.025em]">
-                  {usd(plan.priceCents)}
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[24px] font-semibold tracking-[-0.025em]">
+                    {usd(plan.priceCents)}
+                  </span>
+                  <span className="text-[13px] text-muted">/ month</span>
                 </div>
                 <div className="mt-0.5 text-[13px] text-muted">
-                  {minutesLabel(plan.minutesIncluded)} included
+                  {minutesLabel(plan.minutesIncluded)} included every month
                 </div>
               </div>
 
@@ -112,21 +144,25 @@ export function Plans({
               </p>
 
               <div className="mt-4 pt-1">
-                {enabled ? (
+                {!enabled ? (
+                  <SecondaryButton type="button" disabled className="w-full justify-center">
+                    Unavailable
+                  </SecondaryButton>
+                ) : current && subscribed ? (
+                  <SecondaryButton type="button" disabled className="w-full justify-center">
+                    Your plan
+                  </SecondaryButton>
+                ) : (
                   <SubmitButton
                     type="button"
-                    loading={busy === plan.id}
-                    disabled={Boolean(busy)}
+                    loading={busy === plan.id || pending}
+                    disabled={Boolean(busy) || pending}
                     sheen={false}
                     className="w-full"
                     onClick={() => choose(plan.id)}
                   >
-                    {current ? "Renew" : currentId ? "Switch to this" : "Choose"}
+                    {subscribed ? "Switch to this" : "Choose"}
                   </SubmitButton>
-                ) : (
-                  <SecondaryButton type="button" disabled className="w-full justify-center">
-                    Unavailable
-                  </SecondaryButton>
                 )}
               </div>
             </div>
@@ -135,8 +171,21 @@ export function Plans({
       </div>
 
       <p className="text-xs leading-relaxed text-subtle">
-        Buying a plan starts your minutes again from zero. Included minutes cost
-        nothing to use — your balance is only touched once they run out.
+        {subscribed ? (
+          <>
+            Switching takes effect immediately. We&rsquo;ll charge or credit the
+            difference for the rest of this month, and your minutes carry on from
+            where they are rather than starting again — so upgrading mid-month
+            gives you the bigger allowance straight away.
+          </>
+        ) : (
+          <>
+            Plans renew monthly and your minutes start again from zero on each
+            renewal. Included minutes cost nothing to use; your balance is only
+            touched once they run out. Cancel whenever you like — you keep the
+            month you&rsquo;ve paid for.
+          </>
+        )}
       </p>
     </div>
   )
