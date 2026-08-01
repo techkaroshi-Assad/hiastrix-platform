@@ -6,6 +6,9 @@ import { requireTenant } from "@/lib/tenant"
 import { tenantNav } from "@/lib/nav"
 import { AppShell } from "@/components/app/app-shell"
 import { Card, Pill, callTone } from "@/components/app/table"
+import { CallActions } from "@/components/app/call-actions"
+import { readConfig } from "@/lib/vapi/config"
+import { readActions, findUnbackedClaims } from "@/lib/calls/actions"
 import { usd, duration, dateTime, titleCase } from "@/lib/format"
 
 export const metadata: Metadata = { title: "Call detail" }
@@ -44,7 +47,10 @@ export default async function CallDetailPage({
   const call = await prisma.call.findFirst({
     where: { id, tenantId: tenant.id },
     include: {
-      agent:       { select: { name: true } },
+      // The config comes along so the tool names the tenant chose can be
+      // matched to the actions they actually are — `find_contact` is whatever
+      // they called it, `crm.contact.find` is what it does.
+      agent:       { select: { name: true, config: true } },
       phoneNumber: { select: { phoneNumber: true } },
     },
   })
@@ -53,6 +59,20 @@ export default async function CallDetailPage({
 
   const agentName = call.agent?.name ?? "Agent"
   const turns = turnsFrom(call.messages)
+
+  /*
+   * What the agent did, beside what it said.
+   *
+   * Read from the same message array the transcript comes from — the provider
+   * has been storing every tool call and result all along and nothing looked at
+   * them. Reading them is how we found an agent telling a caller it had noted a
+   * callback without ever calling the note tool.
+   */
+  const typeByName = Object.fromEntries(
+    readConfig(call.agent?.config).tools.map(t => [t.name, t.type])
+  )
+  const actions = readActions(call.messages, typeByName)
+  const claims  = findUnbackedClaims(call.messages, actions)
 
   const analysis = (call.analysis ?? null) as
     | { structuredData?: unknown; successEvaluation?: unknown }
@@ -105,6 +125,11 @@ export default async function CallDetailPage({
               </p>
             </Card>
           )}
+
+          {/* What actually happened, before the transcript — a person opening
+              this page is usually asking whether the agent did its job, and the
+              transcript reads convincingly either way. */}
+          <CallActions actions={actions} claims={claims} />
 
           {/* Recording */}
           <Card title="Recording">
