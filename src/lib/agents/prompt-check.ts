@@ -399,6 +399,35 @@ export const countBySeverity = (findings: Finding[]) => ({
   suggestions: findings.filter(f => f.severity === "suggestion").length,
 })
 
+export type SeverityCounts = ReturnType<typeof countBySeverity>
+
+/**
+ * The one line under "Before you save".
+ *
+ * A pure function rather than an expression inside the JSX, because the version
+ * that lived inside the JSX shipped a real bug: it summed `problems` and
+ * `suggestions` and left `blockers` out entirely, so an agent with two things
+ * stopping it going live reported **"0 to fix"** directly above two cards
+ * describing exactly those two things. The list and the number disagreed, and
+ * the number is the part people read.
+ *
+ * Out here it can be tested, and it is — the first assertion is simply that a
+ * summary is never allowed to say zero while findings exist.
+ */
+export function checkerSummary(counts: SeverityCounts): string {
+  const { blockers, problems, suggestions } = counts
+  if (blockers + problems + suggestions === 0) return "Nothing to flag."
+
+  return [
+    // Named as blocking, not merely counted. "2 to fix" and "2 stopping it
+    // going live" ask for different amounts of urgency, and only one of them
+    // is true.
+    blockers    ? `${blockers} stopping it going live` : "",
+    problems    ? `${problems} to fix` : "",
+    suggestions ? `${suggestions} to consider` : "",
+  ].filter(Boolean).join(" · ")
+}
+
 /**
  * The one question the server asks before letting an agent take calls.
  *

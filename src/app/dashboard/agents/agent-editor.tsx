@@ -44,7 +44,7 @@ import {
 } from "@/lib/vapi/config"
 import { ToolsEditor } from "@/components/agents/tools-editor"
 import { JsonEditor } from "@/components/agents/json-editor"
-import { checkAgent, countBySeverity, type Finding } from "@/lib/agents/prompt-check"
+import { checkAgent, countBySeverity, checkerSummary, type Finding } from "@/lib/agents/prompt-check"
 import {
   promptContains, tidyPrompt, approxTokens, templateOverwrites,
   type TidyResult, type Overwrite,
@@ -57,7 +57,7 @@ import {
 } from "@/lib/agents/templates"
 import {
   JOB_ICON, INDUSTRY_ICON, DIRECTION_ICON,
-  IconSearch, IconWarning, IconChevron, type Icon,
+  IconSearch, IconWarning, IconChevron, IconSuccess, IconInfo, type Icon,
 } from "@/components/app/icons"
 import { Disclosure, DisclosureList } from "@/components/ui/disclosure"
 import { CRM_TOOLS, defaultCrmTool } from "@/lib/vapi/tools"
@@ -816,31 +816,48 @@ export function AgentEditor({
           </Block>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-1">
-          <Link
-            href="/dashboard/agents"
-            className="rounded-field border border-line bg-field px-4 py-2.5 text-[13px] text-muted transition-colors hover:border-line-strong"
-          >
-            Cancel
-          </Link>
-          <SubmitButton
-            type="submit" sheen={false} className="w-auto px-6"
-            loading={busy} disabled={!jsonValid || !draft.name.trim()}
-          >
-            {editing ? "Save changes" : "Create agent"}
-          </SubmitButton>
-        </div>
       </div>
 
-      {/* ── The checker ─────────────────────────────────────────────── */}
+      {/* ── The checker, and the button ─────────────────────────────── */}
+      {/*
+        These are one panel on purpose.
+       
+        They were not. The checker sat in the sidebar and Save sat at the bottom
+        of a form six screens long, so the two facts a person needs at the moment
+        they commit — what is wrong, and the button — were never visible at the
+        same time. Somebody would press Save, get a refusal from the server, and
+        have to go looking for the reason.
+       
+        Now the reason and the button are in the same box, and the box follows
+        you down the page.
+      */}
       <aside className="xl:sticky xl:top-8 xl:self-start">
-        <div className="rounded-2xl border border-line bg-field-soft">
-          <header className="border-b border-line px-5 py-3.5">
-            <h2 className="text-[13.5px] font-medium">Before you save</h2>
+        <div className="overflow-hidden rounded-2xl border border-line bg-field-soft">
+          <header
+            className={cn(
+              "border-b px-5 py-3.5",
+              counts.blockers > 0 ? "border-danger/25 bg-danger/[0.07]" : "border-line"
+            )}
+          >
+            <h2 className="flex items-center gap-2 text-[13.5px] font-medium">
+              {counts.blockers > 0
+                ? <IconWarning size={15} className="shrink-0 text-danger" />
+                : findings.length === 0
+                  ? <IconSuccess size={15} className="shrink-0 text-success" />
+                  : <IconInfo size={15} className="shrink-0 text-warning" />}
+              Before you save
+            </h2>
+            {/*
+              Blockers are counted first and named as blocking.
+             
+              The previous version summed `problems` and `suggestions` and left
+              blockers out of the arithmetic entirely — so an agent with two
+              things stopping it going live reported "0 to fix" above two cards
+              describing exactly those two things. The number and the list
+              disagreed, and the number is the part people read.
+            */}
             <p className="mt-0.5 text-[12px] font-light text-muted">
-              {findings.length === 0
-                ? "Nothing to flag."
-                : `${counts.problems} to fix${counts.suggestions ? `, ${counts.suggestions} to consider` : ""}`}
+              {checkerSummary(counts)}
             </p>
           </header>
 
@@ -851,7 +868,7 @@ export function AgentEditor({
                 nothing contradicts anything else.
               </p>
             ) : (
-              <ul className="space-y-4">
+              <ul className="space-y-3">
                 {findings.map(f => (
                   <FindingCard
                     key={f.id}
@@ -860,10 +877,65 @@ export function AgentEditor({
                     onGo={() => setTab(f.where === "identity" ? "identity"
                                     : f.where === "tools" ? "tools"
                                     : f.where === "after" ? "after" : "conversation")}
+                    /* The repair, offered where the problem is reported.
+                     *
+                     * "Remove anything repeated" lived next to the prompt field,
+                     * which is a tab away and below the fold — so the one button
+                     * that fixes the most common blocker was invisible from the
+                     * panel telling you about it. */
+                    /* Both shapes of repetition, not just one. `checkStructure`
+                     * emits `duplicate-block:…` for a repeated paragraph and
+                     * `repeated-lines` for a repeated single instruction, and
+                     * tidying fixes both — matching only the first would have
+                     * offered the repair on some duplicates and not others, for
+                     * no reason a tenant could see. */
+                    onFix={
+                      /^structure:(duplicate-block|repeated-lines)/.test(f.id)
+                        ? () => { setTab("identity"); runTidy() }
+                        : undefined
+                    }
+                    fixLabel="Remove the repeats"
                   />
                 ))}
               </ul>
             )}
+          </div>
+
+          {/* ── The commit ──────────────────────────────────────────── */}
+          <div className="space-y-3 border-t border-line px-5 py-4">
+            {/*
+              An agent with blockers still saves. It simply cannot go on the air.
+             
+              Disabling the button would be the obvious move and the wrong one:
+              somebody half way through writing a prompt at five to six needs
+              their work kept, and refusing to save it because the company name
+              is still in brackets would lose it. So saving is always allowed and
+              the panel is honest about what saving will and will not do.
+            */}
+            {counts.blockers > 0 && (
+              <p className="flex items-start gap-2 rounded-field border border-danger/25 bg-danger/[0.08] px-3 py-2.5 text-[12px] font-light leading-relaxed text-muted">
+                <IconWarning size={14} className="mt-0.5 shrink-0 text-danger" />
+                <span>
+                  Your work saves either way — but this agent can&rsquo;t take calls
+                  until the {counts.blockers === 1 ? "item" : "items"} above
+                  {counts.blockers === 1 ? " is" : " are"} sorted.
+                </span>
+              </p>
+            )}
+
+            <SubmitButton
+              type="submit" sheen={false}
+              loading={busy} disabled={!jsonValid || !draft.name.trim()}
+            >
+              {editing ? "Save changes" : "Create agent"}
+            </SubmitButton>
+
+            <Link
+              href="/dashboard/agents"
+              className="block rounded-field border border-line bg-field px-4 py-2.5 text-center text-[13px] text-muted transition-colors hover:border-line-strong"
+            >
+              Cancel
+            </Link>
           </div>
         </div>
 
@@ -892,20 +964,62 @@ function Block({
   )
 }
 
+/**
+ * One finding.
+ *
+ * Three severities, three appearances — which sounds obvious and was not the
+ * case. Only `problem` was styled; a **blocker** fell through to the neutral
+ * branch, so the two things actually preventing an agent from going live looked
+ * identical to a mild suggestion about wording. Combined with a header that
+ * did not count them, an agent that could not be published looked completely
+ * fine.
+ */
 function FindingCard({
-  finding, onInsert, onGo,
-}: { finding: Finding; onInsert?: () => void; onGo: () => void }) {
+  finding, onInsert, onGo, onFix, fixLabel,
+}: {
+  finding: Finding
+  onInsert?: () => void
+  onGo: () => void
+  /** A one-click repair for this specific finding, where one exists. */
+  onFix?: () => void
+  fixLabel?: string
+}) {
+  const blocker = finding.severity === "blocker"
   const problem = finding.severity === "problem"
+
   return (
     <li className={cn(
       "rounded-field border px-3.5 py-3",
-      problem ? "border-warning/30 bg-warning/8" : "border-line bg-field"
+      blocker ? "border-danger/35 bg-danger/[0.09]"
+      : problem ? "border-warning/30 bg-warning/8"
+      : "border-line bg-field"
     )}>
-      <p className={cn("text-[12.5px] font-medium", problem ? "text-warning" : "text-fg")}>
-        {finding.title}
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <p className={cn(
+          "text-[12.5px] font-medium",
+          blocker ? "text-danger" : problem ? "text-warning" : "text-fg"
+        )}>
+          {finding.title}
+        </p>
+        {blocker && (
+          <span className="shrink-0 rounded-xs bg-danger/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-danger">
+            Must fix
+          </span>
+        )}
+      </div>
+
       <p className="mt-1 text-[12px] font-light leading-relaxed text-muted">{finding.detail}</p>
+
       <div className="mt-2.5 flex flex-wrap gap-2">
+        {onFix && (
+          <button
+            type="button"
+            onClick={onFix}
+            className="rounded-xs border border-brand-500/60 bg-brand-500/12 px-2.5 py-1 text-[11.5px] font-medium text-brand-on-tint transition-colors hover:border-brand-400"
+          >
+            {fixLabel ?? "Fix it"}
+          </button>
+        )}
         {onInsert && (
           <button
             type="button"
