@@ -2,8 +2,7 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { CampaignForm, type AgentOption } from "../campaign-form"
 
 export const metadata: Metadata = { title: "New campaign" }
@@ -22,7 +21,7 @@ export const dynamic = "force-dynamic"
  * both are one job with one control.
  */
 export default async function NewCampaignPage() {
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
 
   if (tenant.status !== "ACTIVE") redirect("/dashboard/campaigns")
 
@@ -57,13 +56,11 @@ export default async function NewCampaignPage() {
   })
 
   return (
-    <AppShell
-      nav={tenantNav("campaigns")}
+    <Page
       heading="New campaign"
       description="It starts empty and paused. You'll add people next, then start it when you're ready — nothing is dialled before that."
-      userEmail={email}
     >
       <CampaignForm agents={options} />
-    </AppShell>
+    </Page>
   )
 }

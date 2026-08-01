@@ -9,12 +9,21 @@
  * Supabase user object or a raw provider error.
  */
 
+import { cache } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { prisma } from "@/lib/prisma"
 
-/** Resolve the signed-in user's tenant membership, or null if there isn't one. */
-export async function getTenantContext() {
+/**
+ * Resolve the signed-in user's tenant membership, or null if there isn't one.
+ *
+ * Wrapped in React's `cache`, which deduplicates within a single request. That
+ * matters now that the shell lives in `dashboard/layout.tsx`: the layout needs
+ * the email for the sidebar and the page needs the tenant for its query, and
+ * without this every navigation would make two auth round trips and two
+ * membership queries to learn the same thing twice.
+ */
+export const getTenantContext = cache(async () => {
   const supabase = await createClient()
   const {
     data: { user },
@@ -36,7 +45,7 @@ export async function getTenantContext() {
     role: membership.type,
     tenant: membership.tenant,
   }
-}
+})
 
 /** Page-level guard — redirects to /login when there is no valid membership. */
 export async function requireTenant() {

@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill } from "@/components/app/table"
 import { dateOnly, titleCase } from "@/lib/format"
 import { emailConfigured } from "@/lib/email"
@@ -52,11 +51,9 @@ export default async function SettingsPage() {
         : "danger"
 
   return (
-    <AppShell
-      nav={tenantNav("settings")}
+    <Page
       heading="Settings"
       description="Your workspace details and account security."
-      userEmail={email}
     >
       <div className="grid gap-5 lg:grid-cols-2">
         <Card
@@ -139,6 +136,6 @@ export default async function SettingsPage() {
           </Card>
         </div>
       )}
-    </AppShell>
+    </Page>
   )
 }

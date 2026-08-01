@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { prisma } from "@/lib/prisma"
 
 export const metadata: Metadata = { title: "Help" }
@@ -74,11 +73,9 @@ export default async function HelpPage() {
   const support = settings?.supportEmail ?? "support@hiastrix.com"
 
   return (
-    <AppShell
-      nav={tenantNav("help")}
+    <Page
       heading="Help"
       description="How the platform works, what each setting actually does, and what to do when something looks wrong."
-      userEmail={email}
     >
       <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
         {/* Contents. Plain anchors — no state, no JavaScript. */}
@@ -438,6 +435,6 @@ export default async function HelpPage() {
 
         </div>
       </div>
-    </AppShell>
+    </Page>
   )
 }

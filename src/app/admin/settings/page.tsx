@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/admin"
-import { adminNav } from "@/lib/nav-admin"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill } from "@/components/app/table"
 import { dateOnly, titleCase } from "@/lib/format"
 import { stripeConfigured } from "@/lib/stripe"
@@ -53,11 +52,9 @@ export default async function AdminSettingsPage() {
   ]
 
   return (
-    <AppShell
-      nav={adminNav("settings")}
+    <Page
       heading="Platform settings"
       description="Global defaults, integrations and operator accounts."
-      userEmail={admin.email}
     >
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Defaults">
@@ -156,6 +153,6 @@ export default async function AdminSettingsPage() {
           </p>
         </Card>
       </div>
-    </AppShell>
+    </Page>
   )
 }

@@ -2,8 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/admin"
-import { adminNav } from "@/lib/nav-admin"
-import { AppShell, StatCard } from "@/components/app/app-shell"
+import { Page, StatCard } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { usd, titleCase } from "@/lib/format"
 
@@ -44,11 +43,9 @@ export default async function AdminOverviewPage() {
   })
 
   return (
-    <AppShell
-      nav={adminNav("overview")}
+    <Page
       heading="Operations"
       description={`Signed in as ${titleCase(admin.role)}.`}
-      userEmail={admin.email}
     >
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Tenants" value={String(tenants.length)} meta={`${tenants.filter(t => t.status === "ACTIVE").length} active`} />
@@ -151,6 +148,6 @@ export default async function AdminOverviewPage() {
           </Table>
         </Card>
       </div>
-    </AppShell>
+    </Page>
   )
 }

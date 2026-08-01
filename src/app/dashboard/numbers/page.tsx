@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell, EmptyState } from "@/components/app/app-shell"
+import { Page, EmptyState } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill } from "@/components/app/table"
 import { IconNumbers } from "@/components/app/icons"
 import { NumberAssign, type NumberRow } from "./numbers-client"
@@ -11,7 +10,7 @@ export const metadata: Metadata = { title: "Phone numbers" }
 export const dynamic = "force-dynamic"
 
 export default async function NumbersPage() {
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
 
   const [numbers, agents, callCounts] = await Promise.all([
     prisma.phoneNumber.findMany({
@@ -43,11 +42,9 @@ export default async function NumbersPage() {
   }))
 
   return (
-    <AppShell
-      nav={tenantNav("numbers")}
+    <Page
       heading="Phone numbers"
       description="The numbers allocated to your workspace, and the agent answering each."
-      userEmail={email}
     >
       {rows.length === 0 ? (
         <EmptyState
@@ -89,6 +86,6 @@ export default async function NumbersPage() {
           </Table>
         </Card>
       )}
-    </AppShell>
+    </Page>
   )
 }

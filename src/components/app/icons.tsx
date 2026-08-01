@@ -1,93 +1,315 @@
-/** Shared 18px stroke icons for navigation and empty states. */
+/**
+ * The icon vocabulary.
+ *
+ * ── WHY THIS FILE CHANGED ─────────────────────────────────────────────
+ *
+ * There used to be eleven hand-drawn icons here and twenty-nine more scattered
+ * as loose `<svg>` literals across form controls, the theme toggle and one
+ * table cell. That is not a design system, it is a habit — and it had two
+ * costs. Adding an icon meant drawing one, so most things never got one: page
+ * headers, stat cards, buttons, tabs, status pills and every row of every table
+ * were text only. And the ones that did exist drifted, because a stroke width
+ * typed by hand in six files is a stroke width that is wrong in one of them.
+ *
+ * So the drawing is now Lucide's job. It is stroke-based on a 24px grid with
+ * round caps and joins — which is exactly what the hand-drawn set was imitating
+ * — so nothing about the look changes, there is just far more of it and it is
+ * consistent.
+ *
+ * ── WHY THIS FILE STILL EXISTS ────────────────────────────────────────
+ *
+ * Importing straight from `lucide-react` everywhere would work and would be
+ * worse. Three reasons to go through here:
+ *
+ * 1. **The names are ours.** `IconCampaigns` survives a decision to draw
+ *    campaigns as a megaphone instead of a handset. `PhoneOutgoing` does not.
+ *    Screens import meaning, not pictures.
+ * 2. **The size and weight are decided once.** Every icon in the product is
+ *    18px at 1.7 stroke unless it says otherwise, and that is enforced here
+ *    rather than remembered in ninety call sites.
+ * 3. **White-labelling.** The brand mark is still ours and still hand-drawn in
+ *    `brand/logo.tsx`. When a tenant's own icon set eventually matters, this is
+ *    the one file that changes.
+ *
+ * Exports are named rather than bundled into an object, so the bundler only
+ * ships the icons a page actually renders.
+ *
+ * ── ON VERSIONS ───────────────────────────────────────────────────────
+ *
+ * Lucide has renamed a number of icons over the years and keeps the old names
+ * as aliases. Everything below is verified present in the installed version;
+ * if an upgrade ever removes an alias, it breaks here, loudly, in one file,
+ * rather than in whichever screen happened to import it.
+ */
 
-const base = {
-  width: 18,
-  height: 18,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.7,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
+import {
+  /* Navigation */
+  Home, Bot, Megaphone, Phone, BarChart3, Hash, CreditCard, Settings,
+  HelpCircle, Building2, Package,
+
+  /* Actions */
+  Plus, Search, Filter, SlidersHorizontal, X, Check, ChevronDown, ChevronRight,
+  ChevronLeft, ArrowRight, ArrowUpRight, ArrowLeft, ExternalLink, Copy, Trash2,
+  Pencil, RefreshCw, Download, Play, Pause, Send, MoreHorizontal, Menu,
+
+  /* State and feedback */
+  Info, AlertCircle, AlertTriangle, CheckCircle2, XCircle, Loader2, CircleDot, Ban,
+  ShieldCheck, ShieldAlert, BadgeCheck, Eye, EyeOff, Lock, KeyRound,
+
+  /* Movement */
+  TrendingUp, TrendingDown, Minus, ArrowUpDown, Equal,
+
+  /* Time */
+  Calendar, CalendarCheck, CalendarClock, CalendarDays, Clock, Timer, Hourglass,
+
+  /* People */
+  Users, UserPlus, UserCheck, User, LogOut, Mail, Bell,
+
+  /* Telephony */
+  PhoneOutgoing, PhoneIncoming, PhoneCall, PhoneMissed, PhoneOff, Mic, Voicemail,
+  Volume2, Signal,
+
+  /* Records */
+  Tag, FileText, ClipboardList, NotebookPen, MessageSquare, Inbox, Link2,
+
+  /* Money */
+  Wallet, Receipt, Coins, DollarSign, Percent,
+
+  /* Charts */
+  PieChart, LineChart, Grid3x3, Gauge,
+
+  /* Flourish */
+  Sparkles, Zap, Rocket, Target, Star, ThumbsUp, Handshake, Briefcase,
+
+  /* Trades, for the industry template variants */
+  Wrench, Stethoscope, Hammer, LifeBuoy, Headphones, MapPin, Globe,
+
+  /* Theme */
+  Sun, Moon, Monitor,
+
+  type LucideIcon,
+} from "lucide-react"
+
+export type { LucideIcon }
+
+/**
+ * The house size.
+ *
+ * 18px at 1.7 is what the hand-drawn set used, and matching it means nothing
+ * shifted visually when this file was rewritten. Anything that wants a
+ * different size passes `size` — every export below forwards its props.
+ */
+const NAV_SIZE = 18
+const NAV_STROKE = 1.7
+
+export type IconProps = React.ComponentProps<LucideIcon>
+
+/**
+ * What every icon in this file actually is.
+ *
+ * *Not* `LucideIcon`. That type is a `ForwardRefExoticComponent`, and the
+ * wrapper below is a plain function component — so typing a prop as
+ * `icon?: LucideIcon` and passing `IconInbound` fails to compile with a
+ * genuinely baffling message about a missing `$$typeof`. Anything that takes
+ * one of these as a prop should say `Icon`.
+ */
+export type Icon = (props: IconProps) => React.JSX.Element
+
+/** Wrap a Lucide icon in the house defaults, still overridable per use. */
+const glyph = (C: LucideIcon, display: string): Icon => {
+  const Wrapped = (p: IconProps) => <C size={NAV_SIZE} strokeWidth={NAV_STROKE} {...p} />
+  Wrapped.displayName = display
+  return Wrapped
 }
 
-export const IconHome = () => (
-  <svg {...base}>
-    <path d="M3 10.5 12 3l9 7.5" />
-    <path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5" />
-  </svg>
-)
+/* ── Navigation ────────────────────────────────────────────────────────── */
 
-export const IconAgents = () => (
-  <svg {...base}>
-    <rect x="3.5" y="7" width="17" height="12" rx="3" />
-    <path d="M12 3v4M8.5 12.5v2M15.5 12.5v2M12 11.5v4" />
-  </svg>
-)
+export const IconHome      = glyph(Home,       "IconHome")
+export const IconAgents    = glyph(Bot,        "IconAgents")
+export const IconCampaigns = glyph(Megaphone,  "IconCampaigns")
+export const IconCalls     = glyph(Phone,      "IconCalls")
+export const IconAnalytics = glyph(BarChart3,  "IconAnalytics")
+export const IconNumbers   = glyph(Hash,       "IconNumbers")
+export const IconBilling   = glyph(CreditCard, "IconBilling")
+export const IconSettings  = glyph(Settings,   "IconSettings")
+export const IconHelp      = glyph(HelpCircle, "IconHelp")
+export const IconTenants   = glyph(Building2,  "IconTenants")
+export const IconPackages  = glyph(Package,    "IconPackages")
 
-export const IconCalls = () => (
-  <svg {...base}>
-    <path d="M6.5 3.5h2l1.5 4-2 1.5a12 12 0 0 0 5.5 5.5l1.5-2 4 1.5v2a2.5 2.5 0 0 1-2.7 2.5C9.6 18 6 14.4 4 6.2A2.5 2.5 0 0 1 6.5 3.5z" />
-  </svg>
-)
+/* ── Actions ───────────────────────────────────────────────────────────── */
 
-export const IconNumbers = () => (
-  <svg {...base}>
-    <rect x="4" y="3" width="16" height="18" rx="3" />
-    <path d="M9 7h6M9 11h6M9 15h3" />
-  </svg>
-)
+export const IconPlus     = glyph(Plus,            "IconPlus")
+export const IconSearch   = glyph(Search,          "IconSearch")
+export const IconFilter   = glyph(Filter,          "IconFilter")
+export const IconTune     = glyph(SlidersHorizontal, "IconTune")
+export const IconClose    = glyph(X,               "IconClose")
+export const IconCheck    = glyph(Check,           "IconCheck")
+export const IconChevron  = glyph(ChevronDown,     "IconChevron")
+export const IconNext     = glyph(ChevronRight,    "IconNext")
+export const IconPrev     = glyph(ChevronLeft,     "IconPrev")
+export const IconArrow    = glyph(ArrowRight,      "IconArrow")
+export const IconArrowOut = glyph(ArrowUpRight,    "IconArrowOut")
+export const IconBack     = glyph(ArrowLeft,       "IconBack")
+export const IconExternal = glyph(ExternalLink,    "IconExternal")
+export const IconCopy     = glyph(Copy,            "IconCopy")
+export const IconDelete   = glyph(Trash2,          "IconDelete")
+export const IconEdit     = glyph(Pencil,          "IconEdit")
+export const IconRefresh  = glyph(RefreshCw,       "IconRefresh")
+export const IconDownload = glyph(Download,        "IconDownload")
+export const IconPlay     = glyph(Play,            "IconPlay")
+export const IconPause    = glyph(Pause,           "IconPause")
+export const IconSend     = glyph(Send,            "IconSend")
+export const IconMore     = glyph(MoreHorizontal,  "IconMore")
+export const IconMenu     = glyph(Menu,            "IconMenu")
 
-export const IconBilling = () => (
-  <svg {...base}>
-    <rect x="2.5" y="5.5" width="19" height="13" rx="3" />
-    <path d="M2.5 10h19" />
-  </svg>
-)
+/* ── State ─────────────────────────────────────────────────────────────── */
 
-export const IconSettings = () => (
-  <svg {...base}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" />
-  </svg>
-)
+export const IconInfo     = glyph(Info,          "IconInfo")
+export const IconAlert    = glyph(AlertCircle,   "IconAlert")
+export const IconWarning  = glyph(AlertTriangle, "IconWarning")
+export const IconSuccess  = glyph(CheckCircle2,  "IconSuccess")
+export const IconFailure  = glyph(XCircle,       "IconFailure")
+export const IconSpinner  = glyph(Loader2,       "IconSpinner")
+export const IconLive     = glyph(CircleDot,     "IconLive")
+export const IconBlocked  = glyph(Ban,           "IconBlocked")
+export const IconSecure   = glyph(ShieldCheck,   "IconSecure")
+export const IconRisk     = glyph(ShieldAlert,   "IconRisk")
+export const IconVerified = glyph(BadgeCheck,    "IconVerified")
+export const IconShow     = glyph(Eye,           "IconShow")
+export const IconHide     = glyph(EyeOff,        "IconHide")
+export const IconLock     = glyph(Lock,          "IconLock")
+export const IconKey      = glyph(KeyRound,      "IconKey")
 
-export const IconTenants = () => (
-  <svg {...base}>
-    <path d="M3 21V7l7-4v18" />
-    <path d="M10 9h7a2 2 0 0 1 2 2v10" />
-    <path d="M6.5 10.5v0M6.5 14.5v0M14 13v0M14 17v0" />
-  </svg>
-)
+/* ── Movement ──────────────────────────────────────────────────────────── */
 
-export const IconPackages = () => (
-  <svg {...base}>
-    <path d="M12 3 3.5 7.5v9L12 21l8.5-4.5v-9z" />
-    <path d="M3.5 7.5 12 12l8.5-4.5M12 12v9" />
-  </svg>
-)
+export const IconUp    = glyph(TrendingUp,   "IconUp")
+export const IconDown  = glyph(TrendingDown, "IconDown")
+export const IconFlat  = glyph(Minus,        "IconFlat")
+export const IconSort  = glyph(ArrowUpDown,  "IconSort")
+export const IconEqual = glyph(Equal,        "IconEqual")
 
-export const IconAnalytics = () => (
-  <svg {...base}>
-    <path d="M3 20h18" />
-    <path d="M6 20v-6M11 20V6M16 20v-9M21 20v-4" />
-  </svg>
-)
+/* ── Time ──────────────────────────────────────────────────────────────── */
 
-/** Outbound: a handset with a call going out of it. */
-export const IconCampaigns = () => (
-  <svg {...base}>
-    <path d="M5.5 3.5h2l1.4 3.7-1.9 1.4a11 11 0 0 0 5 5l1.4-1.9 3.7 1.4v2a2.4 2.4 0 0 1-2.6 2.4C8.6 16.8 5.2 13.4 3.3 6.1A2.4 2.4 0 0 1 5.5 3.5z" />
-    <path d="M15 9.5 21 3.5" />
-    <path d="M16.5 3.5H21v4.5" />
-  </svg>
-)
+export const IconCalendar  = glyph(Calendar,      "IconCalendar")
+export const IconBooked    = glyph(CalendarCheck, "IconBooked")
+export const IconScheduled = glyph(CalendarClock, "IconScheduled")
+export const IconDays      = glyph(CalendarDays,  "IconDays")
+export const IconClock     = glyph(Clock,         "IconClock")
+export const IconDuration  = glyph(Timer,         "IconDuration")
+export const IconWaiting   = glyph(Hourglass,     "IconWaiting")
 
-/** Help: a question mark in a circle. */
-export const IconHelp = () => (
-  <svg {...base}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.6" />
-    <path d="M12 17.2v0" />
-  </svg>
-)
+/* ── People ────────────────────────────────────────────────────────────── */
+
+export const IconPeople  = glyph(Users,     "IconPeople")
+export const IconInvite  = glyph(UserPlus,  "IconInvite")
+export const IconMember  = glyph(UserCheck, "IconMember")
+export const IconPerson  = glyph(User,      "IconPerson")
+export const IconSignOut = glyph(LogOut,    "IconSignOut")
+export const IconMail    = glyph(Mail,      "IconMail")
+export const IconBell    = glyph(Bell,      "IconBell")
+
+/* ── Telephony ─────────────────────────────────────────────────────────── */
+
+export const IconOutbound  = glyph(PhoneOutgoing, "IconOutbound")
+export const IconInbound   = glyph(PhoneIncoming, "IconInbound")
+export const IconConnected = glyph(PhoneCall,     "IconConnected")
+export const IconMissed    = glyph(PhoneMissed,   "IconMissed")
+export const IconHungUp    = glyph(PhoneOff,      "IconHungUp")
+export const IconMic       = glyph(Mic,           "IconMic")
+export const IconVoicemail = glyph(Voicemail,     "IconVoicemail")
+export const IconRecording = glyph(Volume2,       "IconRecording")
+export const IconSignal    = glyph(Signal,        "IconSignal")
+
+/* ── Records ───────────────────────────────────────────────────────────── */
+
+export const IconTag        = glyph(Tag,           "IconTag")
+export const IconTranscript = glyph(FileText,      "IconTranscript")
+export const IconChecklist  = glyph(ClipboardList, "IconChecklist")
+export const IconNote       = glyph(NotebookPen,   "IconNote")
+export const IconSummary    = glyph(MessageSquare, "IconSummary")
+export const IconInbox      = glyph(Inbox,         "IconInbox")
+export const IconLink       = glyph(Link2,         "IconLink")
+
+/* ── Money ─────────────────────────────────────────────────────────────── */
+
+export const IconBalance = glyph(Wallet,     "IconBalance")
+export const IconInvoice = glyph(Receipt,    "IconInvoice")
+export const IconCredits = glyph(Coins,      "IconCredits")
+export const IconCost    = glyph(DollarSign, "IconCost")
+export const IconRate    = glyph(Percent,    "IconRate")
+
+/* ── Charts ────────────────────────────────────────────────────────────── */
+
+export const IconShare  = glyph(PieChart,  "IconShare")
+export const IconTrend  = glyph(LineChart, "IconTrend")
+export const IconHeat   = glyph(Grid3x3,   "IconHeat")
+export const IconGauge  = glyph(Gauge,     "IconGauge")
+
+/* ── Flourish ──────────────────────────────────────────────────────────── */
+
+export const IconMagic    = glyph(Sparkles,  "IconMagic")
+export const IconFast     = glyph(Zap,       "IconFast")
+export const IconLaunch   = glyph(Rocket,    "IconLaunch")
+export const IconTarget   = glyph(Target,    "IconTarget")
+export const IconStar     = glyph(Star,      "IconStar")
+export const IconApproved = glyph(ThumbsUp,  "IconApproved")
+export const IconDeal     = glyph(Handshake, "IconDeal")
+export const IconWork     = glyph(Briefcase, "IconWork")
+
+/* ── Trades ────────────────────────────────────────────────────────────── */
+
+export const IconTrade      = glyph(Wrench,      "IconTrade")
+export const IconClinic     = glyph(Stethoscope, "IconClinic")
+export const IconBuild      = glyph(Hammer,      "IconBuild")
+export const IconSupport    = glyph(LifeBuoy,    "IconSupport")
+export const IconFrontDesk  = glyph(Headphones,  "IconFrontDesk")
+export const IconLocation   = glyph(MapPin,      "IconLocation")
+export const IconWorld      = glyph(Globe,       "IconWorld")
+
+/* ── Theme ─────────────────────────────────────────────────────────────── */
+
+export const IconLight  = glyph(Sun,     "IconLight")
+export const IconDark   = glyph(Moon,    "IconDark")
+export const IconSystem = glyph(Monitor, "IconSystem")
+
+/* ── By meaning ────────────────────────────────────────────────────────── */
+
+/**
+ * Marketing and campaigns are the same picture, and both names get used.
+ *
+ * Declared before `JOB_ICON` rather than after it because `JOB_ICON` is built
+ * when this module loads: a `const` referenced above its declaration is a
+ * ReferenceError at import time, not a lint warning, and it would take the
+ * whole dashboard down.
+ */
+export const IconMegaphone = IconCampaigns
+
+/**
+ * The icon for a template's job, and for a trade.
+ *
+ * Kept here rather than in `templates.ts` on purpose: that file is imported by
+ * server code and must stay data-only, and a JSX import would drag React into
+ * it. This is the boundary.
+ */
+export const JOB_ICON = {
+  "front-desk": IconFrontDesk,
+  sales:        IconDeal,
+  booking:      IconBooked,
+  support:      IconSupport,
+  marketing:    IconMegaphone,
+  ops:          IconWork,
+  custom:       IconMagic,
+} as const
+
+export const INDUSTRY_ICON = {
+  "home-services": IconBuild,
+  hvac:            IconTrade,
+  clinic:          IconClinic,
+  property:        IconTenants,
+} as const
+
+export const DIRECTION_ICON = {
+  inbound:  IconInbound,
+  outbound: IconOutbound,
+  both:     IconConnected,
+} as const

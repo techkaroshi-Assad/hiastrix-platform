@@ -50,7 +50,15 @@ import {
   type TidyResult, type Overwrite,
 } from "@/lib/agents/prompt-structure"
 import { enforcedRules } from "@/lib/crm/guidance"
-import { AGENT_TEMPLATES, CATEGORY_LABEL, type AgentTemplate } from "@/lib/agents/templates"
+import {
+  AGENT_TEMPLATES, JOB_LABEL, JOB_ORDER, DIRECTION_LABEL, INDUSTRY_LABEL,
+  INDUSTRIES_PRESENT, filterTemplates,
+  type AgentTemplate, type TemplateJob, type TemplateDirection, type TemplateIndustry,
+} from "@/lib/agents/templates"
+import {
+  JOB_ICON, INDUSTRY_ICON, DIRECTION_ICON,
+  IconSearch, IconWarning, IconChevron, type Icon,
+} from "@/components/app/icons"
 import { CRM_TOOLS, defaultCrmTool } from "@/lib/vapi/tools"
 import { cn } from "@/lib/utils"
 
@@ -951,10 +959,48 @@ function TemplateWarning({
   )
 }
 
+/**
+ * Browsing thirty-eight templates.
+ *
+ * A flat grid was fine for ten and is not fine for thirty-eight. The trouble is
+ * that there are three independent things somebody might be narrowing by, and
+ * they are genuinely independent — job, direction and trade — so nesting them
+ * into one list makes two of the three unreachable.
+ *
+ * So: job is the tab row, because it is how people describe what they want
+ * ("something to answer the phone"). Direction and trade are chips, because
+ * they are refinements on that. And there is a search box, because somebody who
+ * already knows the template is called "Speed to lead" should not have to find
+ * which tab it lives under.
+ *
+ * The counts on the tabs are not decoration. Without them, switching to a tab
+ * that turns out to be empty under the current chips reads as a broken page.
+ */
 function Templates({
   applied, onApply,
 }: { applied: string | null; onApply: (t: AgentTemplate) => void }) {
-  const [open, setOpen] = useState<string | null>(null)
+  const [open, setOpen]           = useState<string | null>(null)
+  const [job, setJob]             = useState<TemplateJob | "all">("all")
+  const [direction, setDirection] = useState<TemplateDirection | "all">("all")
+  const [industry, setIndustry]   = useState<TemplateIndustry | "all" | "generic">("all")
+  const [query, setQuery]         = useState("")
+
+  /* Everything except the job filter, so the tab counts describe what you would
+   * actually get by pressing each tab rather than what you have now. */
+  const beforeJob = useMemo(
+    () => filterTemplates(AGENT_TEMPLATES, { direction, industry, query }),
+    [direction, industry, query]
+  )
+
+  const shown = useMemo(
+    () => filterTemplates(beforeJob, { job }),
+    [beforeJob, job]
+  )
+
+  const countFor = (j: TemplateJob | "all") =>
+    j === "all" ? beforeJob.length : beforeJob.filter(t => t.job === j).length
+
+  const tabs: (TemplateJob | "all")[] = ["all", ...JOB_ORDER]
 
   return (
     <section className="rounded-2xl border border-line bg-field-soft">
@@ -965,69 +1011,195 @@ function Templates({
           switched on, in the right order. Change anything you like afterwards.
         </p>
       </header>
-      <div className="grid gap-3 px-6 py-5 sm:grid-cols-2">
-        {AGENT_TEMPLATES.map(t => {
-          const isApplied = applied === t.id
-          const expanded = open === t.id
+
+      {/* ── Search ──────────────────────────────────────────────────── */}
+      <div className="border-b border-line px-6 py-3">
+        <div className="relative">
+          <IconSearch
+            size={15}
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search templates"
+            aria-label="Search templates"
+            className="w-full rounded-field border border-line bg-field py-2 pl-9 pr-3 text-[13px] text-fg outline-none transition-colors placeholder:text-subtle focus:border-brand-400"
+          />
+        </div>
+      </div>
+
+      {/* ── Job tabs ────────────────────────────────────────────────── */}
+      <div className="flex gap-1 overflow-x-auto border-b border-line px-6 py-2.5">
+        {tabs.map(j => {
+          const n = countFor(j)
+          const Glyph = j === "all" ? null : JOB_ICON[j]
           return (
-            <div
-              key={t.id}
+            <button
+              key={j}
+              type="button"
+              onClick={() => setJob(j)}
+              disabled={n === 0 && j !== "all"}
               className={cn(
-                "rounded-field border px-4 py-3.5 transition-colors",
-                isApplied
-                  ? "border-brand-500/60 bg-brand-500/12"
-                  : "border-line bg-field hover:border-line-strong"
+                "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12.5px] whitespace-nowrap transition-colors",
+                job === j
+                  ? "bg-field-hover font-medium text-fg"
+                  : "text-muted hover:text-fg",
+                n === 0 && j !== "all" && "opacity-35 hover:text-muted"
               )}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className={cn("text-[13px] font-medium", isApplied && "text-brand-on-tint")}>
-                    {t.name}
-                  </p>
-                  <p className="mt-0.5 text-[11.5px] font-light text-subtle">
-                    {CATEGORY_LABEL[t.category]}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onApply(t)}
-                  className="shrink-0 rounded-xs border border-line-strong bg-field px-2.5 py-1 text-[11.5px] text-fg transition-colors hover:border-brand-400"
-                >
-                  {isApplied ? "Applied" : "Use"}
-                </button>
-              </div>
-
-              <p className="mt-2 text-[12px] font-light leading-relaxed text-muted">
-                {t.summary}
-              </p>
-
-              {t.flow.length > 0 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setOpen(expanded ? null : t.id)}
-                    className="mt-2 text-[11.5px] text-muted transition-colors hover:text-fg"
-                  >
-                    {expanded ? "Hide the call flow" : "What does it do?"}
-                  </button>
-                  {expanded && (
-                    <>
-                      <ol className="mt-2 ml-4 list-decimal space-y-1 text-[11.5px] font-light text-subtle marker:text-subtle">
-                        {t.flow.map((step, i) => <li key={i}>{step}</li>)}
-                      </ol>
-                      {t.requires?.length ? (
-                        <p className="mt-2 text-[11.5px] font-light text-warning">
-                          Needs: {t.requires.join(" · ")}
-                        </p>
-                      ) : null}
-                    </>
-                  )}
-                </>
+              {Glyph && (
+                <Glyph size={14} className={cn(job === j ? "text-brand-300" : "text-subtle")} />
               )}
-            </div>
+              {j === "all" ? "All" : JOB_LABEL[j]}
+              <span className="text-[11px] text-subtle">{n}</span>
+            </button>
           )
         })}
       </div>
+
+      {/* ── Refinements ─────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-line px-6 py-3">
+        <ChipRow
+          label="Direction"
+          value={direction}
+          onChange={setDirection}
+          options={[
+            { value: "all", label: "Any" },
+            ...(["inbound", "outbound"] as const).map(d => ({
+              value: d, label: DIRECTION_LABEL[d], icon: DIRECTION_ICON[d],
+            })),
+          ]}
+        />
+        <ChipRow
+          label="Written for"
+          value={industry}
+          onChange={setIndustry}
+          options={[
+            { value: "all", label: "Anything" },
+            { value: "generic", label: "Any business" },
+            ...INDUSTRIES_PRESENT.map(i => ({
+              value: i, label: INDUSTRY_LABEL[i], icon: INDUSTRY_ICON[i],
+            })),
+          ]}
+        />
+      </div>
+
+      {/* ── Results ─────────────────────────────────────────────────── */}
+      {shown.length === 0 ? (
+        <div className="px-6 py-14 text-center">
+          <p className="text-[13px] text-muted">Nothing matches that.</p>
+          <button
+            type="button"
+            onClick={() => { setJob("all"); setDirection("all"); setIndustry("all"); setQuery("") }}
+            className="mt-2 text-[12.5px] text-brand-300 transition-colors hover:text-brand-200"
+          >
+            Clear the filters
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-3 px-6 py-5 sm:grid-cols-2">
+          {shown.map(t => {
+            const isApplied = applied === t.id
+            const expanded = open === t.id
+            const Glyph = JOB_ICON[t.job]
+            const Trade = t.industry ? INDUSTRY_ICON[t.industry] : null
+            return (
+              <div
+                key={t.id}
+                className={cn(
+                  "rounded-field border px-4 py-3.5 transition-colors",
+                  isApplied
+                    ? "border-brand-500/60 bg-brand-500/12"
+                    : "border-line bg-field hover:border-line-strong"
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 gap-2.5">
+                    <span
+                      className={cn(
+                        "mt-0.5 shrink-0",
+                        isApplied ? "text-brand-300" : "text-subtle"
+                      )}
+                    >
+                      <Glyph size={16} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className={cn("text-[13px] font-medium", isApplied && "text-brand-on-tint")}>
+                        {t.name}
+                      </p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] font-light text-subtle">
+                        <span>{JOB_LABEL[t.job]}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{DIRECTION_LABEL[t.direction]}</span>
+                        {Trade && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="inline-flex items-center gap-1">
+                              <Trade size={11} />
+                              {INDUSTRY_LABEL[t.industry!]}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onApply(t)}
+                    className="shrink-0 rounded-xs border border-line-strong bg-field px-2.5 py-1 text-[11.5px] text-fg transition-colors hover:border-brand-400"
+                  >
+                    {isApplied ? "Applied" : "Use"}
+                  </button>
+                </div>
+
+                <p className="mt-2 text-[12px] font-light leading-relaxed text-muted">
+                  {t.summary}
+                </p>
+
+                {/* What it needs is shown on the card, not hidden behind the
+                    disclosure. Finding out that a template wanted a calendar
+                    *after* the first booking call failed is exactly the failure
+                    this whole session has been about. */}
+                {t.requires?.length ? (
+                  <ul className="mt-2 space-y-1">
+                    {t.requires.map(r => (
+                      <li key={r} className="flex items-start gap-1.5 text-[11.5px] font-light text-warning">
+                        <IconWarning size={12} className="mt-0.5 shrink-0" />
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                {t.flow.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setOpen(expanded ? null : t.id)}
+                      className="mt-2 flex items-center gap-1 text-[11.5px] text-muted transition-colors hover:text-fg"
+                    >
+                      <IconChevron
+                        size={12}
+                        className={cn("transition-transform", expanded && "rotate-180")}
+                      />
+                      {expanded ? "Hide the call flow" : "What does it do?"}
+                    </button>
+                    {expanded && (
+                      <ol className="mt-2 ml-4 list-decimal space-y-1 text-[11.5px] font-light text-subtle marker:text-subtle">
+                        {t.flow.map((step, i) => <li key={i}>{step}</li>)}
+                      </ol>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {applied && (
         <div className="border-t border-line px-6 py-4">
           <InfoNote>
@@ -1037,6 +1209,50 @@ function Templates({
         </div>
       )}
     </section>
+  )
+}
+
+/**
+ * A labelled row of single-choice chips.
+ *
+ * Generic over the value so the two rows above cannot get their handlers
+ * crossed — a plain `string` here compiled fine and let "outbound" be set as an
+ * industry.
+ */
+function ChipRow<T extends string>({
+  label, value, onChange, options,
+}: {
+  label: string
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; label: string; icon?: Icon }[]
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="mr-0.5 text-[11px] uppercase tracking-[0.1em] text-subtle">
+        {label}
+      </span>
+      {options.map(o => {
+        const Glyph = o.icon
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            aria-pressed={value === o.value}
+            className={cn(
+              "flex items-center gap-1.5 rounded-xs border px-2 py-1 text-[11.5px] transition-colors",
+              value === o.value
+                ? "border-brand-500/50 bg-brand-500/12 text-brand-on-tint"
+                : "border-line bg-field text-muted hover:border-line-strong hover:text-fg"
+            )}
+          >
+            {Glyph && <Glyph size={12} />}
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

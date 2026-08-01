@@ -7,11 +7,13 @@
  * which is the actual source of truth.
  */
 
+import { cache } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { prisma } from "@/lib/prisma"
 
-export async function getAdminContext() {
+/** Deduplicated per request — the admin layout and the page both need it. */
+export const getAdminContext = cache(async () => {
   const supabase = await createClient()
   const {
     data: { user },
@@ -31,7 +33,7 @@ export async function getAdminContext() {
     name:   admin.name,
     role:   admin.role as "SUPER_ADMIN" | "ADMIN",
   }
-}
+})
 
 export async function requireAdmin() {
   const ctx = await getAdminContext()

@@ -2,6 +2,7 @@
 
 import { forwardRef, useId, useState } from "react"
 import { cn } from "@/lib/utils"
+import { IconShow, IconHide, IconSpinner, IconInfo, IconAlert } from "@/components/app/icons"
 
 /* ── Text field ────────────────────────────────────────────────────────── */
 
@@ -64,24 +65,8 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
   )
 })
 
-function Eye() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  )
-}
-
-function EyeOff() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10.6 6.2A9.8 9.8 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-2.4 3.2M6.2 6.4A17 17 0 0 0 2 12s3.5 7 10 7a9.9 9.9 0 0 0 4.3-1" />
-      <path d="m3 3 18 18" />
-      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
-    </svg>
-  )
-}
+const Eye    = () => <IconShow size={16} strokeWidth={1.8} />
+const EyeOff = () => <IconHide size={16} strokeWidth={1.8} />
 
 /* ── Primary button ────────────────────────────────────────────────────── */
 
@@ -133,10 +118,12 @@ export function SubmitButton({
 
 function Spinner() {
   return (
-    <svg className="relative h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" opacity="0.25" />
-      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-    </svg>
+    <IconSpinner
+      size={16}
+      strokeWidth={2.5}
+      aria-hidden="true"
+      className="relative animate-spin"
+    />
   )
 }
 
@@ -148,10 +135,7 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
       role="alert"
       className="flex items-start gap-2 rounded-field border border-danger/25 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger"
     >
-      <svg className="mt-px h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 8v4.5M12 16h.01" />
-      </svg>
+      <IconAlert size={16} strokeWidth={1.9} aria-hidden="true" className="mt-px shrink-0" />
       <span>{children}</span>
     </p>
   )
@@ -160,10 +144,7 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
 export function InfoNote({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex items-start gap-2 rounded-field border border-brand-500/25 bg-brand-500/10 px-3.5 py-2.5 text-[13px] text-brand-on-tint">
-      <svg className="mt-px h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 16v-4.5M12 8h.01" />
-      </svg>
+      <IconInfo size={16} strokeWidth={1.9} aria-hidden="true" className="mt-px shrink-0" />
       <span>{children}</span>
     </p>
   )

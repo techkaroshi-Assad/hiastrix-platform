@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { AuthSplit, AuthLink } from "@/components/auth/auth-shell"
 import { Field, SubmitButton, ErrorNote } from "@/components/ui/field"
+import { IconMail } from "@/components/app/icons"
 
 export default function SignupPage() {
   const [form, setForm] = useState({ name: "", companyName: "", email: "", password: "" })
@@ -45,10 +46,7 @@ export default function SignupPage() {
       <AuthSplit title="Check your inbox" subtitle={`We sent a confirmation link to ${form.email}`}>
         <div className="rounded-card border border-line-strong bg-field px-6 py-8 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-500/12 text-brand-300">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2.5" y="5" width="19" height="14" rx="3" />
-              <path d="m3 7 8.2 5.6a1.5 1.5 0 0 0 1.6 0L21 7" />
-            </svg>
+            <IconMail size={22} />
           </div>
           <p className="mt-4 text-sm font-light leading-relaxed text-muted">{success}</p>
         </div>

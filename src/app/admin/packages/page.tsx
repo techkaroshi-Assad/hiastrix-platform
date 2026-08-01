@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/admin"
-import { adminNav } from "@/lib/nav-admin"
-import { AppShell, EmptyState } from "@/components/app/app-shell"
+import { Page, EmptyState } from "@/components/app/app-shell"
 import { IconPackages } from "@/components/app/icons"
 import { PackagesClient, type PackageRow } from "./packages-client"
 
@@ -29,11 +28,9 @@ export default async function AdminPackagesPage() {
   }))
 
   return (
-    <AppShell
-      nav={adminNav("packages")}
+    <Page
       heading="Packages"
       description="The tiers tenants can be placed on."
-      userEmail={admin.email}
     >
       {rows.length === 0 ? (
         <div className="space-y-4">
@@ -47,6 +44,6 @@ export default async function AdminPackagesPage() {
       ) : (
         <PackagesClient packages={rows} />
       )}
-    </AppShell>
+    </Page>
   )
 }

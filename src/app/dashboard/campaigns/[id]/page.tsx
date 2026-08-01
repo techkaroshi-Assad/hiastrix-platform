@@ -3,8 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell, StatCard } from "@/components/app/app-shell"
+import { Page, StatCard } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { campaignReadiness } from "@/lib/dialer/readiness"
 import { whyIdle } from "@/lib/dialer/idle"
@@ -27,7 +26,7 @@ export default async function CampaignPage({
 }) {
   const { id } = await params
   const sp = await searchParams
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
 
   const campaign = await prisma.campaign.findFirst({
     where:   { id, tenantId: tenant.id },
@@ -125,8 +124,7 @@ export default async function CampaignPage({
   }
 
   return (
-    <AppShell
-      nav={tenantNav("campaigns")}
+    <Page
       heading={campaign.name}
       description={
         `${campaign.agent.name} · ${campaign.windowStart}–${campaign.windowEnd} ` +
@@ -135,7 +133,6 @@ export default async function CampaignPage({
           ? `calling from ${campaign.phoneNumber.phoneNumber}`
           : "rotating across its agent's numbers")
       }
-      userEmail={email}
       actions={
         <CampaignControls
           id={campaign.id}
@@ -352,6 +349,6 @@ export default async function CampaignPage({
           )}
         </>
       )}
-    </AppShell>
+    </Page>
   )
 }

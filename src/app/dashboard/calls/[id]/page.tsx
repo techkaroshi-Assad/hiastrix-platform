@@ -3,8 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { Card, Pill, callTone } from "@/components/app/table"
 import { CallActions } from "@/components/app/call-actions"
 import { readConfig } from "@/lib/vapi/config"
@@ -41,7 +40,7 @@ export default async function CallDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
 
   // Scoped by tenantId, so another tenant's call id is simply a 404.
   const call = await prisma.call.findFirst({
@@ -101,11 +100,9 @@ export default async function CallDetailPage({
   ]
 
   return (
-    <AppShell
-      nav={tenantNav("calls")}
+    <Page
       heading="Call detail"
       description={dateTime(call.startedAt ?? call.createdAt)}
-      userEmail={email}
       actions={
         <Link
           href="/dashboard/calls"
@@ -275,6 +272,6 @@ export default async function CallDetailPage({
           </Card>
         </div>
       </div>
-    </AppShell>
+    </Page>
   )
 }

@@ -2,8 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell, EmptyState } from "@/components/app/app-shell"
+import { Page, EmptyState } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill } from "@/components/app/table"
 import { IconCampaigns } from "@/components/app/icons"
 import { CampaignsHeader } from "./campaigns-client"
@@ -13,7 +12,7 @@ export const metadata: Metadata = { title: "Campaigns" }
 export const dynamic = "force-dynamic"
 
 export default async function CampaignsPage() {
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
 
   const [campaigns, agentCount, suppressions] = await Promise.all([
     prisma.campaign.findMany({
@@ -55,11 +54,9 @@ export default async function CampaignsPage() {
   }
 
   return (
-    <AppShell
-      nav={tenantNav("campaigns")}
+    <Page
       heading="Campaigns"
       description="Give an agent a list of people and it works through it — paced, retried, and stopped the moment your balance runs out."
-      userEmail={email}
       actions={
         <CampaignsHeader
           suppressions={suppressions.map(s => ({
@@ -153,6 +150,6 @@ export default async function CampaignsPage() {
           </Table>
         </Card>
       )}
-    </AppShell>
+    </Page>
   )
 }

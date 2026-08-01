@@ -3,8 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/admin"
-import { adminNav } from "@/lib/nav-admin"
-import { AppShell, StatCard } from "@/components/app/app-shell"
+import { Page, StatCard } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow, callTone } from "@/components/app/table"
 import { usd, duration, dateTime, dateOnly, titleCase } from "@/lib/format"
 import { TenantControls } from "./tenant-controls"
@@ -64,11 +63,9 @@ export default async function AdminTenantDetailPage({
   const pct     = cap > 0 ? Math.min(100, Math.round((tenant.minutesUsed / cap) * 100)) : 0
 
   return (
-    <AppShell
-      nav={adminNav("tenants")}
+    <Page
       heading={tenant.companyName}
       description={tenant.email}
-      userEmail={admin.email}
       actions={
         <Link
           href="/admin/tenants"
@@ -212,6 +209,6 @@ export default async function AdminTenantDetailPage({
           />
         </Card>
       </div>
-    </AppShell>
+    </Page>
   )
 }

@@ -2,8 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/admin"
-import { adminNav } from "@/lib/nav-admin"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { usd, dateOnly, titleCase } from "@/lib/format"
 
@@ -22,11 +21,9 @@ export default async function AdminTenantsPage() {
   })
 
   return (
-    <AppShell
-      nav={adminNav("tenants")}
+    <Page
       heading="Tenants"
       description="Every workspace on the platform."
-      userEmail={admin.email}
     >
       <Card title={`${tenants.length} tenant${tenants.length === 1 ? "" : "s"}`}>
         <Table>
@@ -80,6 +77,6 @@ export default async function AdminTenantsPage() {
           </tbody>
         </Table>
       </Card>
-    </AppShell>
+    </Page>
   )
 }

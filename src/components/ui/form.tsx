@@ -10,6 +10,7 @@
 
 import { forwardRef, useId, useState } from "react"
 import { cn } from "@/lib/utils"
+import { IconChevron, IconClose } from "@/components/app/icons"
 
 const CONTROL = [
   "w-full rounded-field bg-field text-sm text-fg",
@@ -100,18 +101,12 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
             </option>
           ))}
         </select>
-        <svg
+        <IconChevron
           aria-hidden="true"
-          className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
+          size={16}
+          strokeWidth={1.8}
+          className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-subtle"
+        />
       </div>
     </Shell>
   )
@@ -243,21 +238,15 @@ export function Section({
             </span>
           )}
         </span>
-        <svg
+        <IconChevron
           aria-hidden="true"
+          size={16}
+          strokeWidth={1.8}
           className={cn(
-            "h-4 w-4 shrink-0 text-subtle transition-transform duration-200",
+            "shrink-0 text-subtle transition-transform duration-200",
             open && "rotate-180"
           )}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
+        />
       </button>
 
       {open && <div className="space-y-4 border-t border-line px-4 py-4">{children}</div>}
@@ -308,9 +297,7 @@ export function Panel({
             aria-label="Close"
             className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-field-hover hover:text-fg"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
+            <IconClose size={18} strokeWidth={1.8} />
           </button>
         </header>
 

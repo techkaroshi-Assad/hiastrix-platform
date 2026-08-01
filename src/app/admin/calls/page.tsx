@@ -2,8 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/admin"
-import { adminNav } from "@/lib/nav-admin"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow, callTone } from "@/components/app/table"
 import { usd, duration, dateTime, titleCase } from "@/lib/format"
 
@@ -53,11 +52,9 @@ export default async function AdminCallsPage({ searchParams }: { searchParams: S
   }
 
   return (
-    <AppShell
-      nav={adminNav("calls")}
+    <Page
       heading="All calls"
       description="Every call across every tenant."
-      userEmail={admin.email}
     >
       {/* Tenant filter — links keep this a server component. */}
       <div className="mb-5 flex flex-wrap gap-2">
@@ -157,6 +154,6 @@ export default async function AdminCallsPage({ searchParams }: { searchParams: S
           </div>
         )}
       </Card>
-    </AppShell>
+    </Page>
   )
 }

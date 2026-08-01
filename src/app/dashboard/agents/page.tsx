@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { readConfig } from "@/lib/vapi/config"
 import { getVoiceOptions, MODEL_OPTIONS, TRANSCRIBER_OPTIONS } from "@/lib/vapi/catalog"
 import { AgentsClient, type AgentRow, type NumberRow } from "./agents-client"
@@ -11,7 +10,7 @@ export const metadata: Metadata = { title: "Agents" }
 export const dynamic = "force-dynamic"
 
 export default async function AgentsPage() {
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
 
   // Voices are fetched from the account and cached, because the provider
   // retires them: half the list I first shipped had already been withdrawn.
@@ -82,11 +81,9 @@ export default async function AgentsPage() {
           : undefined
 
   return (
-    <AppShell
-      nav={tenantNav("agents")}
+    <Page
       heading="Agents"
       description="The voices that answer and place your calls."
-      userEmail={email}
     >
       <AgentsClient
         agents={rows}
@@ -102,6 +99,6 @@ export default async function AgentsPage() {
           note:  t.note,
         }))}
       />
-    </AppShell>
+    </Page>
   )
 }

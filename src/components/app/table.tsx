@@ -9,11 +9,24 @@ import { cn } from "@/lib/utils"
 
 export function Card({
   title,
+  icon,
+  note,
   action,
   children,
   className,
 }: {
   title?: string
+  /** A glyph before the title. Purely for scanning a page of cards. */
+  icon?: React.ReactNode
+  /**
+   * A qualifier the title cannot carry.
+   *
+   * Exists because of one specific chart: an hour-of-day grid is meaningless
+   * without knowing whose hours, and "Times shown in America/New_York" does not
+   * fit in a heading and must not be buried under the chart where nobody reads
+   * it before drawing a conclusion.
+   */
+  note?: string
   action?: React.ReactNode
   children: React.ReactNode
   className?: string
@@ -27,7 +40,15 @@ export function Card({
     >
       {(title || action) && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
-          {title && <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>}
+          <div className="flex min-w-0 items-center gap-2.5">
+            {icon && <span className="shrink-0 text-subtle">{icon}</span>}
+            <div className="min-w-0">
+              {title && (
+                <h2 className="truncate text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
+              )}
+              {note && <p className="mt-0.5 text-[11.5px] font-light text-subtle">{note}</p>}
+            </div>
+          </div>
           {action}
         </div>
       )}

@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/admin"
-import { adminNav } from "@/lib/nav-admin"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { SyncButton, AllocateSelect } from "./numbers-admin-client"
 
@@ -29,11 +28,9 @@ export default async function AdminNumbersPage() {
   const unallocated = numbers.filter(n => !n.tenantId).length
 
   return (
-    <AppShell
-      nav={adminNav("numbers")}
+    <Page
       heading="Phone numbers"
       description="The upstream inventory and who each number belongs to."
-      userEmail={admin.email}
       actions={<SyncButton />}
     >
       <Card
@@ -83,6 +80,6 @@ export default async function AdminNumbersPage() {
           </tbody>
         </Table>
       </Card>
-    </AppShell>
+    </Page>
   )
 }

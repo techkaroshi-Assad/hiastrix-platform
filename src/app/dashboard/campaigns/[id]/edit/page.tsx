@@ -2,8 +2,7 @@ import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { CampaignForm, type AgentOption, type CampaignValues } from "../../campaign-form"
 
 export const metadata: Metadata = { title: "Edit campaign" }
@@ -26,7 +25,7 @@ export default async function EditCampaignPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
 
   const campaign = await prisma.campaign.findFirst({
     where:  { id, tenantId: tenant.id },
@@ -80,15 +79,13 @@ export default async function EditCampaignPage({
   }
 
   return (
-    <AppShell
-      nav={tenantNav("campaigns")}
+    <Page
       heading={`Edit ${campaign.name}`}
       description={
         campaign.state === "RUNNING"
           ? "This campaign is calling right now. Changes take effect on the next call — you don't need to stop it."
           : "Changes are saved straight away."
       }
-      userEmail={email}
     >
       <CampaignForm
         agents={options}
@@ -96,6 +93,6 @@ export default async function EditCampaignPage({
         campaignId={campaign.id}
         hasRun={Boolean(campaign.startedAt)}
       />
-    </AppShell>
+    </Page>
   )
 }

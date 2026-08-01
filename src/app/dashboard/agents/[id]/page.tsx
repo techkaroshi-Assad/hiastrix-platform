@@ -2,8 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { readConfig, DEFAULT_CONFIG } from "@/lib/vapi/config"
 import { getVoiceOptions, getModelOptions, MODEL_OPTIONS, TRANSCRIBER_OPTIONS } from "@/lib/vapi/catalog"
 import { AgentEditor } from "../agent-editor"
@@ -17,7 +16,7 @@ export default async function EditAgentPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
 
   const [agent, voices, models] = await Promise.all([
     prisma.agent.findFirst({
@@ -42,15 +41,13 @@ export default async function EditAgentPage({
   const numbers = agent.phoneNumbers.map((n: { phoneNumber: string }) => n.phoneNumber)
 
   return (
-    <AppShell
-      nav={tenantNav("agents")}
+    <Page
       heading={agent.name}
       description={
         numbers.length
           ? `Answering on ${numbers.join(", ")}. Changes apply to the next call.`
           : "No phone number attached yet, so it can't take or make calls."
       }
-      userEmail={email}
     >
       <AgentEditor
         agentId={agent.id}
@@ -71,6 +68,6 @@ export default async function EditAgentPage({
         transcribers={TRANSCRIBER_OPTIONS}
         usedForOutbound={agent.campaigns.length > 0}
       />
-    </AppShell>
+    </Page>
   )
 }

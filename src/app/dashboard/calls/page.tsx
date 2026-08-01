@@ -2,11 +2,11 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell } from "@/components/app/app-shell"
+import { Page } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow, callTone } from "@/components/app/table"
 import { usd, duration, dateTime, titleCase } from "@/lib/format"
 import { CallFilters } from "./filters"
+import { IconMic, IconTranscript } from "@/components/app/icons"
 
 export const metadata: Metadata = { title: "Calls" }
 export const dynamic = "force-dynamic"
@@ -22,7 +22,7 @@ type Search = Promise<{
 }>
 
 export default async function CallsPage({ searchParams }: { searchParams: Search }) {
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
   const sp = await searchParams
 
   const page = Math.max(1, Number(sp.page ?? "1") || 1)
@@ -40,7 +40,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
     where.createdAt = range
   }
 
-  const [calls, total, agents] = await Promise.all([
+  const [calls, total, agents, everAny] = await Promise.all([
     prisma.call.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -57,7 +57,19 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    /* Deliberately unfiltered.
+     *
+     * "No calls match this view yet" is the same sentence whether the tenant
+     * has never made a call or has simply filtered to a Tuesday in March, and
+     * those need completely different answers — one is "here's how to get
+     * started", the other is "clear the filter". This platform has shipped that
+     * exact confusion three times now (a tag that matched nobody, a CRM error
+     * shown as an empty list, a campaign outside its calling window all read as
+     * "0"), so the count that tells them apart is worth one extra query. */
+    prisma.call.count({ where: { tenantId: tenant.id } }),
   ])
+
+  const filtered = Boolean(sp.agent || sp.status || sp.from || sp.to)
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -73,11 +85,9 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
   }
 
   return (
-    <AppShell
-      nav={tenantNav("calls")}
+    <Page
       heading="Calls"
       description="Every call your agents have handled."
-      userEmail={email}
     >
       <div className="mb-5">
         <CallFilters agents={agents} />
@@ -109,7 +119,11 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
           <tbody>
             {calls.length === 0 ? (
               <EmptyRow colSpan={8}>
-                No calls match this view yet.
+                {everAny === 0
+                  ? "No calls yet. Once an agent answers or places one, it appears here with its recording, transcript and cost."
+                  : filtered
+                    ? "No calls match these filters. Try widening the dates, or clearing them."
+                    : "No calls on this page."}
               </EmptyRow>
             ) : (
               calls.map(call => (
@@ -134,19 +148,12 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
                     <span className="flex items-center gap-2 text-subtle">
                       {call.recordingUrl && (
                         <span title="Recording available" aria-label="Recording available">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 3v10.5" />
-                            <path d="M8.5 6.5v3.5M15.5 6.5v3.5" />
-                            <circle cx="12" cy="17" r="3.5" />
-                          </svg>
+                          <IconMic size={15} />
                         </span>
                       )}
                       {call.transcript && (
                         <span title="Transcript available" aria-label="Transcript available">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M5 4h14v16H5z" />
-                            <path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4" />
-                          </svg>
+                          <IconTranscript size={15} />
                         </span>
                       )}
                       {!call.recordingUrl && !call.transcript && (
@@ -185,6 +192,6 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
           </div>
         )}
       </Card>
-    </AppShell>
+    </Page>
   )
 }

@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { prisma } from "@/lib/prisma"
 import { requireTenant } from "@/lib/tenant"
-import { tenantNav } from "@/lib/nav"
-import { AppShell, StatCard } from "@/components/app/app-shell"
+import { Page, StatCard } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { InfoNote, ErrorNote } from "@/components/ui/field"
 import { usd, dateTime, dateOnly, titleCase } from "@/lib/format"
@@ -19,7 +18,7 @@ export const dynamic = "force-dynamic"
 type Search = Promise<{ topup?: string; plan?: string; card?: string }>
 
 export default async function BillingPage({ searchParams }: { searchParams: Search }) {
-  const { tenant, email } = await requireTenant()
+  const { tenant } = await requireTenant()
   const sp = await searchParams
 
   const [ledger, payments, plans, settings] = await Promise.all([
@@ -92,11 +91,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
     a.balanceCents <= threshold
 
   return (
-    <AppShell
-      nav={tenantNav("billing")}
+    <Page
       heading="Billing"
       description="Your plan, balance and payment history."
-      userEmail={email}
     >
       {sp.topup === "success" && (
         <div className="mb-5">
@@ -356,6 +353,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
           <TopUp enabled={stripeConfigured() && tenant.status !== "BLOCKED"} rateCents={a.overageRateCents} />
         </Card>
       </div>
-    </AppShell>
+    </Page>
   )
 }
