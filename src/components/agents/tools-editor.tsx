@@ -43,6 +43,16 @@ import { cn } from "@/lib/utils"
 
 type CrmOptions = {
   linked: boolean
+  /**
+   * Why the lists are the way they are.
+   *
+   * Added because every one of these used to arrive as an empty array, and a
+   * tenant holding nineteen tags was told they had none. "Nothing there" and
+   * "we could not look" are different sentences and the builder now says which.
+   */
+  status?: "ok" | "unavailable" | "not_linked" | "unconfigured"
+  /** Which lists failed to load, by name: calendars, pipelines, tags, fields. */
+  failed?: string[]
   calendars: { id: string; name: string }[]
   pipelines: { id: string; name: string; stages: { id: string; name: string }[] }[]
   tags: string[]
@@ -50,7 +60,8 @@ type CrmOptions = {
 }
 
 const NO_OPTIONS: CrmOptions = {
-  linked: false, calendars: [], pipelines: [], tags: [], fields: [],
+  linked: false, status: "unavailable", failed: [],
+  calendars: [], pipelines: [], tags: [], fields: [],
 }
 
 function useCrmOptions() {
@@ -418,6 +429,11 @@ function CrmToolSettings({
             label="Tags this agent may use"
             hint="Pick the ones your campaigns and workflows listen for. The agent is offered these by name."
             empty="No tags in your CRM yet."
+            problem={
+              options.failed?.includes("tags")
+                ? "We couldn't read your tags just now, so this list is incomplete rather than empty. Reload the page, and tell us if it keeps happening."
+                : null
+            }
             options={options.tags.map(name => ({ value: name, label: clean(name) }))}
             selected={(t.tags as string[]) ?? []}
             onChange={next => onPatch({ tags: next })}
@@ -457,6 +473,11 @@ function CrmToolSettings({
           label="Fields this agent may fill in"
           hint="The agent is offered these by name and can write nothing else."
           empty="No custom contact fields in your CRM yet."
+          problem={
+            options.failed?.includes("fields")
+              ? "We couldn't read your custom fields just now, so this list is incomplete rather than empty. Reload the page, and tell us if it keeps happening."
+              : null
+          }
           options={options.fields.map(f => ({ value: f.id, label: f.name }))}
           selected={((t.fields as { id: string }[]) ?? []).map(f => f.id)}
           onChange={next =>
@@ -479,6 +500,7 @@ function CheckList({
   label,
   hint,
   empty,
+  problem,
   options,
   selected,
   onChange,
@@ -486,6 +508,9 @@ function CheckList({
   label: string
   hint: string
   empty: string
+  /** Set when the list could not be read at all, which is not the same as it
+   *  being empty — and used to look identical on screen. */
+  problem?: string | null
   options: { value: string; label: string }[]
   selected: string[]
   onChange: (next: string[]) => void
@@ -499,7 +524,9 @@ function CheckList({
     <div className="space-y-2">
       <span className="block text-xs font-medium text-muted">{label}</span>
 
-      {options.length === 0 ? (
+      {options.length === 0 && problem ? (
+        <p className="text-xs leading-relaxed text-warning">{problem}</p>
+      ) : options.length === 0 ? (
         <p className="text-xs text-subtle">{empty}</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
