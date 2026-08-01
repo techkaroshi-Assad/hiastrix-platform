@@ -109,11 +109,17 @@ export async function getVoiceOptions(): Promise<Option[]> {
 /**
  * Language models.
  *
- * Vapi publishes no list endpoint for these, so the curated set below is the
- * honest option — but the builder also accepts a free-text "provider:model"
- * so a new release never blocks anyone waiting on a deploy from us.
+ * The voice provider publishes no list endpoint for these, so the curated set
+ * below is the honest starting point — these are the handful actually worth
+ * putting behind a phone call, and each one is named with why.
+ *
+ * Everything else arrives from OpenRouter. Once an OpenRouter key is attached
+ * to the provider account, every model on their catalogue becomes reachable, so
+ * hard-coding eight of them would be pretending the choice is smaller than it
+ * is. Their model list is public and needs no key to read, which is what makes
+ * this the same "ask, don't hardcode" arrangement the voice list already uses.
  */
-export const MODEL_OPTIONS: Option[] = [
+export const CORE_MODEL_OPTIONS: Option[] = [
   { value: "openai:gpt-4o",             label: "GPT-4o",            note: "Balanced quality and speed" },
   { value: "openai:gpt-4o-mini",        label: "GPT-4o mini",       note: "Fastest, lowest cost" },
   { value: "openai:gpt-4.1",            label: "GPT-4.1",           note: "Strong reasoning" },
@@ -123,6 +129,92 @@ export const MODEL_OPTIONS: Option[] = [
   { value: "google:gemini-2.0-flash",   label: "Gemini 2.0 Flash",  note: "Low latency" },
   { value: "groq:llama-3.3-70b-versatile", label: "Llama 3.3 70B",  note: "Lowest latency" },
 ]
+
+/**
+ * Kept for the modules that only ever wanted a default.
+ *
+ * The full list is now asynchronous, and a page that just needs something
+ * sensible to preselect should not have to wait on a network call to get it.
+ */
+export const MODEL_OPTIONS = CORE_MODEL_OPTIONS
+
+type OpenRouterModel = {
+  id?: string
+  name?: string
+  context_length?: number
+  architecture?: { modality?: string; input_modalities?: string[] }
+  pricing?: { prompt?: string; completion?: string }
+}
+
+let modelCache: { value: Option[]; at: number } | null = null
+
+/**
+ * Everything OpenRouter can serve, as provider-prefixed options.
+ *
+ * Two filters, and both earn their place. A model that cannot take text in is
+ * no use to a voice agent, and a model with no id cannot be sent anywhere. What
+ * is deliberately *not* filtered is speed or price: a slow model on a phone
+ * call is a bad experience rather than a broken one, and that is the tenant's
+ * call to make, not ours to prevent.
+ */
+async function fetchOpenRouterModels(): Promise<Option[]> {
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/models", {
+      headers: { Accept: "application/json" },
+      // Their catalogue changes daily, not hourly.
+      next: { revalidate: 3600 },
+    })
+    if (!res.ok) return []
+
+    const body = await res.json() as { data?: OpenRouterModel[] }
+    const rows = Array.isArray(body.data) ? body.data : []
+
+    const options: Option[] = []
+    for (const m of rows) {
+      if (!m.id) continue
+
+      const modalities = m.architecture?.input_modalities
+      if (Array.isArray(modalities) && !modalities.includes("text")) continue
+
+      const context = m.context_length
+        ? `${Math.round(m.context_length / 1000)}k context`
+        : ""
+      const free = m.pricing?.prompt === "0" ? "free" : ""
+      const note = [context, free].filter(Boolean).join(" · ")
+
+      options.push({
+        value: `openrouter:${m.id}`,
+        label: m.name ?? m.id,
+        ...(note ? { note } : {}),
+      })
+    }
+
+    return options.sort((a, b) => a.label.localeCompare(b.label))
+  } catch {
+    // A catalogue we could not read is not a reason to stop anyone editing an
+    // agent — they still have the curated list.
+    return []
+  }
+}
+
+/**
+ * The curated models first, then everything OpenRouter offers.
+ *
+ * Order is the recommendation: the eight at the top are the ones proven on a
+ * phone call, and the hundreds below are there because the account can reach
+ * them, not because they are all a good idea. The builder makes that ordering
+ * visible rather than burying the sensible choices alphabetically among three
+ * hundred others.
+ */
+export async function getModelOptions(): Promise<Option[]> {
+  if (modelCache && Date.now() - modelCache.at < TTL_MS) return modelCache.value
+
+  const extra = await fetchOpenRouterModels()
+  const value = [...CORE_MODEL_OPTIONS, ...extra]
+
+  modelCache = { value, at: Date.now() }
+  return value
+}
 
 /**
  * Transcribers.

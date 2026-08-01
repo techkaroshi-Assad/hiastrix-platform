@@ -239,12 +239,10 @@ export function AgentEditor({
                 value={draft.voice}
                 onChange={e => setDraft({ ...draft, voice: e.target.value })}
               />
-              <Select
-                label="Language model"
-                options={models}
+              <ModelPicker
+                models={models}
                 value={draft.model}
-                onChange={e => setDraft({ ...draft, model: e.target.value })}
-                hint="Faster models cost less per minute and reply more quickly. The difference is very audible on a phone call."
+                onChange={model => setDraft({ ...draft, model })}
               />
               <Select
                 label="Who speaks first"
@@ -773,5 +771,99 @@ function Templates({
         </div>
       )}
     </section>
+  )
+}
+
+/* ── Choosing a language model ─────────────────────────────────────────── */
+
+/**
+ * A select was fine for eight models. It is not fine for three hundred.
+ *
+ * Once an OpenRouter key is attached to the provider account, every model on
+ * their catalogue becomes reachable, and a plain dropdown turns that into
+ * scrolling past three hundred names to find one you already know. Typing to
+ * narrow is how anyone actually picks.
+ *
+ * The eight curated ones stay pinned at the top and unfiltered until you type,
+ * because the ordering is the recommendation: those are the models proven on a
+ * phone call. The rest are available because the account can reach them, which
+ * is not the same as being a good idea on a live conversation — a model that
+ * takes four seconds to think is not broken, it is just painful to talk to.
+ */
+function ModelPicker({
+  models,
+  value,
+  onChange,
+}: {
+  models: Option[]
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [query, setQuery] = useState("")
+  const q = query.trim().toLowerCase()
+
+  const shown = q
+    ? models.filter(m => m.label.toLowerCase().includes(q) || m.value.toLowerCase().includes(q))
+    : models.slice(0, 8)
+
+  const selected = models.find(m => m.value === value)
+
+  return (
+    <div className="space-y-2">
+      <Field
+        label="Language model"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder={`Search ${models.length.toLocaleString()} models…`}
+        hint="Faster models cost less per minute and reply more quickly. The difference is very audible on a phone call."
+      />
+
+      <p className="text-[12.5px] text-muted">
+        Using{" "}
+        <span className="text-fg">{selected?.label ?? value ?? "nothing yet"}</span>
+        {selected?.note ? <span className="text-subtle"> · {selected.note}</span> : null}
+      </p>
+
+      {shown.length === 0 ? (
+        <p className="text-[12.5px] text-subtle">
+          No model matches &ldquo;{query}&rdquo;.
+        </p>
+      ) : (
+        <div className="max-h-52 overflow-y-auto rounded-field border border-line bg-field-soft">
+          {!q && (
+            <p className="px-3 pt-2.5 text-[11px] uppercase tracking-[0.08em] text-subtle">
+              Recommended for phone calls
+            </p>
+          )}
+          <ul className="p-1.5">
+            {shown.map(m => {
+              const on = m.value === value
+              return (
+                <li key={m.value}>
+                  <button
+                    type="button"
+                    onClick={() => onChange(m.value)}
+                    className={cn(
+                      "flex w-full items-baseline justify-between gap-3 rounded-field px-2.5 py-1.5 text-left transition-colors",
+                      on ? "bg-brand-500/15 text-brand-on-tint" : "text-muted hover:bg-field-hover hover:text-fg"
+                    )}
+                  >
+                    <span className="text-[13px]">{m.label}</span>
+                    {m.note && <span className="shrink-0 text-[11.5px] text-subtle">{m.note}</span>}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
+      {!q && models.length > 8 && (
+        <p className="text-[11.5px] text-subtle">
+          {(models.length - 8).toLocaleString()} more available — start typing to
+          find one.
+        </p>
+      )}
+    </div>
   )
 }

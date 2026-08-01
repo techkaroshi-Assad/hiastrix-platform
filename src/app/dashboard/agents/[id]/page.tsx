@@ -5,7 +5,7 @@ import { requireTenant } from "@/lib/tenant"
 import { tenantNav } from "@/lib/nav"
 import { AppShell } from "@/components/app/app-shell"
 import { readConfig, DEFAULT_CONFIG } from "@/lib/vapi/config"
-import { getVoiceOptions, MODEL_OPTIONS, TRANSCRIBER_OPTIONS } from "@/lib/vapi/catalog"
+import { getVoiceOptions, getModelOptions, MODEL_OPTIONS, TRANSCRIBER_OPTIONS } from "@/lib/vapi/catalog"
 import { AgentEditor } from "../agent-editor"
 
 export const metadata: Metadata = { title: "Edit agent" }
@@ -19,7 +19,7 @@ export default async function EditAgentPage({
   const { id } = await params
   const { tenant, email } = await requireTenant()
 
-  const [agent, voices] = await Promise.all([
+  const [agent, voices, models] = await Promise.all([
     prisma.agent.findFirst({
       where: { id, tenantId: tenant.id },
       include: {
@@ -35,6 +35,7 @@ export default async function EditAgentPage({
       },
     }),
     getVoiceOptions(),
+    getModelOptions(),
   ])
   if (!agent) notFound()
 
@@ -66,7 +67,7 @@ export default async function EditAgentPage({
           config:               { ...DEFAULT_CONFIG, ...readConfig(agent.config) },
         }}
         voices={voices}
-        models={MODEL_OPTIONS}
+        models={models}
         transcribers={TRANSCRIBER_OPTIONS}
         usedForOutbound={agent.campaigns.length > 0}
       />

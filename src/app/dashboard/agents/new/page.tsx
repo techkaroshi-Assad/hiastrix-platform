@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { requireTenant } from "@/lib/tenant"
 import { tenantNav } from "@/lib/nav"
 import { AppShell } from "@/components/app/app-shell"
-import { getVoiceOptions, MODEL_OPTIONS, TRANSCRIBER_OPTIONS } from "@/lib/vapi/catalog"
+import { getVoiceOptions, getModelOptions, MODEL_OPTIONS, TRANSCRIBER_OPTIONS } from "@/lib/vapi/catalog"
 import { AgentEditor } from "../agent-editor"
 import { blankDraft } from "../draft"
 
@@ -17,7 +17,10 @@ export default async function NewAgentPage() {
   // From the account rather than a hardcoded list — the provider retires
   // voices, and a retired one pre-selected into a new agent fails at save time
   // with an error nobody can act on.
-  const voices = await getVoiceOptions()
+  // Both from the account rather than a hardcoded list. Models now include
+  // everything OpenRouter can reach, since a key attached there widens the
+  // choice without anyone deploying.
+  const [voices, models] = await Promise.all([getVoiceOptions(), getModelOptions()])
 
   return (
     <AppShell
@@ -27,9 +30,9 @@ export default async function NewAgentPage() {
       userEmail={email}
     >
       <AgentEditor
-        initial={blankDraft(voices, MODEL_OPTIONS)}
+        initial={blankDraft(voices, models)}
         voices={voices}
-        models={MODEL_OPTIONS}
+        models={models}
         transcribers={TRANSCRIBER_OPTIONS}
         usedForOutbound={false}
       />
