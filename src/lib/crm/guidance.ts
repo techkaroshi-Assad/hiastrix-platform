@@ -23,6 +23,44 @@ import type { AgentTool, AgentToolType } from "@/lib/vapi/tools"
 const has = (tools: AgentTool[], type: AgentToolType) => tools.some(t => t.type === type)
 const anyCrm = (tools: AgentTool[]) => tools.some(t => t.type.startsWith("crm."))
 
+/* ── What the agent knows at the moment it picks up ────────────────────── */
+
+/**
+ * The date, the time, and who is on the line.
+ *
+ * A language model has no clock and no caller display. Left unaided it invents
+ * both, and it does not invent them plausibly: on a live call placed on 31 July
+ * 2026 an agent asked for availability between 3 and 7 **June 2024**, was
+ * correctly told there was nothing free, and spent two minutes offering the
+ * caller weeks that had already happened. On the same call it asked the caller
+ * to spell out an email — because nobody had told it we already held their
+ * number — and speech-to-text produced two different addresses across two
+ * calls, so the lookup missed and a duplicate contact was created each time.
+ *
+ * Both are one-line fixes, and both have to be resolved when the call happens
+ * rather than when the agent is saved. These are Vapi's own template variables,
+ * substituted at call time: bake a real date in here and the agent believes
+ * whatever day it was last edited, which is a worse bug than the one being
+ * fixed because it degrades silently over months.
+ *
+ * `{{customer.number}}` is the caller's number on an inbound call and the
+ * number dialled on an outbound one — in both cases the other party, which is
+ * what we want. It can be empty when a caller withholds their number, so the
+ * wording never promises it is there.
+ */
+function nowBlock(timeZone: string): string {
+  const day  = `{{"now" | date: "%A, %B %d, %Y", "${timeZone}"}}`
+  const time = `{{"now" | date: "%I:%M %p", "${timeZone}"}}`
+
+  return [
+    `Today is ${day}. The time is ${time} (${timeZone}).`,
+    "Work out every date the caller mentions from that — \"tomorrow\", \"next week\", \"the 14th\" — and never guess a year.",
+    "The other party's number on this call is {{customer.number}}. That line is blank only if they withheld it.",
+  ]
+    .map(l => `- ${l}`)
+    .join("\n")
+}
+
 /* ── The non-negotiable part ───────────────────────────────────────────── */
 
 /**
@@ -30,14 +68,26 @@ const anyCrm = (tools: AgentTool[]) => tools.some(t => t.type.startsWith("crm.")
  * actually switched on. Every extra line here dilutes the tenant's own prompt,
  * so this stays short on purpose.
  */
-export function enforcedRules(tools: AgentTool[]): string {
-  if (!anyCrm(tools)) return ""
+export function enforcedRules(
+  tools: AgentTool[],
+  opts: { timeZone?: string } = {}
+): string {
+  const timeZone = opts.timeZone?.trim() || "UTC"
+
+  // The date and caller block goes to every agent, CRM or not. An agent with no
+  // CRM tools at all still gets asked what day Thursday falls on.
+  const context = `\n\n---\nRight now (set by Hi-Astrix):\n${nowBlock(timeZone)}`
+
+  if (!anyCrm(tools)) return context
 
   const lines: string[] = []
 
   if (has(tools, "crm.contact.find")) {
     lines.push(
-      "Always look the caller up before doing anything else. Search by their phone number when you have it, otherwise their email address."
+      // Named explicitly rather than left as "their phone number", because the
+      // agent that failed did have a lookup rule — it just had no number, so it
+      // asked, and an email read aloud is the least reliable identifier there is.
+      "Look the caller up by the number above before you ask them for anything. Only ask for a phone number or an email address if that number is blank, or if it finds nobody."
     )
   }
   if (has(tools, "crm.contact.create")) {
@@ -56,9 +106,23 @@ export function enforcedRules(tools: AgentTool[]): string {
     )
   }
 
+  /*
+   * The honesty rule.
+   *
+   * On one live call the agent told the caller "I have noted your request for a
+   * callback" without ever calling the note tool, and wrote a note saying an
+   * appointment was booked for 4pm when no booking tool had been called at all.
+   * A model narrates what it intended as though it had happened, and on a phone
+   * call nobody can see that it did not — the caller hangs up believing they
+   * have an appointment.
+   */
+  lines.push(
+    "Never tell the caller something has been done — booked, noted, tagged, updated, created — unless the tool you used has replied saying it was done. If a tool fails or you have not called it, say you will pass it on instead."
+  )
+
   lines.push("Never read an id, a reference or a system message aloud to the caller.")
 
-  return `\n\n---\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
+  return `${context}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
 }
 
 /* ── The editable draft ────────────────────────────────────────────────── */

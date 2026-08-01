@@ -413,14 +413,43 @@ function CrmToolSettings({
       )}
 
       {spec.needsTags && (
-        <CheckList
-          label="Tags this agent may use"
-          hint="Leaving all of these unticked lets the agent use any tag, which is rarely what you want — pick the ones your workflows listen for."
-          empty="No tags in your CRM yet."
-          options={options.tags.map(name => ({ value: name, label: clean(name) }))}
-          selected={(t.tags as string[]) ?? []}
-          onChange={next => onPatch({ tags: next })}
-        />
+        <>
+          <CheckList
+            label="Tags this agent may use"
+            hint="Pick the ones your campaigns and workflows listen for. The agent is offered these by name."
+            empty="No tags in your CRM yet."
+            options={options.tags.map(name => ({ value: name, label: clean(name) }))}
+            selected={(t.tags as string[]) ?? []}
+            onChange={next => onPatch({ tags: next })}
+          />
+
+          {/*
+            Only for adding. Removing a tag is destructive and inventing a name
+            to remove is meaningless, so removal is always restricted.
+          */}
+          {t.type === "crm.tag.add" && (
+            <Toggle
+              label="Let the agent create new tags"
+              description="Off, it can only use the tags ticked above. On, those stay its first choice but it may write a new one when none of them fits. A tag that differs only in capitals or punctuation is always filed under the ticked one, so 'callback requested' can never become a second copy of 'Callback Requested'."
+              checked={Boolean(t.allowNewTags)}
+              onChange={v => onPatch({ allowNewTags: v })}
+            />
+          )}
+
+          {/*
+            The configuration that used to be silently permissive. An empty list
+            with creation off is a tool that can do nothing, so it is not sent to
+            the provider at all — said here rather than discovered from tags that
+            never appear.
+          */}
+          {((t.tags as string[]) ?? []).length === 0 && !t.allowNewTags && (
+            <p className="text-[12px] leading-relaxed text-warning">
+              With no tags ticked and new tags off, this action can&rsquo;t do
+              anything, so it won&rsquo;t be given to the agent. Tick at least one
+              tag, or let it create its own.
+            </p>
+          )}
+        </>
       )}
 
       {spec.needsFields && (

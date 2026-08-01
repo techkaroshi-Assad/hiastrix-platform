@@ -106,7 +106,22 @@ export function crmToolParameters(tool: AgentTool): JsonSchema {
         type: "object",
         properties: {
           contactId: CONTACT_ID,
-          tag: oneOf(tool.tags, "The tag to apply."),
+          /*
+           * Two genuinely different tools behind one name.
+           *
+           * Restricted, the model gets an enum and cannot express anything
+           * else. Open, it gets free text plus the list as strong guidance —
+           * the wording matters here, because "prefer these" produces a
+           * near-match the handler can snap onto the real tag, whereas saying
+           * nothing produces a fresh invention every call.
+           */
+          tag: tool.allowNewTags
+            ? str(
+                tool.tags.length
+                  ? `The tag to apply. Use one of these wherever it fits: ${tool.tags.join(", ")}. Only write a different tag when none of them describes the outcome, and keep it two or three plain words.`
+                  : "The tag to apply. Keep it to two or three plain words describing the outcome of the call."
+              )
+            : oneOf(tool.tags, "The tag to apply. Use one of these exactly."),
         },
         required: ["contactId", "tag"],
       }

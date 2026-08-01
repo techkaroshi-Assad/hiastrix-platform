@@ -63,6 +63,21 @@ function toolPayload(tool: AgentTool): Record<string, unknown> | null {
     const server = toolServer()
     if (!server) return null
 
+    /*
+     * A tag tool that can name no tags is not registered at all.
+     *
+     * Restricted to a list of nothing, every call it makes is refused, so all
+     * it can produce is a wasted turn and an agent apologising mid-sentence.
+     * Omitting it is also what forces the mistake into the open: the builder's
+     * checker reports the tool as unusable, rather than the tenant discovering
+     * it months later from tags that never got applied.
+     *
+     * Removal has no permissive mode at all, so an empty list always disables
+     * it; adding is only disabled when new tags are not allowed either.
+     */
+    if (tool.type === "crm.tag.remove" && tool.tags.length === 0) return null
+    if (tool.type === "crm.tag.add" && tool.tags.length === 0 && !tool.allowNewTags) return null
+
     return {
       type: "function",
       function: { ...fn, parameters: crmToolParameters(tool) },
@@ -176,6 +191,27 @@ function serverBlock(): Record<string, unknown> | null {
   }
 }
 
+/**
+ * Which timezone this agent thinks in.
+ *
+ * The availability tool's timezone, and nothing else. There is deliberately no
+ * separate agent-level setting: two fields meaning "what time is it here" is
+ * two fields that can disagree, and the failure when they do is an agent that
+ * offers a caller a slot it then books an hour out. The calendar is where the
+ * appointments live, so the calendar owns the clock.
+ *
+ * An agent with no calendar tool falls back to UTC. That is a real limitation
+ * rather than a hidden one — it has no appointments to get wrong, and the only
+ * cost is being a few hours out on what "today" means near midnight.
+ */
+export function effectiveTimeZone(config: AgentConfig): string {
+  const fromCalendar = config.tools.find(
+    (t): t is Extract<AgentTool, { timeZone: string }> =>
+      "timeZone" in t && typeof t.timeZone === "string" && t.timeZone.trim() !== ""
+  )
+  return fromCalendar?.timeZone.trim() ?? "UTC"
+}
+
 export function buildAssistantPayload(
   core: AgentCore,
   config: AgentConfig
@@ -208,7 +244,14 @@ export function buildAssistantPayload(
        * Appended at send, not stored: the prompt the tenant sees and edits stays
        * theirs, and the rules stay current if we change them.
        */
-      messages: [{ role: "system", content: core.systemPrompt + enforcedRules(config.tools) }],
+      messages: [
+        {
+          role: "system",
+          content:
+            core.systemPrompt +
+            enforcedRules(config.tools, { timeZone: effectiveTimeZone(config) }),
+        },
+      ],
       ...(config.knowledgeBaseId
         ? { knowledgeBaseId: config.knowledgeBaseId }
         : {}),

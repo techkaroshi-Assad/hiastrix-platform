@@ -114,12 +114,34 @@ export const CrmTagAddSchema = z.object({
   type: z.literal("crm.tag.add"),
   ...identity,
   tags: LABELS,
+  /**
+   * Whether the agent may invent a tag that is not on the list.
+   *
+   * This used to be implied by the list being empty, and that was the bug. An
+   * empty list switched the allow-list check off entirely while the tool
+   * description still told the model "only the tags listed for this agent are
+   * allowed" — so the model believed it was constrained, was not, and minted
+   * `No Appointment Booked`, `Callback Requested` and `Booked` across two live
+   * calls. Campaigns pull contacts from the CRM *by tag*, so every invented
+   * variant is a contact the campaign filter will never match: it works on the
+   * account whose tags were typed by hand and silently returns nobody on the
+   * next one.
+   *
+   * Off is the default and the safe setting. On means the listed tags are
+   * preferred rather than mandatory — a tag that merely differs in case or
+   * punctuation is still snapped to the listed spelling, because two spellings
+   * of one tag is the failure this exists to prevent.
+   */
+  allowNewTags: z.boolean().default(false),
 })
 
 export const CrmTagRemoveSchema = z.object({
   type: z.literal("crm.tag.remove"),
   ...identity,
   tags: LABELS,
+  // Deliberately no `allowNewTags`. Removal is destructive and inventing a name
+  // to remove is meaningless — at best a no-op, at worst it strips a tag some
+  // automation depends on. Removal is always restricted to the list.
 })
 
 export const CrmOpportunityCreateSchema = z.object({
@@ -458,7 +480,10 @@ export function defaultCrmTool(spec: CrmToolSpec): AgentTool {
     case "crm.opportunity.create":
     case "crm.opportunity.stage":
       return { type: spec.type, ...base, pipelineId: "" }
+    // Split, because only adding carries the permissive flag. A new tag tool
+    // starts restricted — the tenant opts in to invention rather than out of it.
     case "crm.tag.add":
+      return { type: spec.type, ...base, tags: [], allowNewTags: false }
     case "crm.tag.remove":
       return { type: spec.type, ...base, tags: [] }
     case "crm.contact.field.set":

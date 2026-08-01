@@ -33,6 +33,50 @@ const key = (s: string) =>
    .trim()
    .toLowerCase()
 
+/**
+ * The same idea, spelled any of the ways a model spells it.
+ *
+ * `key` keeps punctuation, which is right when comparing names a person typed.
+ * For tags it is too strict: `Callback Requested`, `callback-requested` and
+ * `callback_requested` are one tag to a human and three rows in the CRM, and a
+ * campaign filtering on one of them silently matches none of the others. This
+ * strips everything that is not a letter or a digit so a near-match can be
+ * snapped onto the tag the workspace actually configured.
+ */
+const loose = (s: string) => key(s).replace(/[^a-z0-9]+/g, "")
+
+/**
+ * The same number, written the ways a CRM might hold it.
+ *
+ * We always have E.164 — `+13133986372` — because that is what the telephony
+ * provider hands us. A CRM record typed in by a human very often is not: it is
+ * `(313) 398-6372`, or `0313 398 6372`, or the number with no country code at
+ * all. The duplicate-detection endpoint matches on what it is given, so one
+ * format is one guess, and a guess that misses reads exactly like a person who
+ * is not there — which is how a caller we already had ended up with a second
+ * record.
+ *
+ * Deliberately short. Each variant is a round trip, the voice provider gives a
+ * tool call eight seconds in total, and the last ten digits catch essentially
+ * every case the full E.164 form misses. Beyond that the returns vanish and the
+ * latency does not.
+ */
+export function phoneVariants(raw: string): string[] {
+  const trimmed = raw.trim()
+  if (!trimmed) return []
+
+  const digits = trimmed.replace(/\D/g, "")
+  const out = [trimmed]
+
+  // The subscriber part, which is what a locally-typed record usually holds.
+  if (digits.length > 10) {
+    const last10 = digits.slice(-10)
+    if (last10 !== trimmed) out.push(last10)
+  }
+
+  return out
+}
+
 const displayName = (c: { firstName?: string; lastName?: string }) =>
   [c.firstName, c.lastName].filter(Boolean).join(" ").trim() || "that contact"
 
@@ -65,10 +109,17 @@ export async function runCrmAction(
        * that looks like an email or a phone number goes there — which is most
        * inbound calls, where we have the caller's number before they speak.
        */
-      const exact =
-        query.includes("@")     ? await crmContacts.lookupExact(locationId, { email: query }) :
-        /^[+\d][\d\s()-]{5,}$/.test(query) ? await crmContacts.lookupExact(locationId, { phone: query }) :
-        null
+      let exact = null
+      if (query.includes("@")) {
+        exact = await crmContacts.lookupExact(locationId, { email: query })
+      } else if (/^[+\d][\d\s()-]{5,}$/.test(query)) {
+        // Every plausible spelling of the number, stopping at the first hit —
+        // we hold E.164 and the record may not.
+        for (const phone of phoneVariants(query)) {
+          exact = await crmContacts.lookupExact(locationId, { phone })
+          if (exact) break
+        }
+      }
 
       if (exact) return `Found ${displayName(exact)}, contact id ${exact.id}.`
 
@@ -85,6 +136,38 @@ export async function runCrmAction(
     case "crm.contact.create": {
       const firstName = text(args, "firstName")
       if (!firstName) return "I need at least a first name to create a contact."
+
+      /*
+       * Check for the person again, here, immediately before creating them.
+       *
+       * The prompt already says to look first and only create on a miss, and on
+       * two live calls the agent did exactly that and still produced duplicate
+       * records — because the lookup it ran was against a mis-heard email, and
+       * a lookup that misses is indistinguishable from a person who is not
+       * there. An instruction cannot fix that; only asking again, with the
+       * identifiers actually being written, can.
+       *
+       * This uses the duplicate-detection endpoint, which answers from live
+       * data rather than the search index that lags a write by seven seconds —
+       * so unlike `search`, it also catches the case where this same call
+       * created them moments ago.
+       *
+       * Email and phone are checked separately, not together: a caller may give
+       * a number we hold and an email we do not, and a combined query would
+       * find nobody and make a second record for someone we already have.
+       */
+      const phone = text(args, "phone")
+      const email = text(args, "email")
+
+      for (const by of [
+        ...phoneVariants(phone).map(p => ({ phone: p })),
+        ...(email ? [{ email }] : []),
+      ]) {
+        const existing = await crmContacts.lookupExact(locationId, by)
+        if (existing) {
+          return `${displayName(existing)} is already in the CRM, contact id ${existing.id}. Use that — don't create them again.`
+        }
+      }
 
       const created = await crmContacts.create(locationId, {
         firstName,
@@ -143,11 +226,26 @@ export async function runCrmAction(
 
     case "crm.tag.add": {
       const contactId = text(args, "contactId")
-      const tag       = text(args, "tag")
-      if (!contactId || !tag) return "I need the contact and which tag to apply."
+      const raw       = text(args, "tag")
+      if (!contactId || !raw) return "I need the contact and which tag to apply."
 
-      if (tool.tags.length && !tool.tags.some(t => key(t) === key(tag))) {
-        return `I can't apply "${tag}". The tags available are: ${tool.tags.join(", ")}.`
+      /*
+       * Snap to the configured spelling before anything else.
+       *
+       * `Callback Requested`, `callback requested` and `callback-requested` are
+       * three rows in the CRM and one idea. Campaigns filter contacts by an
+       * exact tag, so a variant is a contact the campaign will never find —
+       * which is precisely how tag sourcing came to work on one account and
+       * return nobody on another. Snapping happens whether or not new tags are
+       * allowed: a near-match is always meant to be the listed tag.
+       */
+      const listed = tool.tags.find(t => loose(t) === loose(raw))
+      const tag    = listed ?? raw
+
+      if (!listed && !tool.allowNewTags) {
+        return tool.tags.length
+          ? `I can't apply "${raw}". The tags available are: ${tool.tags.join(", ")}.`
+          : `I can't apply "${raw}" — no tags have been set up for me to use.`
       }
 
       const added = await crmContacts.addTags(locationId, contactId, [tag])
@@ -158,15 +256,21 @@ export async function runCrmAction(
 
     case "crm.tag.remove": {
       const contactId = text(args, "contactId")
-      const tag       = text(args, "tag")
-      if (!contactId || !tag) return "I need the contact and which tag to remove."
+      const raw       = text(args, "tag")
+      if (!contactId || !raw) return "I need the contact and which tag to remove."
 
-      if (tool.tags.length && !tool.tags.some(t => key(t) === key(tag))) {
-        return `I can't change "${tag}". The tags available are: ${tool.tags.join(", ")}.`
+      // Always restricted, with no opt-out — see the schema. Removing a tag
+      // nobody listed is at best a no-op and at worst strips one an automation
+      // depends on.
+      const listed = tool.tags.find(t => loose(t) === loose(raw))
+      if (!listed) {
+        return tool.tags.length
+          ? `I can't change "${raw}". The tags available are: ${tool.tags.join(", ")}.`
+          : `I can't change "${raw}" — no tags have been set up for me to use.`
       }
 
-      const removed = await crmContacts.removeTags(locationId, contactId, [tag])
-      return removed.length ? `Removed the "${tag}" tag.` : `They didn't have the "${tag}" tag.`
+      const removed = await crmContacts.removeTags(locationId, contactId, [listed])
+      return removed.length ? `Removed the "${listed}" tag.` : `They didn't have the "${listed}" tag.`
     }
 
     /* ── Pipeline ──────────────────────────────────────────────────── */
@@ -236,6 +340,32 @@ export async function runCrmAction(
       const end   = dayMs(text(args, "endDate"), true)
       if (start === null || end === null) return "I need both dates as year-month-day."
       if (end < start) return "The end date is before the start date."
+
+      /*
+       * A range that has already happened is answered with the date, not with
+       * "nothing free".
+       *
+       * On a live call placed on 31 July 2026 the agent asked for slots between
+       * 3 and 7 June **2024**, because a language model has no clock and had
+       * been told nothing. The calendar answered truthfully that nothing was
+       * free, so the model concluded the diary was full, offered week after
+       * week — each one also in 2024 — and the caller was told there was no
+       * availability at all. The agent is now given the date in its prompt,
+       * which is the real fix; this is the backstop, because "nothing free" is
+       * an answer that hides the mistake instead of surfacing it.
+       *
+       * Same self-correcting shape as a wrong pipeline stage: say what was
+       * wrong and what the truth is, and the model fixes itself in the same
+       * turn rather than repeating the question.
+       */
+      const today = new Date()
+      const todayStart = Date.UTC(
+        today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()
+      )
+      if (end < todayStart) {
+        const readable = new Date(todayStart).toISOString().slice(0, 10)
+        return `That range is in the past — today is ${readable}. Ask again using dates from today onwards.`
+      }
 
       const slots = await crmCalendars.freeSlots(locationId, tool.calendarId, {
         startMs:  start,
