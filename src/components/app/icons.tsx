@@ -1,199 +1,207 @@
 /**
  * The icon vocabulary.
  *
- * ── WHY THIS FILE CHANGED ─────────────────────────────────────────────
+ * ── WHY THIS FILE EXISTS ──────────────────────────────────────────────
  *
- * There used to be eleven hand-drawn icons here and twenty-nine more scattered
- * as loose `<svg>` literals across form controls, the theme toggle and one
- * table cell. That is not a design system, it is a habit — and it had two
- * costs. Adding an icon meant drawing one, so most things never got one: page
- * headers, stat cards, buttons, tabs, status pills and every row of every table
- * were text only. And the ones that did exist drifted, because a stroke width
- * typed by hand in six files is a stroke width that is wrong in one of them.
+ * Screens import *meaning* — `IconCampaigns` — not a picture. That indirection
+ * has now paid for itself twice: once when eleven hand-drawn SVGs were replaced
+ * by a library, and again when that library was replaced by this one. Both were
+ * a single-file change, and nothing else in the app knew.
  *
- * So the drawing is now Lucide's job. It is stroke-based on a 24px grid with
- * round caps and joins — which is exactly what the hand-drawn set was imitating
- * — so nothing about the look changes, there is just far more of it and it is
- * consistent.
+ * It also decides the size and the weight once, rather than in ninety call
+ * sites, and it is where a white-label icon set would eventually land. The
+ * brand mark stays ours and stays hand-drawn, in `brand/logo.tsx`.
  *
- * ── WHY THIS FILE STILL EXISTS ────────────────────────────────────────
+ * ── WHY PHOSPHOR, AND WHY DUOTONE ─────────────────────────────────────
  *
- * Importing straight from `lucide-react` everywhere would work and would be
- * worse. Three reasons to go through here:
+ * The previous set was uniform-stroke line icons. They were fine, and they read
+ * as *generic* — every glyph the same weight, the same grey, no hierarchy, so a
+ * sidebar of nine of them is nine identical grey marks and the eye has nothing
+ * to grip.
  *
- * 1. **The names are ours.** `IconCampaigns` survives a decision to draw
- *    campaigns as a megaphone instead of a handset. `PhoneOutgoing` does not.
- *    Screens import meaning, not pictures.
- * 2. **The size and weight are decided once.** Every icon in the product is
- *    18px at 1.7 stroke unless it says otherwise, and that is enforced here
- *    rather than remembered in ninety call sites.
- * 3. **White-labelling.** The brand mark is still ours and still hand-drawn in
- *    `brand/logo.tsx`. When a tenant's own icon set eventually matters, this is
- *    the one file that changes.
+ * Duotone fixes that with a filled shape at low opacity behind the outline, so
+ * an icon has mass and a silhouette instead of being a wireframe. It costs
+ * nothing — same glyph, one extra path — and it is the single change that makes
+ * navigation stop looking unfinished.
  *
- * Exports are named rather than bundled into an object, so the bundler only
- * ships the icons a page actually renders.
+ * Chrome icons stay `regular`. A chevron on a select or a close button is not
+ * meant to have presence; it is meant to be invisible until wanted, and a
+ * duotone chevron is a chevron shouting.
  *
- * ── ON VERSIONS ───────────────────────────────────────────────────────
+ * ── WHY THE `/ssr` ENTRY ──────────────────────────────────────────────
  *
- * Lucide has renamed a number of icons over the years and keeps the old names
- * as aliases. Everything below is verified present in the installed version;
- * if an upgrade ever removes an alias, it breaks here, loudly, in one file,
- * rather than in whichever screen happened to import it.
+ * Phosphor ships two builds. The default is a client component that reads an
+ * `IconContext`, which would drag every icon in the app across the server
+ * boundary and into the client bundle — on a dashboard that is almost entirely
+ * server-rendered, that is a lot of JavaScript shipped in order to draw a
+ * telephone. The `/ssr` build is a plain forwardRef with no context, so icons
+ * render to markup on the server and cost the client nothing.
+ *
+ * It works inside client components too — `shell.tsx` uses these — it simply
+ * does not inherit context, which nothing here relies on.
  */
 
 import {
   /* Navigation */
-  Home, Bot, Megaphone, Phone, BarChart3, Hash, CreditCard, Settings,
-  HelpCircle, Building2, Package,
+  House, Robot, Megaphone, Phone, ChartBar, Hash, CreditCard, Gear,
+  Question, Buildings, Package,
 
   /* Actions */
-  Plus, Search, Filter, SlidersHorizontal, X, Check, ChevronDown, ChevronRight,
-  ChevronLeft, ArrowRight, ArrowUpRight, ArrowLeft, ExternalLink, Copy, Trash2,
-  Pencil, RefreshCw, Download, Play, Pause, Send, MoreHorizontal, Menu,
+  Plus, MagnifyingGlass, FunnelSimple, SlidersHorizontal, X, Check,
+  CaretDown, CaretRight, CaretLeft, ArrowRight, ArrowUpRight, ArrowLeft,
+  ArrowSquareOut, CopySimple, Trash, PencilSimple, ArrowsClockwise,
+  DownloadSimple, Play, Pause, PaperPlaneTilt, DotsThree, List,
 
   /* State and feedback */
-  Info, AlertCircle, AlertTriangle, CheckCircle2, XCircle, Loader2, CircleDot, Ban,
-  ShieldCheck, ShieldAlert, BadgeCheck, Eye, EyeOff, Lock, KeyRound,
+  Info, WarningCircle, Warning, CheckCircle, XCircle, CircleNotch, Circle,
+  Prohibit, ShieldCheck, ShieldWarning, SealCheck, Eye, EyeSlash, Lock, Key,
 
   /* Movement */
-  TrendingUp, TrendingDown, Minus, ArrowUpDown, Equal,
+  TrendUp, TrendDown, Minus, ArrowsDownUp, Equals,
 
   /* Time */
-  Calendar, CalendarCheck, CalendarClock, CalendarDays, Clock, Timer, Hourglass,
+  Calendar, CalendarCheck, CalendarDots, Clock, Timer, Hourglass,
 
   /* People */
-  Users, UserPlus, UserCheck, User, LogOut, Mail, Bell,
+  Users, UserPlus, UserCheck, User, SignOut, Envelope, Bell,
 
   /* Telephony */
-  PhoneOutgoing, PhoneIncoming, PhoneCall, PhoneMissed, PhoneOff, Mic, Voicemail,
-  Volume2, Signal,
+  PhoneOutgoing, PhoneIncoming, PhoneCall, PhoneX, Microphone, Broadcast,
+  SpeakerHigh, CellSignalHigh,
 
   /* Records */
-  Tag, FileText, ClipboardList, NotebookPen, MessageSquare, Inbox, Link2,
+  Tag, FileText, ClipboardText, NotePencil, ChatCircle, Tray, LinkSimple,
 
   /* Money */
-  Wallet, Receipt, Coins, DollarSign, Percent,
+  Wallet, Receipt, Coins, CurrencyDollar, Percent,
 
   /* Charts */
-  PieChart, LineChart, Grid3x3, Gauge,
+  ChartPie, ChartLine, GridFour, Gauge,
 
   /* Flourish */
-  Sparkles, Zap, Rocket, Target, Star, ThumbsUp, Handshake, Briefcase,
+  Sparkle, Lightning, Rocket, Target, Star, ThumbsUp, Handshake, Briefcase,
 
-  /* Trades, for the industry template variants */
-  Wrench, Stethoscope, Hammer, LifeBuoy, Headphones, MapPin, Globe,
+  /* Trades */
+  Wrench, Stethoscope, Hammer, Lifebuoy, Headset, MapPin, Globe,
 
   /* Theme */
   Sun, Moon, Monitor,
+} from "@phosphor-icons/react/ssr"
 
-  type LucideIcon,
-} from "lucide-react"
+import type { Icon as PhosphorIcon, IconWeight } from "@phosphor-icons/react"
 
-export type { LucideIcon }
-
-/**
- * The house size.
- *
- * 18px at 1.7 is what the hand-drawn set used, and matching it means nothing
- * shifted visually when this file was rewritten. Anything that wants a
- * different size passes `size` — every export below forwards its props.
- */
-const NAV_SIZE = 18
-const NAV_STROKE = 1.7
-
-export type IconProps = React.ComponentProps<LucideIcon>
+export type IconProps = {
+  size?: number | string
+  weight?: IconWeight
+  className?: string
+  color?: string
+  [key: string]: unknown
+}
 
 /**
  * What every icon in this file actually is.
  *
- * *Not* `LucideIcon`. That type is a `ForwardRefExoticComponent`, and the
- * wrapper below is a plain function component — so typing a prop as
- * `icon?: LucideIcon` and passing `IconInbound` fails to compile with a
- * genuinely baffling message about a missing `$$typeof`. Anything that takes
- * one of these as a prop should say `Icon`.
+ * A plain function component, deliberately — anything taking one as a prop
+ * should say `Icon`, not the library's own exported type. That distinction
+ * exists because the previous version of this file typed a prop as the
+ * library's `ForwardRefExoticComponent`, and passing a wrapped icon then failed
+ * to compile with a message about a missing `$$typeof` that explains nothing.
  */
 export type Icon = (props: IconProps) => React.JSX.Element
 
-/** Wrap a Lucide icon in the house defaults, still overridable per use. */
-const glyph = (C: LucideIcon, display: string): Icon => {
-  const Wrapped = (p: IconProps) => <C size={NAV_SIZE} strokeWidth={NAV_STROKE} {...p} />
+const SIZE = 18
+
+/**
+ * Wrap an icon in the house defaults, still overridable per use.
+ *
+ * `weight` is a default rather than a constant, so a call site that wants the
+ * bold cut of a normally-duotone icon for one particular spot can say so.
+ */
+const glyph = (C: PhosphorIcon, display: string, weight: IconWeight = "duotone"): Icon => {
+  const Wrapped = (p: IconProps) => {
+    const Component = C as unknown as React.ComponentType<Record<string, unknown>>
+    return <Component size={SIZE} weight={weight} {...p} />
+  }
   Wrapped.displayName = display
   return Wrapped
 }
 
+/** Chrome: a chevron with presence is a chevron in the way. */
+const plain = (C: PhosphorIcon, display: string): Icon => glyph(C, display, "regular")
+
 /* ── Navigation ────────────────────────────────────────────────────────── */
 
-export const IconHome      = glyph(Home,       "IconHome")
-export const IconAgents    = glyph(Bot,        "IconAgents")
+export const IconHome      = glyph(House,      "IconHome")
+export const IconAgents    = glyph(Robot,      "IconAgents")
 export const IconCampaigns = glyph(Megaphone,  "IconCampaigns")
 export const IconCalls     = glyph(Phone,      "IconCalls")
-export const IconAnalytics = glyph(BarChart3,  "IconAnalytics")
+export const IconAnalytics = glyph(ChartBar,   "IconAnalytics")
 export const IconNumbers   = glyph(Hash,       "IconNumbers")
 export const IconBilling   = glyph(CreditCard, "IconBilling")
-export const IconSettings  = glyph(Settings,   "IconSettings")
-export const IconHelp      = glyph(HelpCircle, "IconHelp")
-export const IconTenants   = glyph(Building2,  "IconTenants")
+export const IconSettings  = glyph(Gear,       "IconSettings")
+export const IconHelp      = glyph(Question,   "IconHelp")
+export const IconTenants   = glyph(Buildings,  "IconTenants")
 export const IconPackages  = glyph(Package,    "IconPackages")
 
 /* ── Actions ───────────────────────────────────────────────────────────── */
 
-export const IconPlus     = glyph(Plus,            "IconPlus")
-export const IconSearch   = glyph(Search,          "IconSearch")
-export const IconFilter   = glyph(Filter,          "IconFilter")
-export const IconTune     = glyph(SlidersHorizontal, "IconTune")
-export const IconClose    = glyph(X,               "IconClose")
-export const IconCheck    = glyph(Check,           "IconCheck")
-export const IconChevron  = glyph(ChevronDown,     "IconChevron")
-export const IconNext     = glyph(ChevronRight,    "IconNext")
-export const IconPrev     = glyph(ChevronLeft,     "IconPrev")
-export const IconArrow    = glyph(ArrowRight,      "IconArrow")
-export const IconArrowOut = glyph(ArrowUpRight,    "IconArrowOut")
-export const IconBack     = glyph(ArrowLeft,       "IconBack")
-export const IconExternal = glyph(ExternalLink,    "IconExternal")
-export const IconCopy     = glyph(Copy,            "IconCopy")
-export const IconDelete   = glyph(Trash2,          "IconDelete")
-export const IconEdit     = glyph(Pencil,          "IconEdit")
-export const IconRefresh  = glyph(RefreshCw,       "IconRefresh")
-export const IconDownload = glyph(Download,        "IconDownload")
-export const IconPlay     = glyph(Play,            "IconPlay")
-export const IconPause    = glyph(Pause,           "IconPause")
-export const IconSend     = glyph(Send,            "IconSend")
-export const IconMore     = glyph(MoreHorizontal,  "IconMore")
-export const IconMenu     = glyph(Menu,            "IconMenu")
+export const IconPlus     = plain(Plus,              "IconPlus")
+export const IconSearch   = plain(MagnifyingGlass,   "IconSearch")
+export const IconFilter   = plain(FunnelSimple,      "IconFilter")
+export const IconTune     = plain(SlidersHorizontal, "IconTune")
+export const IconClose    = plain(X,                 "IconClose")
+export const IconCheck    = plain(Check,             "IconCheck")
+export const IconChevron  = plain(CaretDown,         "IconChevron")
+export const IconNext     = plain(CaretRight,        "IconNext")
+export const IconPrev     = plain(CaretLeft,         "IconPrev")
+export const IconArrow    = plain(ArrowRight,        "IconArrow")
+export const IconArrowOut = plain(ArrowUpRight,      "IconArrowOut")
+export const IconBack     = plain(ArrowLeft,         "IconBack")
+export const IconExternal = plain(ArrowSquareOut,    "IconExternal")
+export const IconCopy     = plain(CopySimple,        "IconCopy")
+export const IconDelete   = plain(Trash,             "IconDelete")
+export const IconEdit     = plain(PencilSimple,      "IconEdit")
+export const IconRefresh  = plain(ArrowsClockwise,   "IconRefresh")
+export const IconDownload = plain(DownloadSimple,    "IconDownload")
+export const IconPlay     = glyph(Play,              "IconPlay",  "fill")
+export const IconPause    = glyph(Pause,             "IconPause", "fill")
+export const IconSend     = plain(PaperPlaneTilt,    "IconSend")
+export const IconMore     = plain(DotsThree,         "IconMore")
+export const IconMenu     = plain(List,              "IconMenu")
 
 /* ── State ─────────────────────────────────────────────────────────────── */
 
 export const IconInfo     = glyph(Info,          "IconInfo")
-export const IconAlert    = glyph(AlertCircle,   "IconAlert")
-export const IconWarning  = glyph(AlertTriangle, "IconWarning")
-export const IconSuccess  = glyph(CheckCircle2,  "IconSuccess")
+export const IconAlert    = glyph(WarningCircle, "IconAlert")
+export const IconWarning  = glyph(Warning,       "IconWarning")
+export const IconSuccess  = glyph(CheckCircle,   "IconSuccess")
 export const IconFailure  = glyph(XCircle,       "IconFailure")
-export const IconSpinner  = glyph(Loader2,       "IconSpinner")
-export const IconLive     = glyph(CircleDot,     "IconLive")
-export const IconBlocked  = glyph(Ban,           "IconBlocked")
+/** Regular, not duotone: a spinner's whole job is one clear rotating arc. */
+export const IconSpinner  = plain(CircleNotch,   "IconSpinner")
+export const IconLive     = glyph(Circle,        "IconLive", "fill")
+export const IconBlocked  = glyph(Prohibit,      "IconBlocked")
 export const IconSecure   = glyph(ShieldCheck,   "IconSecure")
-export const IconRisk     = glyph(ShieldAlert,   "IconRisk")
-export const IconVerified = glyph(BadgeCheck,    "IconVerified")
-export const IconShow     = glyph(Eye,           "IconShow")
-export const IconHide     = glyph(EyeOff,        "IconHide")
+export const IconRisk     = glyph(ShieldWarning, "IconRisk")
+export const IconVerified = glyph(SealCheck,     "IconVerified")
+export const IconShow     = plain(Eye,           "IconShow")
+export const IconHide     = plain(EyeSlash,      "IconHide")
 export const IconLock     = glyph(Lock,          "IconLock")
-export const IconKey      = glyph(KeyRound,      "IconKey")
+export const IconKey      = glyph(Key,           "IconKey")
 
 /* ── Movement ──────────────────────────────────────────────────────────── */
 
-export const IconUp    = glyph(TrendingUp,   "IconUp")
-export const IconDown  = glyph(TrendingDown, "IconDown")
-export const IconFlat  = glyph(Minus,        "IconFlat")
-export const IconSort  = glyph(ArrowUpDown,  "IconSort")
-export const IconEqual = glyph(Equal,        "IconEqual")
+export const IconUp    = glyph(TrendUp,      "IconUp",   "bold")
+export const IconDown  = glyph(TrendDown,    "IconDown", "bold")
+export const IconFlat  = plain(Minus,        "IconFlat")
+export const IconSort  = plain(ArrowsDownUp, "IconSort")
+export const IconEqual = plain(Equals,       "IconEqual")
 
 /* ── Time ──────────────────────────────────────────────────────────────── */
 
 export const IconCalendar  = glyph(Calendar,      "IconCalendar")
 export const IconBooked    = glyph(CalendarCheck, "IconBooked")
-export const IconScheduled = glyph(CalendarClock, "IconScheduled")
-export const IconDays      = glyph(CalendarDays,  "IconDays")
+export const IconScheduled = glyph(CalendarDots,  "IconScheduled")
+export const IconDays      = glyph(CalendarDots,  "IconDays")
 export const IconClock     = glyph(Clock,         "IconClock")
 export const IconDuration  = glyph(Timer,         "IconDuration")
 export const IconWaiting   = glyph(Hourglass,     "IconWaiting")
@@ -204,51 +212,51 @@ export const IconPeople  = glyph(Users,     "IconPeople")
 export const IconInvite  = glyph(UserPlus,  "IconInvite")
 export const IconMember  = glyph(UserCheck, "IconMember")
 export const IconPerson  = glyph(User,      "IconPerson")
-export const IconSignOut = glyph(LogOut,    "IconSignOut")
-export const IconMail    = glyph(Mail,      "IconMail")
+export const IconSignOut = plain(SignOut,   "IconSignOut")
+export const IconMail    = glyph(Envelope,  "IconMail")
 export const IconBell    = glyph(Bell,      "IconBell")
 
 /* ── Telephony ─────────────────────────────────────────────────────────── */
 
-export const IconOutbound  = glyph(PhoneOutgoing, "IconOutbound")
-export const IconInbound   = glyph(PhoneIncoming, "IconInbound")
-export const IconConnected = glyph(PhoneCall,     "IconConnected")
-export const IconMissed    = glyph(PhoneMissed,   "IconMissed")
-export const IconHungUp    = glyph(PhoneOff,      "IconHungUp")
-export const IconMic       = glyph(Mic,           "IconMic")
-export const IconVoicemail = glyph(Voicemail,     "IconVoicemail")
-export const IconRecording = glyph(Volume2,       "IconRecording")
-export const IconSignal    = glyph(Signal,        "IconSignal")
+export const IconOutbound  = glyph(PhoneOutgoing,  "IconOutbound")
+export const IconInbound   = glyph(PhoneIncoming,  "IconInbound")
+export const IconConnected = glyph(PhoneCall,      "IconConnected")
+export const IconMissed    = glyph(PhoneX,         "IconMissed")
+export const IconHungUp    = glyph(PhoneX,         "IconHungUp")
+export const IconMic       = glyph(Microphone,     "IconMic")
+export const IconVoicemail = glyph(Broadcast,      "IconVoicemail")
+export const IconRecording = glyph(SpeakerHigh,    "IconRecording")
+export const IconSignal    = glyph(CellSignalHigh, "IconSignal")
 
 /* ── Records ───────────────────────────────────────────────────────────── */
 
 export const IconTag        = glyph(Tag,           "IconTag")
 export const IconTranscript = glyph(FileText,      "IconTranscript")
-export const IconChecklist  = glyph(ClipboardList, "IconChecklist")
-export const IconNote       = glyph(NotebookPen,   "IconNote")
-export const IconSummary    = glyph(MessageSquare, "IconSummary")
-export const IconInbox      = glyph(Inbox,         "IconInbox")
-export const IconLink       = glyph(Link2,         "IconLink")
+export const IconChecklist  = glyph(ClipboardText, "IconChecklist")
+export const IconNote       = glyph(NotePencil,    "IconNote")
+export const IconSummary    = glyph(ChatCircle,    "IconSummary")
+export const IconInbox      = glyph(Tray,          "IconInbox")
+export const IconLink       = plain(LinkSimple,    "IconLink")
 
 /* ── Money ─────────────────────────────────────────────────────────────── */
 
-export const IconBalance = glyph(Wallet,     "IconBalance")
-export const IconInvoice = glyph(Receipt,    "IconInvoice")
-export const IconCredits = glyph(Coins,      "IconCredits")
-export const IconCost    = glyph(DollarSign, "IconCost")
-export const IconRate    = glyph(Percent,    "IconRate")
+export const IconBalance = glyph(Wallet,         "IconBalance")
+export const IconInvoice = glyph(Receipt,        "IconInvoice")
+export const IconCredits = glyph(Coins,          "IconCredits")
+export const IconCost    = glyph(CurrencyDollar, "IconCost")
+export const IconRate    = glyph(Percent,        "IconRate", "bold")
 
 /* ── Charts ────────────────────────────────────────────────────────────── */
 
-export const IconShare  = glyph(PieChart,  "IconShare")
-export const IconTrend  = glyph(LineChart, "IconTrend")
-export const IconHeat   = glyph(Grid3x3,   "IconHeat")
-export const IconGauge  = glyph(Gauge,     "IconGauge")
+export const IconShare = glyph(ChartPie,  "IconShare")
+export const IconTrend = glyph(ChartLine, "IconTrend")
+export const IconHeat  = glyph(GridFour,  "IconHeat")
+export const IconGauge = glyph(Gauge,     "IconGauge")
 
 /* ── Flourish ──────────────────────────────────────────────────────────── */
 
-export const IconMagic    = glyph(Sparkles,  "IconMagic")
-export const IconFast     = glyph(Zap,       "IconFast")
+export const IconMagic    = glyph(Sparkle,   "IconMagic", "fill")
+export const IconFast     = glyph(Lightning, "IconFast")
 export const IconLaunch   = glyph(Rocket,    "IconLaunch")
 export const IconTarget   = glyph(Target,    "IconTarget")
 export const IconStar     = glyph(Star,      "IconStar")
@@ -258,13 +266,13 @@ export const IconWork     = glyph(Briefcase, "IconWork")
 
 /* ── Trades ────────────────────────────────────────────────────────────── */
 
-export const IconTrade      = glyph(Wrench,      "IconTrade")
-export const IconClinic     = glyph(Stethoscope, "IconClinic")
-export const IconBuild      = glyph(Hammer,      "IconBuild")
-export const IconSupport    = glyph(LifeBuoy,    "IconSupport")
-export const IconFrontDesk  = glyph(Headphones,  "IconFrontDesk")
-export const IconLocation   = glyph(MapPin,      "IconLocation")
-export const IconWorld      = glyph(Globe,       "IconWorld")
+export const IconTrade     = glyph(Wrench,      "IconTrade")
+export const IconClinic    = glyph(Stethoscope, "IconClinic")
+export const IconBuild     = glyph(Hammer,      "IconBuild")
+export const IconSupport   = glyph(Lifebuoy,    "IconSupport")
+export const IconFrontDesk = glyph(Headset,     "IconFrontDesk")
+export const IconLocation  = glyph(MapPin,      "IconLocation")
+export const IconWorld     = glyph(Globe,       "IconWorld")
 
 /* ── Theme ─────────────────────────────────────────────────────────────── */
 

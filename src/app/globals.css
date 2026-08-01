@@ -425,6 +425,45 @@
   to   { transform: translateX(100%); }
 }
 
+/* ── Sidebar constellation ────────────────────────────────────
+   The sign-in page draws its mesh on a canvas: fifty-six nodes, a distance
+   check between every pair, and a requestAnimationFrame loop that never stops.
+   That is affordable on a page somebody looks at for nine seconds, and it is
+   not affordable on a rail that sits open all day beside their inbox.
+
+   So the sidebar version is the same idea with the arithmetic thrown away. The
+   nodes and links are a fixed SVG drawn once on the server; only opacity and a
+   few transforms move, which the compositor handles on its own thread without
+   waking the main one. It costs nothing measurable and reads as the same
+   family.
+
+   Long, prime-ish, mutually indivisible durations on purpose — 19s against 23s
+   against 31s never resynchronise into a visible pulse, which is what makes a
+   background feel alive rather than mechanical. */
+@keyframes mesh-breathe {
+  0%, 100% { opacity: 0.30; }
+  50%      { opacity: 0.62; }
+}
+@keyframes mesh-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(6px, -14px, 0); }
+}
+@keyframes mesh-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(-8px, 11px, 0); }
+}
+/* A single node lighting up and fading, like a packet arriving. */
+@keyframes mesh-spark {
+  0%, 88%, 100% { opacity: 0;   transform: scale(0.6); }
+  94%           { opacity: 0.9; transform: scale(1); }
+}
+/* The bloom behind it all, moving slowly enough that you never catch it. */
+@keyframes aura-wander {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(-10%, 18%, 0) scale(1.12); }
+  66%      { transform: translate3d(8%, -12%, 0) scale(0.94); }
+}
+
 /* ── Animation utilities ──────────────────────────────────── */
 @layer utilities {
   .animate-rise-in        { animation: rise-in 0.48s cubic-bezier(0.22,1,0.36,1) both; }
@@ -444,6 +483,14 @@
   .animate-pulse-dot      { animation: pulse-dot 2s ease-in-out infinite; }
   .animate-spin           { animation: spin 0.9s linear infinite; }
   .animate-sheen          { animation: sheen 2.4s ease infinite; }
+
+  /* Sidebar constellation. See the keyframes above for why these are so slow
+     and why the durations do not divide into each other. */
+  .animate-mesh-breathe   { animation: mesh-breathe 19s ease-in-out infinite; }
+  .animate-mesh-drift-a   { animation: mesh-drift-a 23s ease-in-out infinite; }
+  .animate-mesh-drift-b   { animation: mesh-drift-b 31s ease-in-out infinite; }
+  .animate-mesh-spark     { animation: mesh-spark 17s ease-in-out infinite; }
+  .animate-aura-wander    { animation: aura-wander 38s ease-in-out infinite; }
 }
 
 /* ── Reduced motion ───────────────────────────────────────── */

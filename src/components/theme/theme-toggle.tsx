@@ -14,17 +14,17 @@ const OPTIONS: { value: ThemeSetting; label: string; icon: React.ReactNode }[] =
   {
     value: "light",
     label: "Light",
-    icon: <IconLight size={15} strokeWidth={1.8} />,
+    icon: <IconLight size={15} />,
   },
   {
     value: "system",
     label: "System",
-    icon: <IconSystem size={15} strokeWidth={1.8} />,
+    icon: <IconSystem size={15} />,
   },
   {
     value: "dark",
     label: "Dark",
-    icon: <IconDark size={15} strokeWidth={1.8} />,
+    icon: <IconDark size={15} />,
   },
 ]
 

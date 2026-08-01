@@ -104,7 +104,6 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         <IconChevron
           aria-hidden="true"
           size={16}
-          strokeWidth={1.8}
           className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-subtle"
         />
       </div>
@@ -241,7 +240,6 @@ export function Section({
         <IconChevron
           aria-hidden="true"
           size={16}
-          strokeWidth={1.8}
           className={cn(
             "shrink-0 text-subtle transition-transform duration-200",
             open && "rotate-180"
@@ -297,7 +295,7 @@ export function Panel({
             aria-label="Close"
             className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-field-hover hover:text-fg"
           >
-            <IconClose size={18} strokeWidth={1.8} />
+            <IconClose size={18} />
           </button>
         </header>
 

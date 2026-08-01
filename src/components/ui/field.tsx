@@ -65,8 +65,8 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
   )
 })
 
-const Eye    = () => <IconShow size={16} strokeWidth={1.8} />
-const EyeOff = () => <IconHide size={16} strokeWidth={1.8} />
+const Eye    = () => <IconShow size={16} />
+const EyeOff = () => <IconHide size={16} />
 
 /* ── Primary button ────────────────────────────────────────────────────── */
 
@@ -120,7 +120,6 @@ function Spinner() {
   return (
     <IconSpinner
       size={16}
-      strokeWidth={2.5}
       aria-hidden="true"
       className="relative animate-spin"
     />
@@ -135,7 +134,7 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
       role="alert"
       className="flex items-start gap-2 rounded-field border border-danger/25 bg-danger/10 px-3.5 py-2.5 text-[13px] text-danger"
     >
-      <IconAlert size={16} strokeWidth={1.9} aria-hidden="true" className="mt-px shrink-0" />
+      <IconAlert size={16} aria-hidden="true" className="mt-px shrink-0" />
       <span>{children}</span>
     </p>
   )
@@ -144,7 +143,7 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
 export function InfoNote({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex items-start gap-2 rounded-field border border-brand-500/25 bg-brand-500/10 px-3.5 py-2.5 text-[13px] text-brand-on-tint">
-      <IconInfo size={16} strokeWidth={1.9} aria-hidden="true" className="mt-px shrink-0" />
+      <IconInfo size={16} aria-hidden="true" className="mt-px shrink-0" />
       <span>{children}</span>
     </p>
   )

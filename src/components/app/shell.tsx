@@ -63,6 +63,7 @@ import { usePathname } from "next/navigation"
 import { Logo } from "@/components/brand/logo"
 import { SignOutButton } from "@/components/app/sign-out-button"
 import { ThemeToggle } from "@/components/theme/theme-toggle"
+import { SidebarAura } from "@/components/app/sidebar-aura"
 import { cn } from "@/lib/utils"
 import type { NavItem } from "@/components/app/app-shell"
 
@@ -93,10 +94,20 @@ export function Shell({
     <div className="relative flex min-h-screen bg-ink">
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       <aside className="sticky top-0 z-30 hidden h-screen w-[248px] shrink-0 flex-col border-r border-line px-4 py-6 lg:flex">
-        {/* Glass, and a bloom behind it so the rail is not a flat slab. Both
-            are behind the content, hence the -z-10 and the relative children. */}
-        <div aria-hidden="true" className="glass absolute inset-0 -z-10 rounded-none border-0 border-r border-line" />
-        <div aria-hidden="true" className="wash-glow-top pointer-events-none absolute inset-0 -z-10 opacity-60" />
+        {/* Two layers behind the content, and the z-order between them is not a
+            detail. The glass is `--glass-bg`, a 70%-opaque near-black; putting
+            it *over* the constellation erases it completely, which is exactly
+            what the first render of this looked like — a mesh that was there in
+            the markup and invisible on screen.
+         *
+            So: glass at -z-20 as the rail's surface, constellation at -z-10
+            drawn on top of it, content above both. Explicit levels rather than
+            two -z-10s ordered by DOM position, because that is a fragile way to
+            express "this must be above that". */}
+        <div aria-hidden="true" className="glass absolute inset-0 -z-20 rounded-none border-0 border-r border-line" />
+        <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden">
+          <SidebarAura />
+        </div>
 
         <Link href="/" className="relative mb-8 px-2">
           <Logo size={26} />
@@ -111,7 +122,7 @@ export function Shell({
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] transition-colors",
+                  "group relative flex items-center gap-3 rounded-xl py-2 pl-2 pr-3 text-[13.5px] transition-colors",
                   active
                     ? "bg-field-hover font-medium text-fg"
                     : "text-muted hover:bg-field-soft hover:text-fg"
@@ -123,13 +134,24 @@ export function Shell({
                 {active && (
                   <span
                     aria-hidden="true"
-                    className="absolute inset-y-1.5 left-0 w-[2px] rounded-full bg-brand-400"
+                    className="absolute inset-y-2 -left-1 w-[2.5px] rounded-full bg-brand-400"
                   />
                 )}
+
+                {/* The icon gets a tile of its own.
+                 *
+                 * Nine bare glyphs in a column are nine grey marks at the same
+                 * weight, and the eye has nothing to land on — which is what
+                 * made this rail look unfinished no matter which icon set was
+                 * in it. A container gives each one a footprint, and lets the
+                 * active state be a lit surface rather than merely a different
+                 * shade of grey. */}
                 <span
                   className={cn(
-                    "shrink-0 transition-colors",
-                    active ? "text-brand-300" : "text-subtle group-hover:text-muted"
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all duration-200",
+                    active
+                      ? "border-brand-500/40 bg-brand-500/15 text-brand-200 shadow-[0_0_18px_-6px_var(--brand-500)]"
+                      : "border-transparent bg-field-soft text-subtle group-hover:border-line group-hover:bg-field group-hover:text-muted"
                   )}
                 >
                   {item.icon}
@@ -169,13 +191,20 @@ export function Shell({
                   href={item.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] whitespace-nowrap transition-colors",
+                    "flex shrink-0 items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-3 text-[13px] whitespace-nowrap transition-colors",
                     active
                       ? "bg-field-hover font-medium text-fg"
                       : "text-muted hover:text-fg"
                   )}
                 >
-                  <span className={cn("shrink-0", active ? "text-brand-300" : "text-subtle")}>
+                  <span
+                    className={cn(
+                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
+                      active
+                        ? "border-brand-500/40 bg-brand-500/15 text-brand-200"
+                        : "border-transparent bg-field-soft text-subtle"
+                    )}
+                  >
                     {item.icon}
                   </span>
                   {item.label}
