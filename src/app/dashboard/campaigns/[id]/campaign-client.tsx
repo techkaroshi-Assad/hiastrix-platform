@@ -274,6 +274,9 @@ export function LeadImport({
    * should be asked to remember a string they would have to go and look up.
    */
   const [crmTags, setCrmTags] = useState<string[] | null>(null)
+  /** Typed filter over the tag list. A sub-account with a hundred tags makes a
+   *  plain dropdown a scrolling exercise. */
+  const [tagQuery, setTagQuery] = useState("")
 
   useEffect(() => {
     if (!crmConnected) return
@@ -548,13 +551,12 @@ export function LeadImport({
                   {crmTags === null ? (
                     <p className="text-[13px] text-subtle">Reading your tags&hellip;</p>
                   ) : crmTags.length > 0 ? (
-                    <Select
-                      label="Tag"
-                      value={crmTag}
-                      onChange={e => setCrmTag(e.target.value)}
-                      placeholder="Choose a tag…"
-                      options={crmTags.map(t => ({ value: t, label: t }))}
-                      hint="Everyone in your CRM carrying this tag is copied in. It's a snapshot — tagging someone afterwards won't add them to a campaign that's already running."
+                    <TagPicker
+                      tags={crmTags}
+                      query={tagQuery}
+                      onQuery={setTagQuery}
+                      selected={crmTag}
+                      onSelect={setCrmTag}
                     />
                   ) : (
                     <Field
@@ -641,5 +643,89 @@ export function LeadImport({
         </div>
       </Panel>
     </>
+  )
+}
+
+/* ── Choosing a tag out of a long list ─────────────────────────────────── */
+
+/**
+ * A dropdown was the first fix, and it was not enough.
+ *
+ * Replacing free text with a picker stopped the typos that made a campaign pull
+ * nobody. But a sub-account can carry a hundred tags, and a plain select turns
+ * that into scrolling and squinting for one you already know the name of.
+ * Typing to narrow is how anyone actually finds a tag.
+ *
+ * Still a list of real tags underneath — the box filters, it never accepts
+ * something that is not there, because a tag has to match the CRM exactly or
+ * the campaign silently pulls an empty list.
+ */
+function TagPicker({
+  tags,
+  query,
+  onQuery,
+  selected,
+  onSelect,
+}: {
+  tags: string[]
+  query: string
+  onQuery: (q: string) => void
+  selected: string
+  onSelect: (tag: string) => void
+}) {
+  const q = query.trim().toLowerCase()
+  const shown = q ? tags.filter(t => t.toLowerCase().includes(q)) : tags
+
+  return (
+    <div className="space-y-2">
+      <Field
+        label="Tag"
+        value={query}
+        onChange={e => onQuery(e.target.value)}
+        placeholder="Search your tags…"
+        hint="Everyone in your CRM carrying this tag is copied in. It's a snapshot — tagging someone afterwards won't add them to a campaign that's already running."
+      />
+
+      {selected && (
+        <p className="text-[12.5px] text-muted">
+          Pulling <span className="text-fg">{selected}</span>.
+        </p>
+      )}
+
+      {shown.length === 0 ? (
+        <p className="text-[12.5px] text-subtle">
+          No tag matches &ldquo;{query}&rdquo;. It has to exist in your CRM already.
+        </p>
+      ) : (
+        <div className="max-h-44 overflow-y-auto rounded-field border border-line bg-field-soft p-1.5">
+          <div className="flex flex-wrap gap-1.5">
+            {shown.map(tag => {
+              const on = tag === selected
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => onSelect(on ? "" : tag)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[12px] transition-colors",
+                    on
+                      ? "border-brand-500/60 bg-brand-500/15 text-brand-on-tint"
+                      : "border-line bg-field text-muted hover:border-line-strong hover:text-fg"
+                  )}
+                >
+                  {tag}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {q && shown.length > 0 && (
+        <p className="text-[11.5px] text-subtle">
+          {shown.length} of {tags.length} tags
+        </p>
+      )}
+    </div>
   )
 }

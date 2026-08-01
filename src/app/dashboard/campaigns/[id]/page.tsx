@@ -7,6 +7,7 @@ import { tenantNav } from "@/lib/nav"
 import { AppShell, StatCard } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { campaignReadiness } from "@/lib/dialer/readiness"
+import { whyIdle } from "@/lib/dialer/idle"
 import { CampaignControls, LeadImport, LiveRefresh } from "./campaign-client"
 import { leadTone, LEAD_LABEL } from "../tones"
 
@@ -45,7 +46,7 @@ export default async function CampaignPage({
   const where: Record<string, unknown> = { campaignId: campaign.id }
   if (sp.state) where.state = sp.state
 
-  const [counts, leads, total, dialled, readiness] = await Promise.all([
+  const [counts, leads, total, dialled, readiness, idle] = await Promise.all([
     prisma.campaignLead.groupBy({
       by: ["state"],
       where: { campaignId: campaign.id },
@@ -67,6 +68,14 @@ export default async function CampaignPage({
     // Shown as a warning before anyone presses start, rather than as an error
     // afterwards.
     campaign.state === "RUNNING" ? Promise.resolve({ ok: true as const }) : campaignReadiness(campaign.id),
+    // And once it IS running: why is nothing happening this minute?
+    //
+    // A campaign with sixty-eight people loaded, an active agent, a number and
+    // a healthy balance sat reading "0 spoke to" while the dialer refused it
+    // every minute — correctly, because the local time was 21:31 and the window
+    // closed at 19:00. The engine was right and looked broken. Nothing on this
+    // page said which.
+    whyIdle(campaign.id),
   ])
 
   const countOf = (s: string) => counts.find(c => c.state === s)?._count._all ?? 0
@@ -112,6 +121,23 @@ export default async function CampaignPage({
       {/* Only while something is actually happening — a finished campaign has
           no reason to keep asking the server whether it has changed. */}
       {campaign.state === "RUNNING" && <LiveRefresh />}
+
+      {/* Why nothing is happening. Above the numbers, because the numbers are
+          what prompted the question. */}
+      {idle && !campaign.pausedReason && (
+        <div
+          className={
+            idle.normal
+              ? "mb-5 rounded-2xl border border-line bg-field-soft px-5 py-4"
+              : "mb-5 rounded-2xl border border-warning/40 bg-warning/[0.08] px-5 py-4"
+          }
+        >
+          <p className={idle.normal ? "text-[13px] font-medium" : "text-[13px] font-medium text-warning"}>
+            {idle.label}
+          </p>
+          <p className="mt-1 text-[13px] font-light leading-relaxed text-muted">{idle.detail}</p>
+        </div>
+      )}
 
       {campaign.pausedReason && (
         <div className="mb-5 rounded-2xl border border-warning/25 bg-warning/10 px-5 py-4">
