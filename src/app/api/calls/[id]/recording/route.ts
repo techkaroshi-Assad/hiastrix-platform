@@ -11,10 +11,9 @@
  *
  *   <Error><Code>InvalidArgument</Code><Message>Authorization</Message></Error>
  *
- * The organisation has HIPAA mode switched on at the voice provider, and in
- * that mode recordings are kept in a private bucket that the returned URL
- * cannot open. The provider's own documentation is explicit that the artifact
- * has to be fetched through their API with the private key instead.
+ * Nothing to do with HIPAA — that add-on is switched off on this account, and
+ * the bucket merely happens to be named for it. The provider simply publishes
+ * the unsigned path on the webhook and keeps the signed one behind their API.
  *
  * ── It named the vendor ────────────────────────────────────────────────────
  *
@@ -40,40 +39,30 @@ export const dynamic = "force-dynamic"
 /**
  * Ask the provider for the bytes.
  *
- * Two ways, because the private-bucket URL and the API-mediated fetch are both
- * plausible readings of the documentation and only one of them is going to work
- * for a given organisation. Trying the cheap one first and falling back costs a
- * round trip on the path that fails and nothing at all on the path that works —
- * which is a better trade than shipping one guess and finding out from a
- * customer.
+ * The URL stored on the call — the one that arrives on the end-of-call webhook —
+ * is an unsigned path into a private bucket. It opens for nobody, with or
+ * without an API key, and both the browser and an authenticated fetch get the
+ * same refusal:
  *
- * Whichever succeeds is logged, so this stops being a guess after the first
- * real request.
+ *   <Error><Code>InvalidArgument</Code><Message>Authorization</Message></Error>
+ *
+ * The playable URL lives on a *different field entirely*. Reading the call back
+ * through the provider's API returns `presignedMonoUrl` and its siblings —
+ * properly signed, and valid for thirty minutes. The unsigned `recordingUrl`
+ * sits right beside them on the same object, which is why this took two wrong
+ * guesses to find: every obvious field name is the one that does not work.
+ *
+ * The signed link is fetched with **no** Authorization header. It carries its
+ * own signature in the query string, and adding a bearer token on top is how
+ * you turn a valid request into a rejected one.
+ *
+ * Because the signature expires, this is fetched fresh on every play. There is
+ * nothing here worth caching — a stored signed URL is a broken link with a
+ * thirty-minute fuse.
  */
-async function fetchRecording(
-  storedUrl: string,
-  vapiCallId: string | null
-): Promise<Response | null> {
+async function fetchRecording(vapiCallId: string | null): Promise<Response | null> {
   const key = process.env.VAPI_API_KEY
-  if (!key) return null
-
-  // 1 · The stored URL, authenticated. Works when the object store accepts the
-  //     provider's bearer token, and when the bucket is public.
-  try {
-    const direct = await fetch(storedUrl, {
-      headers: { Authorization: `Bearer ${key}` },
-      cache: "no-store",
-    })
-    if (direct.ok) return direct
-    console.warn(`[calls/recording] direct fetch ${direct.status}`)
-  } catch (error) {
-    console.error("[calls/recording] direct", error)
-  }
-
-  // 2 · Re-read the call through the API, which is what the provider tells
-  //     HIPAA organisations to do, and take whatever URL it hands back now —
-  //     typically a freshly signed one.
-  if (!vapiCallId) return null
+  if (!key || !vapiCallId) return null
 
   try {
     const res = await fetch(`https://api.vapi.ai/call/${vapiCallId}`, {
@@ -86,31 +75,27 @@ async function fetchRecording(
     }
 
     const call = await res.json() as {
-      recordingUrl?: string
-      artifact?: { recordingUrl?: string; recording?: { stereoUrl?: string; mono?: { combinedUrl?: string } } }
+      artifact?: {
+        presignedMonoUrl?: string
+        presignedStereoUrl?: string
+      }
     }
 
-    const fresh =
-      call.artifact?.recording?.mono?.combinedUrl ??
-      call.artifact?.recording?.stereoUrl ??
-      call.artifact?.recordingUrl ??
-      call.recordingUrl
-
-    // A URL identical to the one we already hold is not a fresh one, and
-    // fetching it again would only repeat the failure above.
-    if (!fresh || fresh === storedUrl) return null
-
-    const second = await fetch(fresh, {
-      headers: { Authorization: `Bearer ${key}` },
-      cache: "no-store",
-    })
-    if (second.ok) {
-      console.info("[calls/recording] served via API re-read")
-      return second
+    // Mono first: it is both sides of the conversation mixed together, which is
+    // what somebody reviewing a call wants. Stereo splits agent and caller onto
+    // separate channels — useful, but not the default anyone expects to hear.
+    const signed = call.artifact?.presignedMonoUrl ?? call.artifact?.presignedStereoUrl
+    if (!signed) {
+      console.warn("[calls/recording] no presigned url on the call")
+      return null
     }
-    console.warn(`[calls/recording] refreshed fetch ${second.status}`)
+
+    const audio = await fetch(signed, { cache: "no-store" })
+    if (audio.ok) return audio
+
+    console.warn(`[calls/recording] signed fetch ${audio.status}`)
   } catch (error) {
-    console.error("[calls/recording] refresh", error)
+    console.error("[calls/recording]", error)
   }
 
   return null
@@ -133,7 +118,7 @@ export async function GET(
 
   if (!call?.recordingUrl) return new Response(null, { status: 404 })
 
-  const upstream = await fetchRecording(call.recordingUrl, call.vapiCallId)
+  const upstream = await fetchRecording(call.vapiCallId)
   if (!upstream?.body) {
     // Deliberately plain. The tenant does not need to know whose bucket it is.
     return Response.json(
