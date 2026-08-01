@@ -14,6 +14,7 @@ import { vapiAssistants } from "@/lib/vapi/client"
 import { AgentConfigInputSchema, readConfig } from "@/lib/vapi/config"
 import { AgentPatchSchema, firstIssue } from "@/lib/vapi/agent"
 import { applyAgentAvailability } from "@/lib/agents/availability"
+import { blockersFor } from "@/lib/agents/prompt-check"
 import { buildAssistantPayload } from "@/lib/vapi/payload"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
@@ -60,6 +61,41 @@ export async function PATCH(
     const nextConfig = AgentConfigInputSchema.parse(
       patch.config ? { ...storedConfig, ...patch.config } : storedConfig
     )
+
+    /*
+     * Nothing broken goes on the air.
+     *
+     * The builder has warned about faults like these for weeks and an agent
+     * whose prompt carried the same section four times went live anyway,
+     * because a warning is a thing you scroll past. Blockers are the small set
+     * of faults nobody could have intended — a duplicated section, a
+     * placeholder that will be read aloud, a tool the prompt never mentions —
+     * and they stop the agent being switched on.
+     *
+     * Checked here rather than only in the editor because the editor is not
+     * what publishes. This route is.
+     *
+     * Only ever on the way *to* ACTIVE. Switching an agent off must always
+     * work, whatever state its prompt is in — refusing to let somebody stop a
+     * misbehaving agent would be the worst possible reading of "safety".
+     */
+    if (patch.status === "ACTIVE") {
+      const blockers = blockersFor({
+        systemPrompt: patch.systemPrompt ?? agent.systemPrompt ?? "",
+        firstMessage: patch.firstMessage ?? agent.firstMessage ?? "",
+        tools:        nextConfig.tools,
+        config:       nextConfig,
+        usedForOutbound: false,
+      })
+
+      if (blockers.length) {
+        return apiError(
+          `${blockers[0]!.title}. Fix that before switching this agent on${
+            blockers.length > 1 ? `, along with ${blockers.length - 1} other issue${blockers.length > 2 ? "s" : ""}` : ""
+          }.`
+        )
+      }
+    }
 
     try {
       if (isToggleOnly) {

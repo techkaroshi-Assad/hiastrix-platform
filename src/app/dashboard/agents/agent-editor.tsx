@@ -40,10 +40,16 @@ import {
   BACKGROUND_SOUNDS,
   LANGUAGES,
   type AgentConfig,
+  type AgentTool,
 } from "@/lib/vapi/config"
 import { ToolsEditor } from "@/components/agents/tools-editor"
 import { JsonEditor } from "@/components/agents/json-editor"
 import { checkAgent, countBySeverity, type Finding } from "@/lib/agents/prompt-check"
+import {
+  promptContains, tidyPrompt, approxTokens, templateOverwrites,
+  type TidyResult, type Overwrite,
+} from "@/lib/agents/prompt-structure"
+import { enforcedRules } from "@/lib/crm/guidance"
 import { AGENT_TEMPLATES, CATEGORY_LABEL, type AgentTemplate } from "@/lib/agents/templates"
 import { CRM_TOOLS, defaultCrmTool } from "@/lib/vapi/tools"
 import { cn } from "@/lib/utils"
@@ -58,6 +64,11 @@ const TABS: { key: TabKey; label: string; blurb: string }[] = [
   { key: "after",        label: "After the call", blurb: "Recording, summaries and extraction." },
   { key: "json",         label: "JSON",           blurb: "The whole thing, editable." },
 ]
+
+/** The human names of the actions currently switched on, for "this will go". */
+function toolLabels(tools: AgentTool[]): string[] {
+  return tools.map(t => CRM_TOOLS.find(s => s.type === t.type)?.label ?? t.type)
+}
 
 export function AgentEditor({
   agentId,
@@ -84,6 +95,19 @@ export function AgentEditor({
   const [error, setError] = useState<string | null>(null)
   const [jsonValid, setJsonValid] = useState(true)
   const [applied, setApplied] = useState<string | null>(null)
+  /** A one-line acknowledgement — "already there", "nothing to remove". */
+  const [note, setNote] = useState<string | null>(null)
+  /** What tidying would remove, shown before anything is applied. */
+  const [tidy, setTidy] = useState<TidyResult | null>(null)
+  const [preview, setPreview] = useState(false)
+  /**
+   * A template waiting on an answer, because applying it would destroy writing
+   * the tenant did themselves. Null in the ordinary case — an empty agent, or
+   * swapping one untouched template for another — where it applies straight
+   * away and says nothing.
+   */
+  const [pending, setPending] =
+    useState<{ template: AgentTemplate; overwrites: Overwrite[] } | null>(null)
 
   const c = draft.config
   const setConfig = (patch: Partial<AgentConfig>) =>
@@ -110,16 +134,107 @@ export function AgentEditor({
 
   const counts = countBySeverity(findings)
 
+  const promptTokens = useMemo(() => approxTokens(draft.systemPrompt), [draft.systemPrompt])
+
+  /* The prompt as the model actually receives it — theirs, plus everything we
+   * append at dial time. */
+  const assembledPrompt = useMemo(
+    () => draft.systemPrompt + enforcedRules(c.tools, { timeZone: previewTimeZone(c.tools) }),
+    [draft.systemPrompt, c.tools]
+  )
+
+  /**
+   * Add a block to the prompt — once.
+   *
+   * This used to be a blind concat, and a live agent's prompt was found
+   * carrying the same eleven-line section four times because of it. Each
+   * enabled tool offers its own near-identical block, so four tools and four
+   * presses produced four copies, each one paid for on every turn of every
+   * call. Nothing warned, and repetition makes a model follow instructions
+   * *less* reliably, not more.
+   *
+   * `promptContains` compares on normalised lines, so a block already present
+   * in slightly different punctuation is still recognised as present.
+   */
   function appendToPrompt(line: string) {
-    setDraft(d => ({
-      ...d,
-      systemPrompt: d.systemPrompt.trimEnd()
-        ? `${d.systemPrompt.trimEnd()}\n${line}`
-        : line,
-    }))
+    setDraft(d => {
+      if (promptContains(d.systemPrompt, line)) {
+        setNote("That's already in the instructions — nothing added.")
+        return d
+      }
+      setNote(null)
+      return {
+        ...d,
+        systemPrompt: d.systemPrompt.trimEnd()
+          ? `${d.systemPrompt.trimEnd()}\n\n${line}`
+          : line,
+      }
+    })
   }
 
+  /**
+   * Remove what is duplicated, after showing what will go.
+   *
+   * Two presses on purpose: the first shows what would be removed, the second
+   * does it. A prompt is the tenant's own writing and the platform does not get
+   * to rewrite it behind their back — and the preview is also the explanation
+   * of why the agent could not be published.
+   */
+  function runTidy() {
+    const result = tidyPrompt(draft.systemPrompt)
+    if (!result.changed) {
+      setTidy(null)
+      setNote("Nothing repeated to remove.")
+      return
+    }
+    setTidy(result)
+  }
+
+  function applyTidy() {
+    if (!tidy) return
+    setDraft(d => ({ ...d, systemPrompt: tidy.prompt }))
+    setTidy(null)
+    setNote("Repeated sections removed. Nothing else was changed.")
+  }
+
+  /**
+   * Ask before overwriting somebody's own words.
+   *
+   * Pressing "Use" on a template used to replace the instructions, the greeting
+   * and the enabled actions on the spot, with no warning and nothing to undo
+   * with. On an empty agent that is exactly right and stopping to ask would be
+   * pure friction — so it still applies silently there, and only stops when the
+   * text in the box is the tenant's own writing rather than one of ours they
+   * have not touched.
+   */
   function applyTemplate(t: AgentTemplate) {
+    const overwrites = templateOverwrites(
+      {
+        systemPrompt: draft.systemPrompt,
+        firstMessage: draft.firstMessage,
+        toolLabels: toolLabels(c.tools),
+      },
+      {
+        systemPrompt: t.systemPrompt,
+        firstMessage: t.firstMessage,
+        toolLabels: t.tools
+          .map(type => CRM_TOOLS.find(s => s.type === type)?.label ?? type),
+      },
+      AGENT_TEMPLATES,
+    )
+
+    if (!overwrites.length) { commitTemplate(t, false); return }
+    setNote(null)
+    setPending({ template: t, overwrites })
+  }
+
+  /**
+   * @param keepWriting take the actions and the settings, leave their words
+   *   alone. This is the option that did not exist before: the reason people
+   *   reach for a template on a half-written agent is usually the tool ordering
+   *   and the call settings, not the prose.
+   */
+  function commitTemplate(t: AgentTemplate, keepWriting: boolean) {
     const tools = t.tools
       .map(type => CRM_TOOLS.find(s => s.type === type))
       .filter((s): s is NonNullable<typeof s> => Boolean(s))
@@ -129,11 +244,15 @@ export function AgentEditor({
       ...d,
       // The name is theirs. Everything else is the template's.
       name: d.name,
-      firstMessage: t.firstMessage,
-      systemPrompt: t.systemPrompt,
+      firstMessage: keepWriting ? d.firstMessage : t.firstMessage,
+      systemPrompt: keepWriting ? d.systemPrompt : t.systemPrompt,
       config: { ...DEFAULT_CONFIG, ...d.config, ...t.config, tools },
     }))
     setApplied(t.id)
+    setPending(null)
+    setNote(keepWriting
+      ? "Actions and settings taken from the template. Your instructions are untouched."
+      : null)
     setTab("identity")
   }
 
@@ -196,6 +315,16 @@ export function AgentEditor({
           <div className="space-y-5">
             {!editing && <Templates applied={applied} onApply={applyTemplate} />}
 
+            {pending && (
+              <TemplateWarning
+                template={pending.template}
+                overwrites={pending.overwrites}
+                onReplace={() => commitTemplate(pending.template, false)}
+                onKeep={() => commitTemplate(pending.template, true)}
+                onCancel={() => setPending(null)}
+              />
+            )}
+
             <Block title="The basics">
               <Field
                 label="Agent name"
@@ -224,6 +353,82 @@ export function AgentEditor({
                 onChange={e => setDraft({ ...draft, systemPrompt: e.target.value })}
                 rows={16} required minLength={10} maxLength={8000}
               />
+              {/*
+                Length in tokens rather than characters, because tokens are what
+                is paid for on every turn of every call — and a prompt that had
+                quietly grown to four copies of one section was invisible when
+                the only number on screen was a character count against a limit
+                nobody was near.
+              */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[12px] font-light text-subtle">
+                  About {promptTokens.toLocaleString()} tokens, carried on every turn
+                  of every call.
+                </p>
+                <div className="flex gap-2">
+                  <SecondaryButton type="button" onClick={runTidy}>
+                    Remove anything repeated
+                  </SecondaryButton>
+                  <SecondaryButton type="button" onClick={() => setPreview(p => !p)}>
+                    {preview ? "Hide" : "Preview"} what the agent gets
+                  </SecondaryButton>
+                </div>
+              </div>
+
+              {note && <InfoNote>{note}</InfoNote>}
+
+              {/* What would go, before anything goes. */}
+              {tidy && (
+                <div className="rounded-field border border-warning/40 bg-warning/[0.07] px-4 py-3.5">
+                  <p className="text-[13px] font-medium text-warning">
+                    {tidy.removedBlocks.length + tidy.removedLines.length} repeated{" "}
+                    {tidy.removedBlocks.length + tidy.removedLines.length === 1 ? "piece" : "pieces"} to remove
+                  </p>
+                  <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-[12.5px] text-muted">
+                    {[...tidy.removedBlocks, ...tidy.removedLines].slice(0, 12).map((r, i) => (
+                      <li key={i} className="truncate">— {r}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-[12px] leading-relaxed text-subtle">
+                    Only second and later copies go. Everything your prompt says, it
+                    will still say.
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <SecondaryButton type="button" onClick={() => setTidy(null)}>
+                      Leave it
+                    </SecondaryButton>
+                    <SecondaryButton
+                      type="button"
+                      onClick={applyTidy}
+                      className="border-brand-500/60 text-brand-on-tint"
+                    >
+                      Remove them
+                    </SecondaryButton>
+                  </div>
+                </div>
+              )}
+
+              {/*
+                The prompt as the agent actually receives it.
+                
+                What a tenant writes is not what the model gets — the CRM rules,
+                the consent line, the date and the caller's number are all added
+                at dial time. Four repeated sections would have been obvious the
+                moment anyone looked at the assembled thing, and so would an
+                agent thinking in UTC.
+              */}
+              {preview && (
+                <div className="rounded-field border border-line bg-field-soft p-3">
+                  <p className="mb-2 text-[12px] text-subtle">
+                    Everything below is sent to the model on every call. The part
+                    after the line is added by Hi-Astrix and can&rsquo;t be edited.
+                  </p>
+                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-muted">
+                    {assembledPrompt}
+                  </pre>
+                </div>
+              )}
+
               <p className="text-[12px] font-light text-subtle">
                 {draft.systemPrompt.length.toLocaleString()} of 8,000 characters. Rules about
                 the CRM — looking someone up before creating them, never inventing a
@@ -685,6 +890,67 @@ function FindingCard({
   )
 }
 
+/**
+ * What a template is about to take away.
+ *
+ * Deliberately not a modal. It appears in the page, under the template list,
+ * with the instructions it is talking about still visible below it — the
+ * decision is easier to make while you can see the thing being decided about.
+ */
+function TemplateWarning({
+  template, overwrites, onReplace, onKeep, onCancel,
+}: {
+  template: AgentTemplate
+  overwrites: Overwrite[]
+  onReplace: () => void
+  onKeep: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="rounded-2xl border border-warning/40 bg-warning/8 px-6 py-5">
+      <h3 className="text-[13.5px] font-medium">
+        “{template.name}” would replace what you&apos;ve written
+      </h3>
+      <p className="mt-1 text-[12.5px] font-light text-muted">
+        This can&apos;t be undone, so here&apos;s exactly what goes:
+      </p>
+
+      <ul className="mt-3 space-y-1.5">
+        {overwrites.map(o => (
+          <li key={o.field} className="text-[12.5px] font-light">
+            <span className="text-fg">{o.label}</span>
+            <span className="text-subtle"> — {o.detail}</span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onReplace}
+          className="rounded-field border border-warning/60 bg-warning/15 px-3.5 py-2 text-[12.5px] text-fg transition-colors hover:border-warning"
+        >
+          Replace it with the template
+        </button>
+        <button
+          type="button"
+          onClick={onKeep}
+          className="rounded-field border border-line-strong bg-field px-3.5 py-2 text-[12.5px] text-fg transition-colors hover:border-brand-400"
+        >
+          Keep my writing, take the actions and settings
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-field px-3.5 py-2 text-[12.5px] font-light text-muted transition-colors hover:text-fg"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Templates({
   applied, onApply,
 }: { applied: string | null; onApply: (t: AgentTemplate) => void }) {
@@ -866,4 +1132,20 @@ function ModelPicker({
       )}
     </div>
   )
+}
+
+/**
+ * The timezone the preview should show.
+ *
+ * Mirrors `effectiveTimeZone` on the server — the availability tool's setting,
+ * or UTC. Duplicated rather than imported because that module reads the
+ * environment and cannot cross into a client component, and getting it wrong
+ * here would make the preview lie about the one thing it exists to reveal.
+ */
+function previewTimeZone(tools: AgentTool[]): string {
+  const cal = tools.find(
+    (t): t is Extract<AgentTool, { timeZone: string }> =>
+      "timeZone" in t && typeof t.timeZone === "string" && t.timeZone.trim() !== ""
+  )
+  return cal?.timeZone.trim() ?? "UTC"
 }

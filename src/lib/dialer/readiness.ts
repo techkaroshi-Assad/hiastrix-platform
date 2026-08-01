@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/prisma"
 import { verdictFor } from "@/lib/billing/can-call"
 import { readConfig } from "@/lib/vapi/config"
+import { blockersFor } from "@/lib/agents/prompt-check"
 
 export type Readiness = { ok: true } | { ok: false; reason: string }
 
@@ -23,7 +24,7 @@ export async function campaignReadiness(campaignId: string): Promise<Readiness> 
       tenant: {
         include: { package: { select: { minutesIncluded: true, overageRateCents: true } } },
       },
-      agent: { select: { id: true, name: true, status: true, config: true } },
+      agent: { select: { id: true, name: true, status: true, config: true, systemPrompt: true, firstMessage: true } },
     },
   })
   if (!campaign) return { ok: false, reason: "That campaign no longer exists." }
@@ -54,6 +55,29 @@ export async function campaignReadiness(campaignId: string): Promise<Readiness> 
 
   if (campaign.agent.status !== "ACTIVE") {
     return { ok: false, reason: `Turn ${campaign.agent.name} on before starting this campaign.` }
+  }
+
+  /*
+   * And the agent's setup has to be fit to run.
+   *
+   * The same gate as switching an agent on, asked again here because a campaign
+   * is the other way an agent reaches real people — and a prompt carrying four
+   * copies of one section costs four times as much across a list of hundreds as
+   * it does on one inbound call.
+   */
+  const agentConfig = readConfig(campaign.agent.config)
+  const blockers = blockersFor({
+    systemPrompt: campaign.agent.systemPrompt ?? "",
+    firstMessage: campaign.agent.firstMessage ?? "",
+    tools:        agentConfig.tools,
+    config:       agentConfig,
+    usedForOutbound: true,
+  })
+  if (blockers.length) {
+    return {
+      ok: false,
+      reason: `${campaign.agent.name} can't run a campaign yet — ${blockers[0]!.title.toLowerCase()}. Open the agent and fix that first.`,
+    }
   }
 
   /* ── A number to call from ─────────────────────────────────────────── */

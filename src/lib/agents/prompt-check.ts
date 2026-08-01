@@ -28,8 +28,23 @@
  */
 
 import type { AgentTool, AgentToolType } from "@/lib/vapi/tools"
+import { checkStructure } from "@/lib/agents/prompt-structure"
 
-export type Severity = "problem" | "suggestion"
+/**
+ * Three levels, and the top one is new.
+ *
+ * `problem` and `suggestion` were both advisory, and an agent whose prompt
+ * carried the same paragraph four times went live anyway — because a warning is
+ * a thing you scroll past. A `blocker` is not advice: the platform refuses to
+ * put the agent on the air until it is gone.
+ *
+ * The bar is deliberately high. A blocker must be something nobody could
+ * reasonably have intended — a duplicated section, a placeholder that will be
+ * read aloud. Anything arguable stays a warning, because a platform that
+ * refuses to publish over a matter of taste is one people learn to route
+ * around.
+ */
+export type Severity = "blocker" | "problem" | "suggestion"
 
 export type Finding = {
   id: string
@@ -260,7 +275,9 @@ export function checkAgent(input: CheckInput): Finding[] {
     })
   }
 
-  if (prompt.includes("[YOUR COMPANY]") || prompt.includes("[YOUR NAME]")) {
+  // Superseded by the structural check, which recognises any placeholder shape
+  // rather than two literal strings, and blocks rather than warns.
+  if (false && (prompt.includes("[YOUR COMPANY]") || prompt.includes("[YOUR NAME]"))) {
     findings.push({
       id: "prompt:placeholder",
       severity: "problem",
@@ -352,14 +369,44 @@ export function checkAgent(input: CheckInput): Finding[] {
     })
   }
 
-  // Problems first: a list that opens with a suggestion reads as advisory.
-  return findings.sort((a, b) =>
-    a.severity === b.severity ? 0 : a.severity === "problem" ? -1 : 1
-  )
+  /* ── Is the prompt itself in a fit state? ────────────────────────── */
+  //
+  // Structure rather than subject: repeated sections, contradictions, length.
+  // Kept in its own module because it asks a different question — not "what
+  // did you set up that won't happen" but "should this ship at all".
+  for (const issue of checkStructure(prompt)) {
+    findings.push({
+      id: `structure:${issue.id}`,
+      severity: issue.blocking ? "blocker" : "problem",
+      title: issue.title,
+      detail: issue.sample
+        ? `${issue.detail} It starts “${issue.sample.slice(0, 70)}${issue.sample.length > 70 ? "…" : ""}”.`
+        : issue.detail,
+      where: "identity",
+    })
+  }
+
+  // Blockers first, then problems: a list that opens with a suggestion reads as
+  // advisory, and the first line of this list is the one people act on.
+  const rank = { blocker: 0, problem: 1, suggestion: 2 } as const
+  return findings.sort((a, b) => rank[a.severity] - rank[b.severity])
 }
 
 /** For the header count. */
 export const countBySeverity = (findings: Finding[]) => ({
+  blockers:    findings.filter(f => f.severity === "blocker").length,
   problems:    findings.filter(f => f.severity === "problem").length,
   suggestions: findings.filter(f => f.severity === "suggestion").length,
 })
+
+/**
+ * The one question the server asks before letting an agent take calls.
+ *
+ * Exported separately so the routes that put an agent on the air — attaching a
+ * number, switching it to Active, starting a campaign — all ask it the same
+ * way. A check that only runs in the editor is theatre: the API is what
+ * actually publishes.
+ */
+export function blockersFor(input: CheckInput): Finding[] {
+  return checkAgent(input).filter(f => f.severity === "blocker")
+}
