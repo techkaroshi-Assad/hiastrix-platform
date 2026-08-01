@@ -67,7 +67,7 @@ export default async function HelpPage() {
 
   // The one number worth pulling: support address is configurable, and a guide
   // that tells people to email the wrong place is worse than one that doesn't.
-  const settings = await prisma.platformSettings.findUnique({
+  const settings = await prisma.platformSettings.findFirst({
     where:  { id: true },
     select: { supportEmail: true },
   })

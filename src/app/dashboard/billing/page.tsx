@@ -41,7 +41,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
         priceCents: true, overageRateCents: true,
       },
     }),
-    prisma.platformSettings.findUnique({ where: { id: true } }),
+    prisma.platformSettings.findFirst({ where: { id: true } }),
   ])
 
   /*

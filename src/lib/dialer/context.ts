@@ -37,7 +37,7 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
         agent:  { select: { id: true, vapiAssistantId: true, config: true, systemPrompt: true } },
       },
     }),
-    prisma.platformSettings.findUnique({ where: { id: true } }),
+    prisma.platformSettings.findFirst({ where: { id: true } }),
   ])
 
   if (!campaign) return null

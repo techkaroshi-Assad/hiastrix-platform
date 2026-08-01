@@ -55,7 +55,7 @@ export async function runHeartbeat(now = Date.now()): Promise<TickResult> {
 
   // The 2am switch. Checked first and cheaply, so turning it off actually stops
   // things rather than merely stopping new campaigns.
-  const settings = await prisma.platformSettings.findUnique({ where: { id: true } })
+  const settings = await prisma.platformSettings.findFirst({ where: { id: true } })
   if (settings && settings.dialerEnabled === false) {
     return { ...result, halted: "The dialer is switched off platform-wide." }
   }

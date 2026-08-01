@@ -75,7 +75,7 @@ async function closeGatesForUnpaid(): Promise<{ disabled: number; campaignsPause
     take: MAX_TENANTS,
   })
 
-  const settings = await prisma.platformSettings.findUnique({ where: { id: true } })
+  const settings = await prisma.platformSettings.findFirst({ where: { id: true } })
   const fallbackRate = settings?.overageRateCents ?? 35
 
   let disabled = 0

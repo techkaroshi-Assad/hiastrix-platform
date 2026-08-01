@@ -60,7 +60,7 @@ export async function processCallEnded(params: {
       where: { id: tenantId },
       include: { package: true },
     }),
-    prisma.platformSettings.findUnique({ where: { id: true } }),
+    prisma.platformSettings.findFirst({ where: { id: true } }),
   ])
 
   const minutesBilled  = Math.ceil(durationSeconds / 60)

@@ -27,14 +27,14 @@ export default async function AdminSettingsPage() {
   const admin = await requireAdmin()
 
   const [settings, admins] = await Promise.all([
-    prisma.platformSettings.findUnique({ where: { id: true } }),
+    prisma.platformSettings.findFirst({ where: { id: true } }),
     prisma.adminUser.findMany({ orderBy: { createdAt: "asc" } }),
   ])
 
   // The CRM is the one integration that is not purely an environment variable:
   // the client credentials are, but the agency token is granted at runtime and
   // stored, so "configured" and "connected" are genuinely different states.
-  const crmConnection = await prisma.crmConnection.findUnique({
+  const crmConnection = await prisma.crmConnection.findFirst({
     where:  { id: true },
     select: { companyId: true, connectedBy: true, updatedAt: true },
   })

@@ -91,7 +91,7 @@ export async function tenantCanCall(tenantId: string): Promise<CallVerdict> {
         package: { select: { minutesIncluded: true, overageRateCents: true } },
       },
     }),
-    prisma.platformSettings.findUnique({ where: { id: true } }),
+    prisma.platformSettings.findFirst({ where: { id: true } }),
   ])
 
   if (!tenant) {

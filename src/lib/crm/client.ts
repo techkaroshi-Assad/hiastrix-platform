@@ -124,8 +124,23 @@ export type CrmConnectionRow = {
   expiresAt:    Date
 }
 
+/*
+ * `findFirst`, not `findUnique`, and that is not a style preference.
+ *
+ * Both single-row tables key on `id Boolean @id @default(true)` — the standard
+ * trick for a table that must hold exactly one row. Prisma 7 rejects
+ * `findUnique({ where: { id: true }, select: … })` on such a table with
+ * "Unknown argument `in`", because in a unique-where the boolean is parsed
+ * against the wrong input type once a `select` is present. Without a `select`
+ * the same call works, which is what made this so hard to see: the CRM builder
+ * showed a sub-account holding nineteen tags and fifty-two custom fields as
+ * having none of either, while the dialler read its settings happily all day.
+ *
+ * `findFirst` treats the boolean as an ordinary filter and is exact here anyway,
+ * since there is only ever one row.
+ */
 async function readConnection(): Promise<CrmConnectionRow | null> {
-  return prisma.crmConnection.findUnique({
+  return prisma.crmConnection.findFirst({
     where:  { id: true },
     select: { companyId: true, accessToken: true, refreshToken: true, expiresAt: true },
   })

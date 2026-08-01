@@ -35,7 +35,7 @@ export async function GET() {
       return nothing("unconfigured", "CRM_APP_ID is not set on this environment.")
     }
 
-    const connection = await prisma.crmConnection.findUnique({
+    const connection = await prisma.crmConnection.findFirst({
       where:  { id: true },
       select: { id: true },
     })
