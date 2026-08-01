@@ -44,6 +44,7 @@ import {
 } from "@/lib/vapi/config"
 import { ToolsEditor } from "@/components/agents/tools-editor"
 import { JsonEditor } from "@/components/agents/json-editor"
+import { SchemaBuilder } from "@/components/agents/schema-builder"
 import {
   checkAgent, countBySeverity, checkerSummary,
   type Finding, type FieldTarget,
@@ -562,7 +563,7 @@ export function AgentEditor({
           <div className="space-y-5">
             <Block
               title="Actions"
-              description="Switching one on gives the agent the ability. Your instructions decide whether it ever uses it — the checker on the right tells you which ones your prompt is silent about."
+              description="Things the agent does to your CRM while the call is happening — looking somebody up, writing a note, booking a slot. Switching one on gives it the ability; your instructions decide whether it ever uses it. (Reading values back out of the conversation afterwards is a different thing, under “After the call”.)"
             >
               <Target id="tools" flash={flash}>
                 <ToolsEditor
@@ -840,7 +841,7 @@ export function AgentEditor({
 
             <Block
               title="What's worked out"
-              description="Read from the conversation once it ends."
+              description="Read out of the conversation once it ends, onto the call record. None of this touches your CRM — it is the agent listening back, not the agent doing something."
             >
               <Toggle
                 label="Write a summary"
@@ -858,22 +859,23 @@ export function AgentEditor({
               />
               <Toggle
                 label="Pull out specific details"
-                help={<>Extracts named fields from the conversation into structured data you can read back — budget, postcode, which product they asked about. You describe what you want as a JSON schema and it’s filled in per call.</>}
+                help={<>Reads named values <em>out of</em> the conversation once it ends and puts them on the call record, so you can report on them. It writes nothing to your CRM — that is what the actions under “What it can do” are for. This is listening; those are doing.</>}
                 helpHref="/dashboard/help#calls"
-                description="Extract named values — a booking date, a budget, a postcode — into fields you can report on."
+                description="Reads values out of the conversation onto the call record — a budget, a postcode, a date. It doesn't write to your CRM."
                 checked={c.structuredDataEnabled}
                 onChange={v => setConfig({ structuredDataEnabled: v })}
               />
               {c.structuredDataEnabled && (
                 <Target id="structured-schema" flash={flash}>
-                  <TextArea
-                    label="What to pull out (JSON Schema)"
-                    rows={8}
-                    value={c.structuredDataSchema}
-                    onChange={e => setConfig({ structuredDataSchema: e.target.value })}
-                    placeholder={`{\n  "type": "object",\n  "properties": {\n    "callerName": { "type": "string" }\n  }\n}`}
-                    hint="Without this, extraction returns nothing on every call."
-                  />
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium tracking-[0.01em] text-muted">
+                      What to pull out
+                    </p>
+                    <SchemaBuilder
+                      value={c.structuredDataSchema}
+                      onChange={next => setConfig({ structuredDataSchema: next })}
+                    />
+                  </div>
                 </Target>
               )}
             </Block>

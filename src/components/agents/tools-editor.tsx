@@ -423,11 +423,29 @@ function CrmToolSettings({
         </>
       )}
 
+      {/*
+        Adding and removing are two different jobs and used to share one label.
+       
+        "Tags this agent may use — pick the ones your campaigns and workflows
+        listen for" is correct advice for *applying* a tag and actively wrong
+        for *removing* one: the tags you want it able to take off are not the
+        tags your workflows are listening for, they are usually the opposite.
+        A tenant reading the same sentence under both toggles could not work out
+        what the second one was for, and said so.
+      */}
       {spec.needsTags && (
         <>
           <CheckList
-            label="Tags this agent may use"
-            hint="Pick the ones your campaigns and workflows listen for. The agent is offered these by name."
+            label={
+              t.type === "crm.tag.remove"
+                ? "Tags it may take off"
+                : "Tags it may put on"
+            }
+            hint={
+              t.type === "crm.tag.remove"
+                ? "Only these can be removed. Everything else on a contact is left alone, whatever the caller says."
+                : "Pick the ones your campaigns and workflows listen for — applying one of these is what sets them off."
+            }
             empty="No tags in your CRM yet."
             problem={
               options.failed?.includes("tags")
@@ -445,8 +463,22 @@ function CrmToolSettings({
           */}
           {t.type === "crm.tag.add" && (
             <Toggle
-              label="Let the agent create new tags"
-              description="Off, it can only use the tags ticked above. On, those stay its first choice but it may write a new one when none of them fits. A tag that differs only in capitals or punctuation is always filed under the ticked one, so 'callback requested' can never become a second copy of 'Callback Requested'."
+              label="Let it invent new tags"
+              description="Off, it can only use the ones ticked above. On, it may write a new one when none of them fits."
+              help={
+                <>
+                  Leave this off unless you have a reason. Campaigns pull contacts
+                  <em> by tag</em>, so an invented spelling is a contact your campaign
+                  will never find — and an agent left to name things itself produced
+                  “Booked”, “Callback Requested” and “No Appointment Booked” across two
+                  live calls here.
+                  <br /><br />
+                  With it on, a tag that differs only in capitals or punctuation is
+                  still filed under the ticked one, so “callback requested” can never
+                  become a second copy of “Callback Requested”.
+                </>
+              }
+              helpHref="/dashboard/help#agents"
               checked={Boolean(t.allowNewTags)}
               onChange={v => onPatch({ allowNewTags: v })}
             />
@@ -460,9 +492,10 @@ function CrmToolSettings({
           */}
           {((t.tags as string[]) ?? []).length === 0 && !t.allowNewTags && (
             <p className="text-[12px] leading-relaxed text-warning">
-              With no tags ticked and new tags off, this action can&rsquo;t do
-              anything, so it won&rsquo;t be given to the agent. Tick at least one
-              tag, or let it create its own.
+              With nothing ticked{t.type === "crm.tag.add" ? " and new tags off" : ""},
+              this action can&rsquo;t do anything, so it won&rsquo;t be given to the
+              agent. Tick at least one tag
+              {t.type === "crm.tag.add" ? ", or let it invent its own." : "."}
             </p>
           )}
         </>

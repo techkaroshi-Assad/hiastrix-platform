@@ -300,7 +300,7 @@ export const CRM_TOOLS: CrmToolSpec[] = [
     type: "crm.contact.field.set",
     group: "contacts",
     label: "Fill in a custom field",
-    blurb: "Record an answer against one of your own fields.",
+    blurb: "Writes an answer onto the contact in your CRM, in a field you created.",
     defaultName: "set_contact_field",
     defaultDescription:
       "Record an answer against one of the workspace's custom contact fields.",
@@ -318,8 +318,8 @@ export const CRM_TOOLS: CrmToolSpec[] = [
   {
     type: "crm.tag.add",
     group: "contacts",
-    label: "Apply a tag",
-    blurb: "Tag the contact so your existing workflows take over.",
+    label: "Put a tag on",
+    blurb: "Tags the contact when the call ends a certain way, so your existing workflows take over.",
     defaultName: "add_tag",
     defaultDescription:
       "Apply a tag to the contact to record the outcome of the call. Only the tags listed for this agent are allowed.",
@@ -328,11 +328,11 @@ export const CRM_TOOLS: CrmToolSpec[] = [
   {
     type: "crm.tag.remove",
     group: "contacts",
-    label: "Remove a tag",
-    blurb: "Clear a tag that no longer applies.",
+    label: "Take a tag off",
+    blurb: "Clears a tag that no longer describes them. Pair it with “Put a tag on” to swap one for another.",
     defaultName: "remove_tag",
     defaultDescription:
-      "Remove a tag from the contact when it no longer describes them.",
+      "Remove a tag from the contact when it no longer describes them — for example when their situation has changed and a different tag now applies. Only the tags listed for this agent can be removed.",
     needsTags: true,
   },
   {

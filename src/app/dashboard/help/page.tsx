@@ -81,6 +81,7 @@ const TOPICS = [
   ["getting-started", "Getting started",           "Three things, in order, and what each one is for."],
   ["templates",       "Templates",                 "Thirty-eight starting points, including ones written for your trade."],
   ["agents",          "Agents",                    "Instructions, actions, and why an agent won't publish."],
+  ["actions-vs-extraction", "Actions vs. what's pulled out", "Two things that sound alike and do opposite jobs."],
   ["numbers",         "Phone numbers",             "How a number reaches an agent, and what happens when it doesn't."],
   ["campaigns",       "Outbound campaigns",        "Calling a list: pacing, retries, calling windows and pauses."],
   ["lists",           "Lists and do-not-call",     "Importing people, and making sure the wrong ones are never called."],
@@ -275,6 +276,77 @@ export default async function HelpPage() {
                 the agent can&rsquo;t tell an answering machine from a person: it holds a full
                 conversation with the answerphone, and that gets recorded as somebody you
                 spoke to. Your results look better than they are.
+              </p>
+            </Q>
+          </Topic>
+
+          <Topic id="actions-vs-extraction" title="Actions vs. what's pulled out" summary="Two things that sound alike and do opposite jobs." icon={<IconChecklist size={17} />}>
+            <p>
+              These get mixed up constantly, and the difference is worth two minutes
+              because it decides where your data ends up.
+            </p>
+
+            <Q q="Actions — what the agent does">
+              <p>
+                Under <strong>What it can do</strong>. These happen <em>during</em> the
+                call and they change your CRM: looking somebody up, creating them,
+                writing a note, putting a tag on, booking a slot. The caller is on the
+                line while it happens.
+              </p>
+              <p>
+                They are the reason a call is worth automating. When the call ends, the
+                work is already done — the appointment exists, the note is on the
+                record, the workflow has fired.
+              </p>
+            </Q>
+
+            <Q q="Pulling out details — what the agent noticed">
+              <p>
+                Under <strong>After the call</strong>. This happens <em>once the call
+                has ended</em>, and it writes nothing anywhere except the call record.
+                You name the things you want — a budget, a postcode, whether they own
+                the property — and each finished call carries those values so you can
+                report on them.
+              </p>
+              <p>
+                Nothing in your CRM changes. Nobody gets tagged. No workflow fires.
+              </p>
+            </Q>
+
+            <Q q="So which do I want?">
+              <p>
+                Usually both, for different things.
+              </p>
+              <p>
+                Use an <strong>action</strong> when something has to happen: they need
+                booking in, they need tagging so a follow-up goes out, the note has to
+                be on their record for whoever picks it up next.
+              </p>
+              <p>
+                Use <strong>pulling out details</strong> when you want to be able to
+                answer a question later — what was the average budget people asked
+                about, how many callers already had planning permission, which postcodes
+                are ringing us. That is reporting, not doing.
+              </p>
+              <p>
+                A rough rule: if leaving it out would mean somebody has to do a job by
+                hand, it is an action. If leaving it out would only mean you cannot make
+                a chart of it, it is a detail to pull out.
+              </p>
+            </Q>
+
+            <Q q="Do I have to write JSON for it?">
+              <p>
+                No — not any more. You name each field, pick what kind of answer it is
+                (text, a number, yes or no, a date, or a list), and say in a sentence
+                what the agent should look for. The technical version is generated for
+                you, and there is an <strong>Edit as JSON</strong> button if you would
+                rather write it yourself.
+              </p>
+              <p>
+                The sentence matters more than people expect. It is the only instruction
+                the model gets about what your field means — &ldquo;Budget&rdquo; with
+                no description is extracted by guesswork.
               </p>
             </Q>
           </Topic>
