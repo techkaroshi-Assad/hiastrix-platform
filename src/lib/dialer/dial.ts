@@ -56,6 +56,10 @@ export type DialContext = {
    */
   agentSystemPrompt: string | null
   agentConfig: unknown
+  /** The agent's own model, as `provider:id`. Repeated into the override
+   *  because the provider rejects a model object without a provider — see
+   *  lib/dialer/consent.ts. */
+  agentModel: string | null
   consentLine: string
   voicemailMessage: string | null
 }
@@ -187,6 +191,7 @@ export async function placeCall(
         assistantOverrides: campaignOverrides({
           agentSystemPrompt: ctx.agentSystemPrompt,
           agentConfig:       ctx.agentConfig,
+          agentModel:        ctx.agentModel,
           consentLine:       ctx.consentLine,
           campaignName:      ctx.campaignName,
           contactName:       lead.contactName,

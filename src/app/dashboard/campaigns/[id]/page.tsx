@@ -46,7 +46,7 @@ export default async function CampaignPage({
   const where: Record<string, unknown> = { campaignId: campaign.id }
   if (sp.state) where.state = sp.state
 
-  const [counts, leads, total, dialled, readiness, idle] = await Promise.all([
+  const [counts, leads, total, dialled, readiness, idle, onCall] = await Promise.all([
     prisma.campaignLead.groupBy({
       by: ["state"],
       where: { campaignId: campaign.id },
@@ -76,6 +76,34 @@ export default async function CampaignPage({
     // closed at 19:00. The engine was right and looked broken. Nothing on this
     // page said which.
     whyIdle(campaign.id),
+    /*
+     * Who is on the phone this second, by name and number.
+     *
+     * "On the phone now: 2" answers how many and not who, and who is the thing
+     * somebody watching a campaign actually wants — it is the difference
+     * between a number on a dashboard and being able to see the dialler
+     * working. The caller ID comes from the attempt, so it also shows which of
+     * the agent's numbers each call is going out on.
+     */
+    prisma.campaignLead.findMany({
+      where:   { campaignId: campaign.id, state: { in: ["DIALING", "IN_PROGRESS"] } },
+      orderBy: { updatedAt: "asc" },
+      take:    12,
+      select:  {
+        id: true, phoneE164: true, contactName: true, state: true, updatedAt: true,
+        attempts: {
+          where:   { state: { in: ["PLACING", "DIALING", "IN_PROGRESS", "RECONCILING"] } },
+          orderBy: { createdAt: "desc" },
+          take:    1,
+          select:  {
+            createdAt: true,
+            // Which of the agent's numbers is presenting as caller ID on this
+            // call — the useful half of "rotating across its agent's numbers".
+            phoneNumber: { select: { phoneNumber: true } },
+          },
+        },
+      },
+    }),
   ])
 
   const countOf = (s: string) => counts.find(c => c.state === s)?._count._all ?? 0
@@ -162,6 +190,41 @@ export default async function CampaignPage({
         <StatCard label="Finished" value={`${pct}%`}
                   meta={`${finished.toLocaleString()} of ${all.toLocaleString()}`} />
       </div>
+
+      {/* Who, not how many. Only while somebody is actually connected. */}
+      {onCall.length > 0 && (
+        <div className="mb-5 rounded-2xl border border-brand-500/40 bg-brand-500/[0.06] px-5 py-4">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-500 opacity-70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-500" />
+            </span>
+            <p className="text-[13px] font-medium text-brand-on-tint">
+              Calling now — {onCall.length}
+            </p>
+          </div>
+
+          <ul className="mt-3 space-y-2">
+            {onCall.map(lead => {
+              const attempt = lead.attempts[0]
+              return (
+                <li key={lead.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <span className="text-[13.5px]">
+                    {lead.contactName ?? "Unknown"}{" "}
+                    <span className="text-muted">{lead.phoneE164}</span>
+                  </span>
+                  <span className="text-[12px] text-subtle">
+                    {lead.state === "IN_PROGRESS" ? "connected" : "ringing"}
+                    {attempt?.phoneNumber?.phoneNumber
+                      ? ` · from ${attempt.phoneNumber.phoneNumber}`
+                      : ""}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
 
       <div
         className="mb-6 h-2 w-full overflow-hidden rounded-full bg-field-hover"

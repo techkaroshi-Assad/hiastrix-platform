@@ -34,7 +34,7 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
       where: { id: campaignId },
       include: {
         tenant: { select: { id: true, maxConcurrentCalls: true } },
-        agent:  { select: { id: true, vapiAssistantId: true, config: true, systemPrompt: true } },
+        agent:  { select: { id: true, vapiAssistantId: true, config: true, systemPrompt: true, model: true } },
       },
     }),
     prisma.platformSettings.findFirst({ where: { id: true } }),
@@ -105,6 +105,16 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
 
       agentSystemPrompt: campaign.agent.systemPrompt,
       agentConfig:       campaign.agent.config,
+      /*
+       * The agent's own model, carried purely so the override can name it.
+       *
+       * The provider validates `assistantOverrides.model` as a whole model
+       * object and rejects it outright without a `provider`. We were sending
+       * only `messages`, so every outbound call came back 400 and not one was
+       * ever placed. Repeating the agent's existing model changes nothing about
+       * how it behaves; it just makes the override legal.
+       */
+      agentModel:        campaign.agent.model,
       // Falls back to a sentence rather than an empty string: a platform_settings
       // row that predates this column must not silently produce campaign calls
       // with no consent line at all.

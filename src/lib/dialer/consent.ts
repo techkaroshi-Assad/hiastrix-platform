@@ -25,6 +25,7 @@
  * for a tenant to delete. Placing a call is the only way to see it.
  */
 
+import { splitOption } from "@/lib/vapi/options"
 import { enforcedRules } from "@/lib/crm/guidance"
 import { readConfig } from "@/lib/vapi/config"
 
@@ -72,6 +73,22 @@ export function campaignSystemPrompt(a: {
 export function campaignOverrides(a: {
   agentSystemPrompt: string | null
   agentConfig: unknown
+  /**
+   * The agent's own model, as `provider:id`.
+   *
+   * Required, and the reason is worth stating plainly: the provider validates
+   * `assistantOverrides.model` as a complete model object, so sending only
+   * `messages` is rejected with
+   *
+   *   assistantOverrides.model.provider must be one of the following values: …
+   *
+   * That is a 400 on the call itself, not a warning — so every outbound call a
+   * campaign ever placed failed before it rang, nine in a row, all recorded as
+   * "We couldn't place a call to this number". Naming the agent's existing
+   * model changes nothing about its behaviour; it only makes the override a
+   * legal object.
+   */
+  agentModel: string | null
   consentLine: string
   campaignName: string
   contactName: string | null
@@ -79,8 +96,15 @@ export function campaignOverrides(a: {
   /** Set when the campaign leaves voicemails, so the agent knows what to say. */
   voicemailMessage?: string | null
 }): Record<string, unknown> {
+  // Its own model, repeated back. `splitOption` defaults an unprefixed value to
+  // the provider's own namespace, which is also the right fallback for an agent
+  // saved before models carried a prefix.
+  const m = splitOption(a.agentModel?.trim() || "gpt-4o-mini")
+
   const overrides: Record<string, unknown> = {
     model: {
+      provider: m.provider,
+      model:    m.id,
       messages: [{ role: "system", content: campaignSystemPrompt(a) }],
     },
     variableValues: {
