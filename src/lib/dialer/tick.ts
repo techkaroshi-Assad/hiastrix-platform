@@ -23,6 +23,7 @@ import { prisma } from "@/lib/prisma"
 import { advanceCampaign } from "@/lib/dialer/advance"
 import { reapExpiredLeases } from "@/lib/dialer/reap"
 import { takeCampaignsForTick, releaseDeferred } from "@/lib/dialer/claim"
+import { reconcileAvailability } from "@/lib/agents/reconcile"
 import {
   TICK_DEADLINE_MS,
   MAX_CAMPAIGNS_PER_TICK,
@@ -57,6 +58,31 @@ export async function runHeartbeat(now = Date.now()): Promise<TickResult> {
   const settings = await prisma.platformSettings.findUnique({ where: { id: true } })
   if (settings && settings.dialerEnabled === false) {
     return { ...result, halted: "The dialer is switched off platform-wide." }
+  }
+
+  /*
+   * Before any dialling: is everybody who is switched on entitled to be?
+   *
+   * Outbound is gated at the point of dialling, so this is not about the
+   * dialler — it is about inbound, which the provider answers before we hear a
+   * word about it. The only thing that can stop an inbound call is the phone
+   * number not pointing at the assistant, and that is a fact stored in someone
+   * else's database. Facts stored elsewhere drift.
+   *
+   * The money check is pure database work and runs every tick. Re-asserting the
+   * detachment upstream costs provider calls, so it runs on the hour's tenth
+   * minute — often enough that a gap is minutes rather than months, rarely
+   * enough to be invisible in the bill.
+   */
+  try {
+    const deep = new Date(now).getUTCMinutes() % 10 === 0
+    const rec  = await reconcileAvailability(deep)
+    if (rec.disabled || rec.reasserted || rec.campaignsPaused) {
+      console.warn("[dialer/tick] availability reconciled", rec)
+    }
+  } catch (err) {
+    // Never let this stop the dialling it runs in front of.
+    console.error("[dialer/tick] reconcile", err)
   }
 
   /*
