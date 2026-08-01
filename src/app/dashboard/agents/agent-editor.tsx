@@ -44,7 +44,10 @@ import {
 } from "@/lib/vapi/config"
 import { ToolsEditor } from "@/components/agents/tools-editor"
 import { JsonEditor } from "@/components/agents/json-editor"
-import { checkAgent, countBySeverity, checkerSummary, type Finding } from "@/lib/agents/prompt-check"
+import {
+  checkAgent, countBySeverity, checkerSummary,
+  type Finding, type FieldTarget,
+} from "@/lib/agents/prompt-check"
 import {
   promptContains, tidyPrompt, approxTokens, templateOverwrites,
   type TidyResult, type Overwrite,
@@ -73,6 +76,38 @@ const TABS: { key: TabKey; label: string; blurb: string }[] = [
   { key: "after",        label: "After the call", blurb: "Recording, summaries and extraction." },
   { key: "json",         label: "JSON",           blurb: "The whole thing, editable." },
 ]
+
+/**
+ * The scroll anchor and the highlight, in one element.
+ *
+ * Every control a finding can point at is wrapped in one of these. The id is
+ * what `goToFinding` looks up; the ring is what says which of the twenty
+ * controls on the tab it has just brought you to is the one at issue.
+ *
+ * A wrapper rather than an id on the input itself, because the targets are not
+ * all inputs — one is a `Toggle`, which renders a `<button>`, and one is the
+ * whole tools editor. A wrapper works for all of them, and can carry a ring
+ * that a bare `<input>` cannot without fighting its own focus styles.
+ */
+function Target({
+  id, flash, children,
+}: {
+  id: FieldTarget
+  flash: FieldTarget | null
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      id={`field-${id}`}
+      className={cn(
+        "scroll-mt-28 rounded-field transition-shadow duration-300",
+        flash === id && "ring-2 ring-brand-400 ring-offset-4 ring-offset-[var(--field-soft)]"
+      )}
+    >
+      {children}
+    </div>
+  )
+}
 
 /** The human names of the actions currently switched on, for "this will go". */
 function toolLabels(tools: AgentTool[]): string[] {
@@ -117,10 +152,58 @@ export function AgentEditor({
    */
   const [pending, setPending] =
     useState<{ template: AgentTemplate; overwrites: Overwrite[] } | null>(null)
+  /** The control "Take me there" just jumped to, ringed for a couple of seconds. */
+  const [flash, setFlash] = useState<FieldTarget | null>(null)
 
   const c = draft.config
   const setConfig = (patch: Partial<AgentConfig>) =>
     setDraft(d => ({ ...d, config: { ...d.config, ...patch } }))
+
+  /**
+   * Take me there — and actually go.
+   *
+   * The previous version called `setTab` and stopped. Three ways that failed,
+   * every one of them looking like a dead button rather than a no-op:
+   *
+   *   · The finding was about the system prompt and you were already on "Who it
+   *     is", so nothing on screen changed at all.
+   *   · Even when the tab did change, the control was below the fold — on the
+   *     identity tab the prompt sits underneath the entire template picker.
+   *   · Nothing indicated which of the twenty controls on the new tab was the
+   *     one being complained about.
+   *
+   * So: switch the tab, wait for it to paint, scroll the control to the middle
+   * of the screen and ring it. Two nested `requestAnimationFrame`s, because one
+   * is not enough — React commits on the first, and the element has no layout
+   * position until the browser has laid the new tab out, which happens before
+   * the second.
+   */
+  function goToFinding(f: Finding) {
+    setTab(
+      f.where === "identity" ? "identity"
+      : f.where === "tools" ? "tools"
+      : f.where === "after" ? "after"
+      : "conversation"
+    )
+
+    if (!f.field) return
+    const target = f.field
+    setFlash(target)
+
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.getElementById(`field-${target}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: "smooth", block: "center" })
+      // Focus the control, not the wrapper — and without scrolling again, since
+      // a second scroll fights the smooth one and lands somewhere else.
+      el.querySelector<HTMLElement>("textarea, input, select, button")
+        ?.focus({ preventScroll: true })
+    }))
+
+    // Long enough to find by eye after a smooth scroll, short enough not to
+    // still be glowing once you start typing.
+    window.setTimeout(() => setFlash(cur => (cur === target ? null : cur)), 2400)
+  }
 
   const findings = useMemo(
     () => checkAgent({
@@ -343,27 +426,31 @@ export function AgentEditor({
                 required minLength={2} maxLength={60}
                 hint="Only you see this. It's how you'll pick it in a campaign."
               />
-              <TextArea
-                label="First thing it says"
-                value={draft.firstMessage}
-                onChange={e => setDraft({ ...draft, firstMessage: e.target.value })}
-                rows={2} required maxLength={1000}
-                hint="Said the moment the call connects. On outbound calls you can use {{name}} for the person's name."
-              />
+              <Target id="first-message" flash={flash}>
+                <TextArea
+                  label="First thing it says"
+                  value={draft.firstMessage}
+                  onChange={e => setDraft({ ...draft, firstMessage: e.target.value })}
+                  rows={2} required maxLength={1000}
+                  hint="Said the moment the call connects. On outbound calls you can use {{name}} for the person's name."
+                />
+              </Target>
             </Block>
 
             <Block
               title="Instructions"
               description="The single thing that decides how good this agent is. Tell it who it is, what the call is for, how the call should go, and what it must never do."
             >
-              <TextArea
-                label="System prompt"
-                help={<>Everything the agent knows about who it is and what the call is for. Be specific about what it must <em>not</em> do — “never quote a price” works, hoping it won’t doesn’t. Square brackets like [YOUR COMPANY] get read out loud exactly as written, so publishing is blocked until they’re gone.</>}
-                helpHref="/dashboard/help#agents"
-                value={draft.systemPrompt}
-                onChange={e => setDraft({ ...draft, systemPrompt: e.target.value })}
-                rows={16} required minLength={10} maxLength={8000}
-              />
+              <Target id="system-prompt" flash={flash}>
+                <TextArea
+                  label="System prompt"
+                  help={<>Everything the agent knows about who it is and what the call is for. Be specific about what it must <em>not</em> do — “never quote a price” works, hoping it won’t doesn’t. Square brackets like [YOUR COMPANY] get read out loud exactly as written, so publishing is blocked until they’re gone.</>}
+                  helpHref="/dashboard/help#agents"
+                  value={draft.systemPrompt}
+                  onChange={e => setDraft({ ...draft, systemPrompt: e.target.value })}
+                  rows={16} required minLength={10} maxLength={8000}
+                />
+              </Target>
               {/*
                 Length in tokens rather than characters, because tokens are what
                 is paid for on every turn of every call — and a prompt that had
@@ -477,11 +564,13 @@ export function AgentEditor({
               title="Actions"
               description="Switching one on gives the agent the ability. Your instructions decide whether it ever uses it — the checker on the right tells you which ones your prompt is silent about."
             >
-              <ToolsEditor
-                value={c.tools}
-                onChange={tools => setConfig({ tools })}
-                onAddGuidance={appendToPrompt}
-              />
+              <Target id="tools" flash={flash}>
+                <ToolsEditor
+                  value={c.tools}
+                  onChange={tools => setConfig({ tools })}
+                  onAddGuidance={appendToPrompt}
+                />
+              </Target>
             </Block>
 
             <Block
@@ -528,15 +617,17 @@ export function AgentEditor({
                 onChange={e => setConfig({ temperature: Number(e.target.value) })}
                 hint="0 gives the same answer every time and sounds robotic. Around 0.6 is natural. Above 1 starts improvising in ways you won't have planned for."
               />
-              <Field
-                label="Longest reply"
-                help={<>A ceiling on how much the agent can say in one turn. Low keeps it snappy and stops it monologuing; too low and it gets cut off mid-sentence. Around 250 suits most phone conversations.</>}
-                helpHref="/dashboard/help#agents"
-                type="number" min={50} max={4000} step="10"
-                value={String(c.maxTokens)}
-                onChange={e => setConfig({ maxTokens: Number(e.target.value) })}
-                hint="Roughly 250 keeps it conversational. On a phone call, a long answer is one the other person talks over."
-              />
+              <Target id="max-tokens" flash={flash}>
+                <Field
+                  label="Longest reply"
+                  help={<>A ceiling on how much the agent can say in one turn. Low keeps it snappy and stops it monologuing; too low and it gets cut off mid-sentence. Around 250 suits most phone conversations.</>}
+                  helpHref="/dashboard/help#agents"
+                  type="number" min={50} max={4000} step="10"
+                  value={String(c.maxTokens)}
+                  onChange={e => setConfig({ maxTokens: Number(e.target.value) })}
+                  hint="Roughly 250 keeps it conversational. On a phone call, a long answer is one the other person talks over."
+                />
+              </Target>
             </Block>
 
             <Block
@@ -701,23 +792,27 @@ export function AgentEditor({
               title="Answering machines"
               description="Only matters on outbound calls."
             >
-              <Toggle
-                label="Detect voicemail"
-                help={<>The agent works out it has reached an answering machine rather than a person. Essential on outbound campaigns: without it the agent holds a full conversation with a beep and burns a whole attempt.</>}
-                helpHref="/dashboard/help#campaigns"
-                description="Without this it can't tell a machine from a person — it holds a full conversation with the answerphone, and that gets recorded as somebody you spoke to."
-                checked={c.voicemailDetectionEnabled}
-                onChange={v => setConfig({ voicemailDetectionEnabled: v })}
-              />
-              {c.voicemailDetectionEnabled && (
-                <TextArea
-                  label="Message to leave"
-                  rows={3}
-                  value={c.voicemailMessage}
-                  onChange={e => setConfig({ voicemailMessage: e.target.value })}
-                  maxLength={1000}
-                  hint="Blank means hang up without leaving one, which is a perfectly reasonable choice."
+              <Target id="voicemail-detect" flash={flash}>
+                <Toggle
+                  label="Detect voicemail"
+                  help={<>The agent works out it has reached an answering machine rather than a person. Essential on outbound campaigns: without it the agent holds a full conversation with a beep and burns a whole attempt.</>}
+                  helpHref="/dashboard/help#campaigns"
+                  description="Without this it can't tell a machine from a person — it holds a full conversation with the answerphone, and that gets recorded as somebody you spoke to."
+                  checked={c.voicemailDetectionEnabled}
+                  onChange={v => setConfig({ voicemailDetectionEnabled: v })}
                 />
+              </Target>
+              {c.voicemailDetectionEnabled && (
+                <Target id="voicemail-message" flash={flash}>
+                  <TextArea
+                    label="Message to leave"
+                    rows={3}
+                    value={c.voicemailMessage}
+                    onChange={e => setConfig({ voicemailMessage: e.target.value })}
+                    maxLength={1000}
+                    hint="Blank means hang up without leaving one, which is a perfectly reasonable choice."
+                  />
+                </Target>
               )}
             </Block>
           </div>
@@ -770,14 +865,16 @@ export function AgentEditor({
                 onChange={v => setConfig({ structuredDataEnabled: v })}
               />
               {c.structuredDataEnabled && (
-                <TextArea
-                  label="What to pull out (JSON Schema)"
-                  rows={8}
-                  value={c.structuredDataSchema}
-                  onChange={e => setConfig({ structuredDataSchema: e.target.value })}
-                  placeholder={`{\n  "type": "object",\n  "properties": {\n    "callerName": { "type": "string" }\n  }\n}`}
-                  hint="Without this, extraction returns nothing on every call."
-                />
+                <Target id="structured-schema" flash={flash}>
+                  <TextArea
+                    label="What to pull out (JSON Schema)"
+                    rows={8}
+                    value={c.structuredDataSchema}
+                    onChange={e => setConfig({ structuredDataSchema: e.target.value })}
+                    placeholder={`{\n  "type": "object",\n  "properties": {\n    "callerName": { "type": "string" }\n  }\n}`}
+                    hint="Without this, extraction returns nothing on every call."
+                  />
+                </Target>
               )}
             </Block>
 
@@ -874,9 +971,7 @@ export function AgentEditor({
                     key={f.id}
                     finding={f}
                     onInsert={f.insert ? () => appendToPrompt(f.insert!) : undefined}
-                    onGo={() => setTab(f.where === "identity" ? "identity"
-                                    : f.where === "tools" ? "tools"
-                                    : f.where === "after" ? "after" : "conversation")}
+                    onGo={() => goToFinding(f)}
                     /* The repair, offered where the problem is reported.
                      *
                      * "Remove anything repeated" lived next to the prompt field,

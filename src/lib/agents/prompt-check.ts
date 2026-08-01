@@ -57,7 +57,35 @@ export type Finding = {
   insert?: string
   /** Which tab of the editor fixes it. */
   where: "identity" | "tools" | "conversation" | "after"
+  /**
+   * The DOM id of the control that fixes it.
+   *
+   * `where` alone was not enough, and the gap was visible rather than
+   * theoretical: "Take me there" switched the tab and nothing else, so on a
+   * finding about the system prompt — already on the tab you were looking at,
+   * three screens below the fold behind the template picker — pressing it did
+   * nothing at all. It read as a dead button.
+   *
+   * The tab says which screen; this says where on it.
+   */
+  field?: FieldTarget
 }
+
+/**
+ * Every control a finding can point at.
+ *
+ * A union rather than a string, so a typo is a compile error instead of a
+ * silently dead button — which is the exact failure this whole field exists to
+ * fix, and it would be embarrassing to reintroduce it one level down.
+ */
+export type FieldTarget =
+  | "system-prompt"
+  | "first-message"
+  | "tools"
+  | "max-tokens"
+  | "voicemail-detect"
+  | "voicemail-message"
+  | "structured-schema"
 
 export type CheckInput = {
   systemPrompt: string
@@ -230,6 +258,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       detail: expect.detail,
       insert: expect.insert,
       where: "identity",
+      field: "system-prompt",
     })
   }
 
@@ -259,6 +288,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       title: "These are described in the wrong order",
       detail: rule.note,
       where: "identity",
+      field: "system-prompt",
     })
   }
 
@@ -272,6 +302,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       detail:
         "A few words leaves the agent to invent the rest of the call — its tone, what it asks, and what it will happily promise on your behalf.",
       where: "identity",
+      field: "system-prompt",
     })
   }
 
@@ -285,6 +316,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       detail:
         "The agent will read “[YOUR COMPANY]” out loud, exactly as written.",
       where: "identity",
+      field: "system-prompt",
     })
   }
 
@@ -296,6 +328,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       detail:
         "The first second of a call decides whether someone stays on it. A plain hello does more than it sounds like it should.",
       where: "identity",
+      field: "first-message",
     })
   }
 
@@ -308,6 +341,7 @@ export function checkAgent(input: CheckInput): Finding[] {
         "Agents are agreeable by nature. Without an explicit “never quote a price” or “never promise a date”, one eventually will.",
       insert: "Never quote a price, promise a date, or commit to anything on the company's behalf.",
       where: "identity",
+      field: "system-prompt",
     })
   }
 
@@ -320,6 +354,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       title: "Data extraction is on with nothing to extract",
       detail: "Without a schema describing the fields you want, every call returns nothing.",
       where: "after",
+      field: "structured-schema",
     })
   }
 
@@ -331,6 +366,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       detail:
         "It will hang up silently. That's a reasonable choice — but if you'd rather leave a message, write one.",
       where: "conversation",
+      field: "voicemail-message",
     })
   }
 
@@ -342,6 +378,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       detail:
         "It will hold a full conversation with an answerphone, and that gets recorded as somebody you spoke to. Your campaign results will look better than they are.",
       where: "conversation",
+      field: "voicemail-detect",
     })
   }
 
@@ -353,6 +390,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       detail:
         "On a phone call, a long answer is one the other person talks over. Around 250 keeps it conversational.",
       where: "conversation",
+      field: "max-tokens",
     })
   }
 
@@ -366,6 +404,7 @@ export function checkAgent(input: CheckInput): Finding[] {
       detail:
         "With no tools switched on, the call leaves nothing behind — no contact, no note, no booking. Fine for a message line; not for anything you want to follow up.",
       where: "tools",
+      field: "tools",
     })
   }
 
@@ -383,6 +422,7 @@ export function checkAgent(input: CheckInput): Finding[] {
         ? `${issue.detail} It starts “${issue.sample.slice(0, 70)}${issue.sample.length > 70 ? "…" : ""}”.`
         : issue.detail,
       where: "identity",
+      field: "system-prompt",
     })
   }
 
