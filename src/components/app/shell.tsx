@@ -150,8 +150,12 @@ export function Shell({
                   className={cn(
                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all duration-200",
                     active
-                      ? "border-brand-500/40 bg-brand-500/15 text-brand-200 shadow-[0_0_18px_-6px_var(--brand-500)]"
-                      : "border-transparent bg-field-soft text-subtle group-hover:border-line group-hover:bg-field group-hover:text-muted"
+                      ? "border-brand-500/40 bg-brand-500/15 text-brand-on-tint shadow-[0_0_18px_-6px_var(--brand-500)]"
+                      // `text-muted`, not `text-subtle`. --subtle is #8A8699 in the
+                      // light theme, which against a near-white tile is too pale
+                      // to carry a glyph — the icons looked washed out long
+                      // before anybody called it a contrast problem.
+                      : "border-transparent bg-field-soft text-muted group-hover:border-line group-hover:bg-field group-hover:text-fg"
                   )}
                 >
                   {item.icon}
@@ -201,8 +205,8 @@ export function Shell({
                     className={cn(
                       "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors",
                       active
-                        ? "border-brand-500/40 bg-brand-500/15 text-brand-200"
-                        : "border-transparent bg-field-soft text-subtle"
+                        ? "border-brand-500/40 bg-brand-500/15 text-brand-on-tint"
+                        : "border-transparent bg-field-soft text-muted"
                     )}
                   >
                     {item.icon}

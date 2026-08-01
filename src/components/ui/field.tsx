@@ -3,16 +3,22 @@
 import { forwardRef, useId, useState } from "react"
 import { cn } from "@/lib/utils"
 import { IconShow, IconHide, IconSpinner, IconInfo, IconAlert } from "@/components/app/icons"
+import { Hint } from "@/components/ui/hint"
 
 /* ── Text field ────────────────────────────────────────────────────────── */
 
 type FieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
   label: string
+  /** One short line under the input. Always visible. */
   hint?: string
+  /** The paragraph behind a `?`. For anything that needs explaining once. */
+  help?: React.ReactNode
+  /** Deep link into the help page, shown at the foot of the popover. */
+  helpHref?: string
 }
 
 export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
-  { label, hint, className, id, type, ...props },
+  { label, hint, help, helpHref, className, id, type, ...props },
   ref
 ) {
   const autoId = useId()
@@ -22,12 +28,18 @@ export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
 
   return (
     <div className="space-y-2">
-      <label
-        htmlFor={fieldId}
-        className="block text-xs font-medium tracking-[0.01em] text-muted"
-      >
-        {label}
-      </label>
+      {/* The label row carries the optional `?`. `hint` is one short line
+          under the input and stays that; `help` is the paragraph somebody needs
+          the first time and never again, so it hides behind a click. */}
+      <div className="flex items-center gap-1.5">
+        <label
+          htmlFor={fieldId}
+          className="block text-xs font-medium tracking-[0.01em] text-muted"
+        >
+          {label}
+        </label>
+        {help && <Hint label={label} href={helpHref}>{help}</Hint>}
+      </div>
 
       <div className="relative">
         <input

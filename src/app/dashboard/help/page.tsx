@@ -3,6 +3,11 @@ import Link from "next/link"
 import { requireTenant } from "@/lib/tenant"
 import { Page } from "@/components/app/app-shell"
 import { prisma } from "@/lib/prisma"
+import { Disclosure, DisclosureList } from "@/components/ui/disclosure"
+import {
+  IconLaunch, IconAgents, IconNumbers, IconCampaigns, IconChecklist,
+  IconAnalytics, IconBilling, IconPeople, IconWarning, IconMagic,
+} from "@/components/app/icons"
 
 export const metadata: Metadata = { title: "Help" }
 export const dynamic = "force-dynamic"
@@ -25,18 +30,34 @@ export const dynamic = "force-dynamic"
 
 /* ── Small presentational pieces, local to this page ───────────────────── */
 
+/**
+ * One topic, closed until asked for.
+ *
+ * This page used to render all nine topics end to end, which meant roughly four
+ * thousand words between "how do I make an agent" and "why has my campaign
+ * stopped". The content was not the problem; the shape was. Nine headings fit
+ * on one screen, and opening one is a click.
+ *
+ * `Disclosure` is built on `<details>`, so Ctrl+F still finds text inside a
+ * closed topic and opens it — which matters more on a help page than anywhere
+ * else in the product, and is the reason this is not a `useState` boolean.
+ */
 function Topic({
-  id, title, children,
-}: { id: string; title: string; children: React.ReactNode }) {
+  id, title, summary, icon, defaultOpen, children,
+}: {
+  id: string
+  title: string
+  summary: string
+  icon?: React.ReactNode
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
   return (
-    <section id={id} className="scroll-mt-8 rounded-2xl border border-line bg-field-soft">
-      <header className="border-b border-line px-6 py-4">
-        <h2 className="text-[15px] font-medium tracking-[-0.01em]">{title}</h2>
-      </header>
-      <div className="space-y-4 px-6 py-5 text-[13.5px] font-light leading-relaxed text-muted">
+    <Disclosure id={id} title={title} summary={summary} icon={icon} defaultOpen={defaultOpen}>
+      <div className="max-w-[70ch] space-y-4 text-[13.5px] font-light leading-relaxed text-muted">
         {children}
       </div>
-    </section>
+    </Disclosure>
   )
 }
 
@@ -49,16 +70,24 @@ function Q({ q, children }: { q: string; children: React.ReactNode }) {
   )
 }
 
+/**
+ * Every topic, with the one line that goes under its heading while it is shut.
+ *
+ * A closed section whose title is the only thing you can read is a guessing
+ * game. The summary is what makes nine collapsed rows a usable table of
+ * contents rather than nine mystery boxes.
+ */
 const TOPICS = [
-  ["getting-started", "Getting started"],
-  ["agents", "Agents"],
-  ["numbers", "Phone numbers"],
-  ["campaigns", "Outbound campaigns"],
-  ["lists", "Lists and do-not-call"],
-  ["calls", "Calls and analytics"],
-  ["billing", "Minutes and billing"],
-  ["team", "Your team"],
-  ["trouble", "When something isn't working"],
+  ["getting-started", "Getting started",           "Three things, in order, and what each one is for."],
+  ["templates",       "Templates",                 "Thirty-eight starting points, including ones written for your trade."],
+  ["agents",          "Agents",                    "Instructions, actions, and why an agent won't publish."],
+  ["numbers",         "Phone numbers",             "How a number reaches an agent, and what happens when it doesn't."],
+  ["campaigns",       "Outbound campaigns",        "Calling a list: pacing, retries, calling windows and pauses."],
+  ["lists",           "Lists and do-not-call",     "Importing people, and making sure the wrong ones are never called."],
+  ["calls",           "Calls and analytics",       "Recordings, transcripts, what the agent actually did, and what the numbers mean."],
+  ["billing",         "Minutes and billing",       "Plans, top-ups, what a call costs, and what happens at zero."],
+  ["team",            "Your team",                 "Inviting people and what they can see."],
+  ["trouble",         "When something isn't working", "The five things that go wrong most, and what each one looks like."],
 ] as const
 
 export default async function HelpPage() {
@@ -94,9 +123,9 @@ export default async function HelpPage() {
           </ul>
         </nav>
 
-        <div className="max-w-[760px] space-y-5">
+        <DisclosureList className="max-w-[820px]">
 
-          <Topic id="getting-started" title="Getting started">
+          <Topic id="getting-started" title="Getting started" summary="Three things, in order, and what each one is for." icon={<IconLaunch size={17} />} defaultOpen>
             <p>
               Hi-Astrix gives you AI agents that answer your phone and make calls for you.
               An agent is a voice, a personality and a set of things it&rsquo;s allowed to
@@ -123,7 +152,92 @@ export default async function HelpPage() {
             </p>
           </Topic>
 
-          <Topic id="agents" title="Agents">
+          <Topic id="templates" title="Templates" summary="Thirty-eight starting points, including ones written for your trade." icon={<IconMagic size={17} />}>
+            <p>
+              A blank agent is the single biggest reason one underperforms. Most people
+              write &ldquo;you are a helpful assistant for Acme&rdquo;, switch on four
+              actions, and then find the agent never uses any of them — because nothing in
+              the instructions says <em>when</em> to. The actions were the easy part. The
+              ordering is the hard part, and it is invisible.
+            </p>
+            <p>
+              So a template is not a placeholder. It is a written call flow with the action
+              sequence already correct, the settings tuned for that job, and the sentences
+              that make the actions actually fire.
+            </p>
+
+            <Q q="How are they organised?">
+              <p>
+                By <strong>job</strong> — front desk, sales, booking, support, marketing,
+                operations. That is how people describe what they want
+                (&ldquo;something to answer the phone&rdquo;), so it is the grouping.
+              </p>
+              <p>
+                <strong>Direction</strong> and <strong>trade</strong> are separate filters
+                on top, because they are genuinely independent: a win-back is outbound and
+                sales, a support triage is inbound and support, an appointment booker works
+                either way. There is a search box too, for when you already know the name.
+              </p>
+            </Q>
+
+            <Q q="What are the ones written for a trade?">
+              <p>
+                Sixteen of the thirty-eight are the same four jobs — receptionist, booker,
+                speed-to-lead, appointment reminder — rewritten for roofing and home
+                services, HVAC and plumbing, clinics and med spa, and property.
+              </p>
+              <p>
+                The wording is the smaller half of what they give you. The real reason they
+                exist is the rules you would never think to write and would only discover on
+                the call where it mattered. The HVAC ones tell the agent what to do when
+                somebody says they can smell gas. The clinic ones will not answer a medical
+                question under any circumstances, and confirm who they are speaking to
+                before naming a treatment out loud. The property ones refuse to put a figure
+                on a house, and will not answer &ldquo;is it a good area for families&rdquo;,
+                because in a great many places answering that is unlawful.
+              </p>
+              <p>
+                If one of those four trades is close to yours, start there even if it is not
+                exact — the safety rules transfer and the wording is quick to change.
+              </p>
+            </Q>
+
+            <Q q="What is &ldquo;Needs a calendar&rdquo; on some of the cards?">
+              <p>
+                What that template requires before it can work. A template that books
+                appointments needs a calendar connected; one that stores answers needs custom
+                fields; one that moves deals along needs a pipeline. It is shown on the card
+                rather than after you apply it, so you find out now rather than on the first
+                failed call.
+              </p>
+            </Q>
+
+            <Q q="What happens to what I've already written?">
+              <p>
+                Nothing, without asking. Applying a template over an empty agent replaces
+                everything silently, which is what you want. Applying one over instructions
+                <em> you</em> wrote stops and shows you exactly what would go, measured in
+                words — and offers a third option: take the actions and settings, keep your
+                writing. That is usually the actual reason somebody reaches for a template
+                half way through.
+              </p>
+            </Q>
+
+            <Q q="Why won't it publish with the brackets still in?">
+              <p>
+                Because <code className="rounded-xs bg-field px-1 py-0.5 text-[12px]">[YOUR COMPANY]</code>{" "}
+                gets read out loud, exactly as written, to a real caller. The brackets are a
+                task list, and publishing is blocked until they are gone. Same for a
+                paragraph that has ended up in the instructions more than once — you pay for
+                every copy on every turn of every call, and repetition makes an agent follow
+                instructions <em>less</em> reliably, not more. There is a{" "}
+                <strong>Tidy the prompt</strong> button that removes duplicates and shows you
+                what it will take out first.
+              </p>
+            </Q>
+          </Topic>
+
+          <Topic id="agents" title="Agents" summary="Instructions, actions, and why an agent won't publish." icon={<IconAgents size={17} />}>
             <p>
               An agent handles both directions. The same agent answers people who call your
               number and makes the calls in a campaign — you don&rsquo;t need one of each.
@@ -165,7 +279,7 @@ export default async function HelpPage() {
             </Q>
           </Topic>
 
-          <Topic id="numbers" title="Phone numbers">
+          <Topic id="numbers" title="Phone numbers" summary="How a number reaches an agent, and what happens when it doesn't." icon={<IconNumbers size={17} />}>
             <p>
               Numbers are allocated to your workspace by us — you can&rsquo;t buy one from
               inside the app. Once you have one, you decide which agent answers it.
@@ -186,7 +300,7 @@ export default async function HelpPage() {
             </Q>
           </Topic>
 
-          <Topic id="campaigns" title="Outbound campaigns">
+          <Topic id="campaigns" title="Outbound campaigns" summary="Calling a list: pacing, retries, calling windows and pauses." icon={<IconCampaigns size={17} />}>
             <p>
               A campaign is a list of people and an agent to call them. You upload the list,
               set the hours it&rsquo;s allowed to call, and press start — it works through
@@ -264,7 +378,7 @@ export default async function HelpPage() {
             </Q>
           </Topic>
 
-          <Topic id="lists" title="Lists and do-not-call">
+          <Topic id="lists" title="Lists and do-not-call" summary="Importing people, and making sure the wrong ones are never called." icon={<IconChecklist size={17} />}>
             <Q q="Uploading a spreadsheet">
               <p>
                 Save it as a CSV with a header row. You&rsquo;ll be shown the first few rows
@@ -322,7 +436,7 @@ export default async function HelpPage() {
             </Q>
           </Topic>
 
-          <Topic id="calls" title="Calls and analytics">
+          <Topic id="calls" title="Calls and analytics" summary="Recordings, transcripts, what the agent actually did, and what the numbers mean." icon={<IconAnalytics size={17} />}>
             <p>
               Every call — answered, made, or tested — appears in{" "}
               <Link href="/dashboard/calls" className="text-brand-on-tint hover:underline">Calls</Link>{" "}
@@ -345,7 +459,7 @@ export default async function HelpPage() {
             </Q>
           </Topic>
 
-          <Topic id="billing" title="Minutes and billing">
+          <Topic id="billing" title="Minutes and billing" summary="Plans, top-ups, what a call costs, and what happens at zero." icon={<IconBilling size={17} />}>
             <p>
               You&rsquo;re charged for the minutes you use. A plan includes an allowance at a
               lower rate; anything past it comes out of your balance at the plan&rsquo;s
@@ -376,7 +490,7 @@ export default async function HelpPage() {
             </Q>
           </Topic>
 
-          <Topic id="team" title="Your team">
+          <Topic id="team" title="Your team" summary="Inviting people and what they can see." icon={<IconPeople size={17} />}>
             <p>
               Invite colleagues from{" "}
               <Link href="/dashboard/settings" className="text-brand-on-tint hover:underline">Settings</Link>.
@@ -389,7 +503,7 @@ export default async function HelpPage() {
             </p>
           </Topic>
 
-          <Topic id="trouble" title="When something isn't working">
+          <Topic id="trouble" title="When something isn't working" summary="The five things that go wrong most, and what each one looks like." icon={<IconWarning size={17} />}>
             <Q q="The campaign won't start">
               <p>
                 The page tells you why, just above the buttons. Usually one of: no balance, the
@@ -433,7 +547,7 @@ export default async function HelpPage() {
             </Q>
           </Topic>
 
-        </div>
+        </DisclosureList>
       </div>
     </Page>
   )

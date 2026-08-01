@@ -59,6 +59,7 @@ import {
   JOB_ICON, INDUSTRY_ICON, DIRECTION_ICON,
   IconSearch, IconWarning, IconChevron, type Icon,
 } from "@/components/app/icons"
+import { Disclosure, DisclosureList } from "@/components/ui/disclosure"
 import { CRM_TOOLS, defaultCrmTool } from "@/lib/vapi/tools"
 import { cn } from "@/lib/utils"
 
@@ -357,6 +358,8 @@ export function AgentEditor({
             >
               <TextArea
                 label="System prompt"
+                help={<>Everything the agent knows about who it is and what the call is for. Be specific about what it must <em>not</em> do — “never quote a price” works, hoping it won’t doesn’t. Square brackets like [YOUR COMPANY] get read out loud exactly as written, so publishing is blocked until they’re gone.</>}
+                helpHref="/dashboard/help#agents"
                 value={draft.systemPrompt}
                 onChange={e => setDraft({ ...draft, systemPrompt: e.target.value })}
                 rows={16} required minLength={10} maxLength={8000}
@@ -518,6 +521,8 @@ export function AgentEditor({
             >
               <Field
                 label="Creativity"
+                help={<>How much the agent varies its wording. Low keeps it consistent and on-script, which is what you want for anything with rules — bookings, prices, compliance. High sounds more natural and improvises more, including occasionally improvising something you didn’t intend.</>}
+                helpHref="/dashboard/help#agents"
                 type="number" min={0} max={2} step="0.1"
                 value={String(c.temperature)}
                 onChange={e => setConfig({ temperature: Number(e.target.value) })}
@@ -525,6 +530,8 @@ export function AgentEditor({
               />
               <Field
                 label="Longest reply"
+                help={<>A ceiling on how much the agent can say in one turn. Low keeps it snappy and stops it monologuing; too low and it gets cut off mid-sentence. Around 250 suits most phone conversations.</>}
+                helpHref="/dashboard/help#agents"
                 type="number" min={50} max={4000} step="10"
                 value={String(c.maxTokens)}
                 onChange={e => setConfig({ maxTokens: Number(e.target.value) })}
@@ -550,6 +557,8 @@ export function AgentEditor({
               />
               <Toggle
                 label="Filter background noise"
+                help={<>Cleans up the caller’s audio before the agent hears it. Worth it for people ringing from a car or a building site; it adds a little delay, so leave it off if your callers are usually somewhere quiet.</>}
+                helpHref="/dashboard/help#agents"
                 description="Clean up the caller's audio before transcribing it. Worth it for people calling from a car or a building site."
                 checked={c.backgroundDenoisingEnabled}
                 onChange={v => setConfig({ backgroundDenoisingEnabled: v })}
@@ -575,12 +584,16 @@ export function AgentEditor({
               />
               <Toggle
                 label="Judge when they've finished"
+                help={<>The agent waits for a natural end to your sentence rather than a fixed gap of silence. Leave it on — with it off, anybody who pauses to think gets interrupted.</>}
+                helpHref="/dashboard/help#agents"
                 description="Work out whether the caller has finished their sentence, rather than just waiting for silence. Usually worth leaving on."
                 checked={c.smartEndpointingEnabled}
                 onChange={v => setConfig({ smartEndpointingEnabled: v })}
               />
               <Field
                 label="Pause before replying (seconds)"
+                help={<>How long the agent waits after you stop before it starts talking. Shorter feels sharp and risks talking over someone mid-thought; longer feels calm and starts to read as a bad line.</>}
+                helpHref="/dashboard/help#agents"
                 type="number" min={0} max={5} step="0.1"
                 value={String(c.startSpeakingWaitSeconds)}
                 onChange={e => setConfig({ startSpeakingWaitSeconds: Number(e.target.value) })}
@@ -588,6 +601,8 @@ export function AgentEditor({
               />
               <Field
                 label="Words needed to interrupt"
+                help={<>How many words you have to say before the agent stops talking and listens. Zero means any sound cuts it off — a cough, a passing car. Two or three suits a noisy line.</>}
+                helpHref="/dashboard/help#agents"
                 type="number" min={0} max={20}
                 value={String(c.stopSpeakingNumWords)}
                 onChange={e => setConfig({ stopSpeakingNumWords: Number(e.target.value) })}
@@ -637,6 +652,8 @@ export function AgentEditor({
             >
               <Field
                 label="Longest a call can run (seconds)"
+                help={<>A hard ceiling. The call ends when it’s reached, mid-sentence if necessary, so set it above a realistic worst case rather than at your average. It exists to stop one stuck call costing an hour of minutes.</>}
+                helpHref="/dashboard/help#agents"
                 type="number" min={30} max={43200}
                 value={String(c.maxDurationSeconds)}
                 onChange={e => setConfig({ maxDurationSeconds: Number(e.target.value) })}
@@ -644,6 +661,8 @@ export function AgentEditor({
               />
               <Field
                 label="Hang up after silence (seconds)"
+                help={<>How long total silence lasts before the agent ends the call. This is what stops you paying for a call somebody abandoned without hanging up; a phone left on a desk otherwise runs to the length limit.</>}
+                helpHref="/dashboard/help#agents"
                 type="number" min={10} max={3600}
                 value={String(c.silenceTimeoutSeconds)}
                 onChange={e => setConfig({ silenceTimeoutSeconds: Number(e.target.value) })}
@@ -665,6 +684,8 @@ export function AgentEditor({
               />
               <Field
                 label="Phrases that end the call"
+                help={<>Say one of these and the agent hangs up. Good for a clean sign-off, risky if it’s something a caller might say in passing — “thanks, bye” is fine, “that’s all” is not.</>}
+                helpHref="/dashboard/help#agents"
                 value={c.endCallPhrases.join(", ")}
                 onChange={e =>
                   setConfig({
@@ -682,6 +703,8 @@ export function AgentEditor({
             >
               <Toggle
                 label="Detect voicemail"
+                help={<>The agent works out it has reached an answering machine rather than a person. Essential on outbound campaigns: without it the agent holds a full conversation with a beep and burns a whole attempt.</>}
+                helpHref="/dashboard/help#campaigns"
                 description="Without this it can't tell a machine from a person — it holds a full conversation with the answerphone, and that gets recorded as somebody you spoke to."
                 checked={c.voicemailDetectionEnabled}
                 onChange={v => setConfig({ voicemailDetectionEnabled: v })}
@@ -706,6 +729,8 @@ export function AgentEditor({
             <Block title="What's kept">
               <Toggle
                 label="Record calls"
+                help={<>Keeps the audio, playable from the call page. Off means no recording is stored for this agent at all. Check the rules where you’re calling — some places require you to tell people they’re being recorded.</>}
+                helpHref="/dashboard/help#calls"
                 description="Audio you can play back from the call log."
                 checked={draft.recordingEnabled}
                 onChange={v => setDraft({ ...draft, recordingEnabled: v })}
@@ -730,12 +755,16 @@ export function AgentEditor({
               />
               <Toggle
                 label="Judge whether it went well"
+                help={<>After each call the model scores whether it achieved its goal, and that appears on Analytics as a success rate. The denominator is only the calls that were scored, which is why the figure there says “of N scored”.</>}
+                helpHref="/dashboard/help#calls"
                 description="Scores whether the call achieved what it set out to. This is what fills in the success figure on your analytics."
                 checked={c.successEvaluationEnabled}
                 onChange={v => setConfig({ successEvaluationEnabled: v })}
               />
               <Toggle
                 label="Pull out specific details"
+                help={<>Extracts named fields from the conversation into structured data you can read back — budget, postcode, which product they asked about. You describe what you want as a JSON schema and it’s filled in per call.</>}
+                helpHref="/dashboard/help#calls"
                 description="Extract named values — a booking date, a budget, a postcode — into fields you can report on."
                 checked={c.structuredDataEnabled}
                 onChange={v => setConfig({ structuredDataEnabled: v })}
@@ -976,31 +1005,47 @@ function TemplateWarning({
  * The counts on the tabs are not decoration. Without them, switching to a tab
  * that turns out to be empty under the current chips reads as a broken page.
  */
+/**
+ * Browsing thirty-eight templates.
+ *
+ * ── WHY SECTIONS AND NOT A GRID ───────────────────────────────────────
+ *
+ * The first version of this was one flat grid, which was fine for ten
+ * templates and a wall for thirty-eight. The second was a row of job tabs,
+ * which was better and still wrong in one specific way: a tab row shows you one
+ * category and hides the other five, so the answer to "what can I start from"
+ * was never on screen at once.
+ *
+ * Collapsed sections answer that. Six headings with counts fit in the space of
+ * four cards, so the shape of the library is visible immediately, and opening
+ * one is a click. Only the first is open on arrival — a screen where nothing at
+ * all is open reads as broken rather than as tidy.
+ *
+ * ── THE THREE FILTERS ─────────────────────────────────────────────────
+ *
+ * Job is the grouping. Direction and trade are genuinely independent of it and
+ * of each other, so they are chips rather than a nested menu. Search sits above
+ * everything, because somebody who already knows the template is called "Speed
+ * to lead" should not have to work out which section it lives in — and while a
+ * search is active every matching section opens itself, since a closed section
+ * hiding the one result you searched for is the worst possible outcome.
+ */
 function Templates({
   applied, onApply,
 }: { applied: string | null; onApply: (t: AgentTemplate) => void }) {
-  const [open, setOpen]           = useState<string | null>(null)
-  const [job, setJob]             = useState<TemplateJob | "all">("all")
   const [direction, setDirection] = useState<TemplateDirection | "all">("all")
   const [industry, setIndustry]   = useState<TemplateIndustry | "all" | "generic">("all")
   const [query, setQuery]         = useState("")
 
-  /* Everything except the job filter, so the tab counts describe what you would
-   * actually get by pressing each tab rather than what you have now. */
-  const beforeJob = useMemo(
+  const shown = useMemo(
     () => filterTemplates(AGENT_TEMPLATES, { direction, industry, query }),
     [direction, industry, query]
   )
 
-  const shown = useMemo(
-    () => filterTemplates(beforeJob, { job }),
-    [beforeJob, job]
-  )
-
-  const countFor = (j: TemplateJob | "all") =>
-    j === "all" ? beforeJob.length : beforeJob.filter(t => t.job === j).length
-
-  const tabs: (TemplateJob | "all")[] = ["all", ...JOB_ORDER]
+  const searching = query.trim().length > 0
+  const groups = JOB_ORDER
+    .map(job => ({ job, items: shown.filter(t => t.job === job) }))
+    .filter(g => g.items.length > 0)
 
   return (
     <section className="rounded-2xl border border-line bg-field-soft">
@@ -1031,35 +1076,6 @@ function Templates({
         </div>
       </div>
 
-      {/* ── Job tabs ────────────────────────────────────────────────── */}
-      <div className="flex gap-1 overflow-x-auto border-b border-line px-6 py-2.5">
-        {tabs.map(j => {
-          const n = countFor(j)
-          const Glyph = j === "all" ? null : JOB_ICON[j]
-          return (
-            <button
-              key={j}
-              type="button"
-              onClick={() => setJob(j)}
-              disabled={n === 0 && j !== "all"}
-              className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12.5px] whitespace-nowrap transition-colors",
-                job === j
-                  ? "bg-field-hover font-medium text-fg"
-                  : "text-muted hover:text-fg",
-                n === 0 && j !== "all" && "opacity-35 hover:text-muted"
-              )}
-            >
-              {Glyph && (
-                <Glyph size={14} className={cn(job === j ? "text-brand-300" : "text-subtle")} />
-              )}
-              {j === "all" ? "All" : JOB_LABEL[j]}
-              <span className="text-[11px] text-subtle">{n}</span>
-            </button>
-          )
-        })}
-      </div>
-
       {/* ── Refinements ─────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-line px-6 py-3">
         <ChipRow
@@ -1087,116 +1103,51 @@ function Templates({
         />
       </div>
 
-      {/* ── Results ─────────────────────────────────────────────────── */}
-      {shown.length === 0 ? (
+      {/* ── The sections ────────────────────────────────────────────── */}
+      {groups.length === 0 ? (
         <div className="px-6 py-14 text-center">
           <p className="text-[13px] text-muted">Nothing matches that.</p>
           <button
             type="button"
-            onClick={() => { setJob("all"); setDirection("all"); setIndustry("all"); setQuery("") }}
+            onClick={() => { setDirection("all"); setIndustry("all"); setQuery("") }}
             className="mt-2 text-[12.5px] text-brand-300 transition-colors hover:text-brand-200"
           >
             Clear the filters
           </button>
         </div>
       ) : (
-        <div className="grid gap-3 px-6 py-5 sm:grid-cols-2">
-          {shown.map(t => {
-            const isApplied = applied === t.id
-            const expanded = open === t.id
-            const Glyph = JOB_ICON[t.job]
-            const Trade = t.industry ? INDUSTRY_ICON[t.industry] : null
-            return (
-              <div
-                key={t.id}
-                className={cn(
-                  "rounded-field border px-4 py-3.5 transition-colors",
-                  isApplied
-                    ? "border-brand-500/60 bg-brand-500/12"
-                    : "border-line bg-field hover:border-line-strong"
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 gap-2.5">
-                    <span
-                      className={cn(
-                        "mt-0.5 shrink-0",
-                        isApplied ? "text-brand-300" : "text-subtle"
-                      )}
-                    >
-                      <Glyph size={16} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className={cn("text-[13px] font-medium", isApplied && "text-brand-on-tint")}>
-                        {t.name}
-                      </p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] font-light text-subtle">
-                        <span>{JOB_LABEL[t.job]}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>{DIRECTION_LABEL[t.direction]}</span>
-                        {Trade && (
-                          <>
-                            <span aria-hidden="true">·</span>
-                            <span className="inline-flex items-center gap-1">
-                              <Trade size={11} />
-                              {INDUSTRY_LABEL[t.industry!]}
-                            </span>
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onApply(t)}
-                    className="shrink-0 rounded-xs border border-line-strong bg-field px-2.5 py-1 text-[11.5px] text-fg transition-colors hover:border-brand-400"
-                  >
-                    {isApplied ? "Applied" : "Use"}
-                  </button>
-                </div>
-
-                <p className="mt-2 text-[12px] font-light leading-relaxed text-muted">
-                  {t.summary}
-                </p>
-
-                {/* What it needs is shown on the card, not hidden behind the
-                    disclosure. Finding out that a template wanted a calendar
-                    *after* the first booking call failed is exactly the failure
-                    this whole session has been about. */}
-                {t.requires?.length ? (
-                  <ul className="mt-2 space-y-1">
-                    {t.requires.map(r => (
-                      <li key={r} className="flex items-start gap-1.5 text-[11.5px] font-light text-warning">
-                        <IconWarning size={12} className="mt-0.5 shrink-0" />
-                        <span>{r}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-
-                {t.flow.length > 0 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setOpen(expanded ? null : t.id)}
-                      className="mt-2 flex items-center gap-1 text-[11.5px] text-muted transition-colors hover:text-fg"
-                    >
-                      <IconChevron
-                        size={12}
-                        className={cn("transition-transform", expanded && "rotate-180")}
+        <div className="px-6 py-5">
+          <DisclosureList>
+            {groups.map((g, i) => {
+              const Glyph = JOB_ICON[g.job]
+              return (
+                <Disclosure
+                  /* Keyed on the search text as well as the job, so that
+                   * changing the search remounts the section and `defaultOpen`
+                   * is re-applied. Without the key, React keeps the previous
+                   * open/closed state and a search can land its only result
+                   * inside a section that stays shut. */
+                  key={`${g.job}:${searching}`}
+                  title={JOB_LABEL[g.job]}
+                  summary={JOB_BLURB[g.job]}
+                  icon={<Glyph size={17} />}
+                  meta={`${g.items.length}`}
+                  defaultOpen={searching || i === 0}
+                >
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {g.items.map(t => (
+                      <TemplateCard
+                        key={t.id}
+                        template={t}
+                        applied={applied === t.id}
+                        onApply={onApply}
                       />
-                      {expanded ? "Hide the call flow" : "What does it do?"}
-                    </button>
-                    {expanded && (
-                      <ol className="mt-2 ml-4 list-decimal space-y-1 text-[11.5px] font-light text-subtle marker:text-subtle">
-                        {t.flow.map((step, i) => <li key={i}>{step}</li>)}
-                      </ol>
-                    )}
-                  </>
-                )}
-              </div>
-            )
-          })}
+                    ))}
+                  </div>
+                </Disclosure>
+              )
+            })}
+          </DisclosureList>
         </div>
       )}
 
@@ -1209,6 +1160,107 @@ function Templates({
         </div>
       )}
     </section>
+  )
+}
+
+/** One line per category, so a closed section still says what is inside it. */
+const JOB_BLURB: Record<TemplateJob, string> = {
+  "front-desk": "Answering the phone, taking messages, getting people to the right person.",
+  sales:        "Chasing enquiries, quotes and deals — and calling new leads fast.",
+  booking:      "Filling the diary, confirming what is in it, and rescuing what falls out.",
+  support:      "Taking problems down accurately and chasing what people are waiting on.",
+  marketing:    "Reviews, feedback, invitations and keeping a list worth calling.",
+  ops:          "Internal calls — screening applicants and the like.",
+  custom:       "An empty agent. You write everything.",
+}
+
+/**
+ * One template.
+ *
+ * `requires` is on the card rather than behind the disclosure, deliberately.
+ * Finding out that a template wanted a calendar *after* the first booking call
+ * failed is the exact shape of failure this whole platform keeps hitting.
+ */
+function TemplateCard({
+  template: t, applied, onApply,
+}: {
+  template: AgentTemplate
+  applied: boolean
+  onApply: (t: AgentTemplate) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const Trade = t.industry ? INDUSTRY_ICON[t.industry] : null
+
+  return (
+    <div
+      className={cn(
+        "rounded-field border px-4 py-3.5 transition-colors",
+        applied
+          ? "border-brand-500/60 bg-brand-500/12"
+          : "border-line bg-field hover:border-line-strong"
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={cn("text-[13px] font-medium", applied && "text-brand-on-tint")}>
+            {t.name}
+          </p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] font-light text-subtle">
+            <span>{DIRECTION_LABEL[t.direction]}</span>
+            {Trade && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="inline-flex items-center gap-1">
+                  <Trade size={11} />
+                  {INDUSTRY_LABEL[t.industry!]}
+                </span>
+              </>
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onApply(t)}
+          className="shrink-0 rounded-xs border border-line-strong bg-field px-2.5 py-1 text-[11.5px] text-fg transition-colors hover:border-brand-400"
+        >
+          {applied ? "Applied" : "Use"}
+        </button>
+      </div>
+
+      <p className="mt-2 text-[12px] font-light leading-relaxed text-muted">{t.summary}</p>
+
+      {t.requires?.length ? (
+        <ul className="mt-2 space-y-1">
+          {t.requires.map(r => (
+            <li key={r} className="flex items-start gap-1.5 text-[11.5px] font-light text-warning">
+              <IconWarning size={12} className="mt-0.5 shrink-0" />
+              <span>{r}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {t.flow.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            className="mt-2 flex items-center gap-1 text-[11.5px] text-muted transition-colors hover:text-fg"
+          >
+            <IconChevron
+              size={12}
+              className={cn("transition-transform", open && "rotate-180")}
+            />
+            {open ? "Hide the call flow" : "What does it do?"}
+          </button>
+          {open && (
+            <ol className="mt-2 ml-4 list-decimal space-y-1 text-[11.5px] font-light text-subtle marker:text-subtle">
+              {t.flow.map((step, i) => <li key={i}>{step}</li>)}
+            </ol>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 

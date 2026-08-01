@@ -11,6 +11,7 @@
 import { forwardRef, useId, useState } from "react"
 import { cn } from "@/lib/utils"
 import { IconChevron, IconClose } from "@/components/app/icons"
+import { Hint } from "@/components/ui/hint"
 
 const CONTROL = [
   "w-full rounded-field bg-field text-sm text-fg",
@@ -27,18 +28,26 @@ function Shell({
   id,
   label,
   hint,
+  help,
+  helpHref,
   children,
 }: {
   id: string
   label: string
   hint?: string
+  /** The paragraph behind a `?`. `hint` is the always-visible one-liner. */
+  help?: React.ReactNode
+  helpHref?: string
   children: React.ReactNode
 }) {
   return (
     <div className="space-y-2">
-      <label htmlFor={id} className="block text-xs font-medium tracking-[0.01em] text-muted">
-        {label}
-      </label>
+      <div className="flex items-center gap-1.5">
+        <label htmlFor={id} className="block text-xs font-medium tracking-[0.01em] text-muted">
+          {label}
+        </label>
+        {help && <Hint label={label} href={helpHref}>{help}</Hint>}
+      </div>
       {children}
       {hint && <p className="text-xs leading-relaxed text-subtle">{hint}</p>}
     </div>
@@ -50,14 +59,16 @@ function Shell({
 type TextAreaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
   label: string
   hint?: string
+  help?: React.ReactNode
+  helpHref?: string
 }
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
-  function TextArea({ label, hint, className, id, rows = 5, ...props }, ref) {
+  function TextArea({ label, hint, help, helpHref, className, id, rows = 5, ...props }, ref) {
     const autoId = useId()
     const fieldId = id ?? autoId
     return (
-      <Shell id={fieldId} label={label} hint={hint}>
+      <Shell id={fieldId} label={label} hint={hint} help={help} helpHref={helpHref}>
         <textarea
           ref={ref}
           id={fieldId}
@@ -75,18 +86,20 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
 type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   label: string
   hint?: string
+  help?: React.ReactNode
+  helpHref?: string
   options: { value: string; label: string; note?: string }[]
   placeholder?: string
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, hint, options, placeholder, className, id, ...props },
+  { label, hint, help, helpHref, options, placeholder, className, id, ...props },
   ref
 ) {
   const autoId = useId()
   const fieldId = id ?? autoId
   return (
-    <Shell id={fieldId} label={label} hint={hint}>
+    <Shell id={fieldId} label={label} hint={hint} help={help} helpHref={helpHref}>
       <div className="relative">
         <select
           ref={ref}
@@ -119,14 +132,25 @@ export function Toggle({
   checked,
   onChange,
   disabled,
+  help,
+  helpHref,
 }: {
   label: string
   description?: string
   checked: boolean
   onChange: (next: boolean) => void
   disabled?: boolean
+  /** The paragraph behind a `?`. */
+  help?: React.ReactNode
+  helpHref?: string
 }) {
-  return (
+  /* The `?` sits *outside* the button, positioned over its corner.
+   *
+   * Not a stylistic choice: `<details>` inside a `<button>` is invalid markup
+   * and browsers do not deliver the click to it — the whole row swallows it and
+   * toggles the switch instead. So the row stays one big button, and the
+   * popover is a sibling laid on top of it. */
+  const row = (
     <button
       type="button"
       role="switch"
@@ -140,7 +164,9 @@ export function Toggle({
       )}
     >
       <span className="min-w-0">
-        <span className="block text-[13.5px] font-medium text-fg">{label}</span>
+        <span className={cn("block text-[13.5px] font-medium text-fg", help && "pr-5")}>
+          {label}
+        </span>
         {description && (
           <span className="mt-0.5 block text-xs leading-relaxed text-subtle">{description}</span>
         )}
@@ -160,6 +186,17 @@ export function Toggle({
         />
       </span>
     </button>
+  )
+
+  if (!help) return row
+
+  return (
+    <div className="relative">
+      {row}
+      <span className="absolute right-14 top-3.5">
+        <Hint label={label} href={helpHref} align="right">{help}</Hint>
+      </span>
+    </div>
   )
 }
 

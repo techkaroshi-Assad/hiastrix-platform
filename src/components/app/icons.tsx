@@ -12,21 +12,29 @@
  * sites, and it is where a white-label icon set would eventually land. The
  * brand mark stays ours and stays hand-drawn, in `brand/logo.tsx`.
  *
- * ── WHY PHOSPHOR, AND WHY DUOTONE ─────────────────────────────────────
+ * ── WHY PHOSPHOR, AND WHY BOLD ────────────────────────────────────────
  *
- * The previous set was uniform-stroke line icons. They were fine, and they read
- * as *generic* — every glyph the same weight, the same grey, no hierarchy, so a
- * sidebar of nine of them is nine identical grey marks and the eye has nothing
- * to grip.
+ * The set before this was uniform-stroke line icons. They were fine, and they
+ * read as *generic* — every glyph the same weight, the same grey, no hierarchy,
+ * so a sidebar of nine is nine identical marks and the eye has nothing to grip.
  *
- * Duotone fixes that with a filled shape at low opacity behind the outline, so
- * an icon has mass and a silhouette instead of being a wireframe. It costs
- * nothing — same glyph, one extra path — and it is the single change that makes
- * navigation stop looking unfinished.
+ * The first attempt at fixing that was Phosphor's `duotone`, which adds a
+ * filled shape at 20% opacity behind the outline. On the dark theme it looked
+ * rich. **On the light theme it looked out of focus**, and that is not a matter
+ * of taste: a 20%-opacity tint of `--subtle` (#8A8699) against `--field-soft`
+ * (a 2% wash on near-white) is a few percent of contrast, so the fill layer
+ * reads as a soft halo around the outline rather than as a second tone. Every
+ * icon in the rail looked slightly blurred, and rendering the two themes side
+ * by side made it obvious in a way that describing it does not.
+ *
+ * `bold` is the answer to both problems at once. It has the presence duotone
+ * was reaching for, it is a single opaque path so it is crisp at 18px in either
+ * theme, and it is *sharper* than duotone even on dark — the tint layer was
+ * muddying the outline at this size rather than supporting it.
  *
  * Chrome icons stay `regular`. A chevron on a select or a close button is not
- * meant to have presence; it is meant to be invisible until wanted, and a
- * duotone chevron is a chevron shouting.
+ * meant to have presence; it is meant to be invisible until wanted, and a bold
+ * chevron is a chevron shouting.
  *
  * ── WHY THE `/ssr` ENTRY ──────────────────────────────────────────────
  *
@@ -43,7 +51,7 @@
 
 import {
   /* Navigation */
-  House, Robot, Megaphone, Phone, ChartBar, Hash, CreditCard, Gear,
+  House, UserSound, Megaphone, Phone, ChartBar, Hash, CreditCard, Gear,
   Question, Buildings, Package,
 
   /* Actions */
@@ -117,7 +125,7 @@ const SIZE = 18
  * `weight` is a default rather than a constant, so a call site that wants the
  * bold cut of a normally-duotone icon for one particular spot can say so.
  */
-const glyph = (C: PhosphorIcon, display: string, weight: IconWeight = "duotone"): Icon => {
+const glyph = (C: PhosphorIcon, display: string, weight: IconWeight = "bold"): Icon => {
   const Wrapped = (p: IconProps) => {
     const Component = C as unknown as React.ComponentType<Record<string, unknown>>
     return <Component size={SIZE} weight={weight} {...p} />
@@ -132,7 +140,16 @@ const plain = (C: PhosphorIcon, display: string): Icon => glyph(C, display, "reg
 /* ── Navigation ────────────────────────────────────────────────────────── */
 
 export const IconHome      = glyph(House,      "IconHome")
-export const IconAgents    = glyph(Robot,      "IconAgents")
+/**
+ * A person, speaking.
+ *
+ * It was `Robot`, which is the AI cliché and reads as a toy at 18px — and it
+ * described the implementation rather than the thing. What a tenant is buying
+ * is somebody to answer the phone. `UserSound` says exactly that, and it stays
+ * legible next to `Phone` for Calls and `Megaphone` for Campaigns, which a
+ * microphone or a waveform would not.
+ */
+export const IconAgents    = glyph(UserSound,  "IconAgents")
 export const IconCampaigns = glyph(Megaphone,  "IconCampaigns")
 export const IconCalls     = glyph(Phone,      "IconCalls")
 export const IconAnalytics = glyph(ChartBar,   "IconAnalytics")

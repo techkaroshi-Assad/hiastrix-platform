@@ -40,12 +40,13 @@ import { Card, Pill, callTone } from "@/components/app/table"
 import { Sparkline } from "@/components/app/charts"
 import {
   IconAgents, IconCalls, IconBalance, IconDuration, IconLive, IconNumbers,
-  IconWarning, IconArrow, IconMagic, IconConnected, IconInbound, IconOutbound,
+  IconArrow, IconMagic, IconConnected, IconInbound, IconOutbound, IconCheck,
   IconMic, IconCampaigns,
 } from "@/components/app/icons"
 import {
   loadAnalytics, rangeFromDays, changePct, connectionRate, CONNECTED_SECONDS,
 } from "@/lib/analytics"
+import { loadOnboarding, type SetupStep } from "@/lib/onboarding"
 import { usd, duration, titleCase } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -60,7 +61,7 @@ export default async function DashboardPage() {
 
   const [
     agentCount, activeAgents, numberCount, liveCalls, recentCalls,
-    runningCampaigns, analytics,
+    runningCampaigns, analytics, onboarding,
   ] = await Promise.all([
     prisma.agent.count({ where: { tenantId: tenant.id } }),
     prisma.agent.count({ where: { tenantId: tenant.id, status: "ACTIVE" } }),
@@ -85,6 +86,12 @@ export default async function DashboardPage() {
     prisma.campaign.count({ where: { tenantId: tenant.id, state: "RUNNING" } }),
 
     loadAnalytics(tenant.id, range),
+
+    /* The same state the shell's setup bar reads. Computed once per request and
+     * shared, so the bar at the top of the page and the checklist below it can
+     * never disagree about how far along somebody is — which they did, briefly,
+     * when this page worked it out for itself. */
+    loadOnboarding(tenant),
   ])
 
   const t = analytics.totals
@@ -98,12 +105,10 @@ export default async function DashboardPage() {
   const pct         = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0
   const overageCost = overage * (tenant.package?.overageRateCents ?? 0)
 
-  /* Can this workspace place a call at all? Same predicate the dialer uses:
-   * allowance left, or credit in hand. Neither means the phone is off. */
+  /* Only used for the balance card's caption now. Whether the workspace can
+   * place a call at all is decided in `loadOnboarding`, which is also what the
+   * shell's banner reads — one predicate, one answer. */
   const hasAllowance = cap > 0 && used < cap
-  const canCall = hasAllowance || tenant.creditBalanceCents > 0
-
-  const setupDone = numberCount > 0 && agentCount > 0 && t.calls > 0
   const trend = (now: number, before: number, goodWhenUp = true) => {
     const change = changePct(now, before)
     return change === null ? undefined : { pct: change, goodWhenUp, label: "vs the fortnight before" }
@@ -114,40 +119,15 @@ export default async function DashboardPage() {
       heading={`Good to see you, ${firstName}`}
       description="Here's what's happening across your workspace."
     >
-      {/* ── Anything stopping calls ─────────────────────────────────── */}
-      {!canCall && (
-        <Alert
-          tone="danger"
-          icon={<IconWarning size={17} />}
-          title="Your agents can't take calls"
-          body={
-            cap > 0
-              ? "You've used your included minutes and your balance is empty, so incoming calls aren't being answered and campaigns are paused."
-              : "There's no balance on the account, so incoming calls aren't being answered and campaigns are paused."
-          }
-          href="/dashboard/billing"
-          cta="Top up"
-        />
-      )}
+      {/* Anything actively stopping calls is shown by the shell, on every page —
+          a warning that only exists on Overview is a warning somebody misses,
+          because the moment things go quiet is the moment they are off looking
+          at Calls. It is not repeated here.
 
-      {canCall && agentCount > 0 && activeAgents === 0 && (
-        <Alert
-          tone="warning"
-          icon={<IconWarning size={17} />}
-          title="Every agent is switched off"
-          body="Nothing is answering the phone. An agent switched off doesn't take calls even if its number is live."
-          href="/dashboard/agents"
-          cta="Go to agents"
-        />
-      )}
-
-      {/* ── Getting started, until it's done ────────────────────────── */}
-      {!setupDone ? (
-        <Setup
-          hasNumber={numberCount > 0}
-          hasAgent={agentCount > 0}
-          hasCalls={t.calls > 0}
-        />
+          The checklist is the opposite case: it wants room, and somebody who
+          has come to Overview has come to see where things stand. */}
+      {!onboarding.complete ? (
+        <Setup steps={onboarding.steps} done={onboarding.done} />
       ) : (
         <>
           {/* ── The four figures ───────────────────────────────────── */}
@@ -373,92 +353,19 @@ export default async function DashboardPage() {
 /* ── Pieces ────────────────────────────────────────────────────────────── */
 
 /**
- * The banner that tells somebody their phone is off.
- *
- * Deliberately loud and deliberately at the very top. The failure this exists
- * to prevent is a tenant discovering their agents stopped answering because a
- * customer rang them personally to complain — which has happened, and which no
- * amount of accurate reporting further down the page prevents.
- */
-function Alert({
-  tone, icon, title, body, href, cta,
-}: {
-  tone: "danger" | "warning"
-  icon: React.ReactNode
-  title: string
-  body: string
-  href: string
-  cta: string
-}) {
-  return (
-    <div
-      role="alert"
-      className={cn(
-        "mb-5 flex flex-wrap items-start gap-4 rounded-2xl border px-5 py-4",
-        tone === "danger" ? "border-danger/35 bg-danger/10" : "border-warning/35 bg-warning/10"
-      )}
-    >
-      <span className={cn("mt-0.5 shrink-0", tone === "danger" ? "text-danger" : "text-warning")}>
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[13.5px] font-medium">{title}</p>
-        <p className="mt-1 text-[12.5px] font-light leading-relaxed text-muted">{body}</p>
-      </div>
-      <Link
-        href={href}
-        className="shrink-0 rounded-field border border-line-strong bg-field px-3.5 py-2 text-[12.5px] font-medium text-fg transition-colors hover:border-brand-400"
-      >
-        {cta}
-      </Link>
-    </div>
-  )
-}
-
-/**
  * The first-run sequence.
  *
- * Three steps, in the only order that works — a number has to exist before an
- * agent can answer on it, and an agent has to exist before a call can happen.
- * Each completed step stays visible with a tick rather than disappearing,
- * because a checklist that shrinks as you go gives no sense of progress.
+ * The steps and their order come from `loadOnboarding`, not from this file. It
+ * used to work them out itself from three counts, which was fine right up until
+ * the shell started showing the same information in a bar and the two
+ * disagreed — the bar said "point a number at it" while the checklist showed
+ * only three steps and none of them were that.
+ *
+ * A completed step stays visible with a tick rather than disappearing. A
+ * checklist that shrinks as you go gives no sense of progress, and hides the
+ * evidence that you did the earlier ones correctly.
  */
-function Setup({
-  hasNumber, hasAgent, hasCalls,
-}: {
-  hasNumber: boolean
-  hasAgent: boolean
-  hasCalls: boolean
-}) {
-  const steps = [
-    {
-      done: hasNumber,
-      icon: <IconNumbers size={16} />,
-      title: "Get a phone number",
-      body: "Numbers are allocated to your workspace by the Hi-Astrix team. Once one appears, point it at an agent.",
-      href: "/dashboard/numbers",
-      cta: "See your numbers",
-    },
-    {
-      done: hasAgent,
-      icon: <IconAgents size={16} />,
-      title: "Build an agent",
-      body: "Start from a template — there are thirty-eight, including ones written for roofing, HVAC, clinics and property — then change the wording to suit you.",
-      href: "/dashboard/agents/new",
-      cta: "Create an agent",
-    },
-    {
-      done: hasCalls,
-      icon: <IconCalls size={16} />,
-      title: "Make a test call",
-      body: "Ring your own phone from the agent editor and hear it. Thirty seconds of listening beats an hour of reading the prompt.",
-      href: "/dashboard/agents",
-      cta: "Go to agents",
-    },
-  ]
-
-  const doneCount = steps.filter(s => s.done).length
-
+function Setup({ steps, done }: { steps: SetupStep[]; done: number }) {
   return (
     <section className="relative overflow-hidden rounded-2xl border border-line bg-field-soft">
       <div aria-hidden="true" className="wash-glow-top pointer-events-none absolute inset-0" />
@@ -469,12 +376,12 @@ function Setup({
           <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Get your phone answered</h2>
         </div>
         <p className="mt-1.5 text-[13px] font-light text-muted">
-          Three things, in this order. {doneCount} of 3 done.
+          {steps.length} things, in this order. {done} of {steps.length} done.
         </p>
         <div className="mt-3 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-field-hover">
           <div
             className="h-full rounded-full bg-linear-to-r from-brand-400 to-brand-600 transition-[width] duration-500"
-            style={{ width: `${(doneCount / steps.length) * 100}%` }}
+            style={{ width: `${(done / steps.length) * 100}%` }}
           />
         </div>
       </header>
@@ -482,7 +389,7 @@ function Setup({
       <ol className="relative">
         {steps.map((s, i) => (
           <li
-            key={s.title}
+            key={s.key}
             className="flex flex-wrap items-start gap-4 border-b border-line-soft px-6 py-5 last:border-b-0"
           >
             <span
@@ -493,25 +400,33 @@ function Setup({
                   : "border-line bg-field text-subtle"
               )}
             >
-              {s.done ? "✓" : i + 1}
+              {s.done ? <IconCheck size={15} /> : i + 1}
             </span>
 
             <div className="min-w-0 flex-1">
-              <p className={cn("flex items-center gap-2 text-[13.5px] font-medium", s.done && "text-muted")}>
-                <span className={s.done ? "text-subtle" : "text-brand-300"}>{s.icon}</span>
+              <p className={cn("text-[13.5px] font-medium", s.done && "text-muted")}>
                 {s.title}
               </p>
               <p className="mt-1 text-[12.5px] font-light leading-relaxed text-muted">{s.body}</p>
             </div>
 
+            {/* No button on a step somebody cannot do. Sending them to a page to
+                hunt for a control that is not there reads as a broken product
+                rather than as a queue they are in. */}
             {!s.done && (
-              <Link
-                href={s.href}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-field border border-line-strong bg-field px-3.5 py-2 text-[12.5px] font-medium text-fg transition-colors hover:border-brand-400"
-              >
-                {s.cta}
-                <IconArrow size={13} />
-              </Link>
+              s.waiting ? (
+                <span className="shrink-0 text-[12px] font-light text-subtle">
+                  We&rsquo;ll set this up
+                </span>
+              ) : (
+                <Link
+                  href={s.href}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-field border border-line-strong bg-field px-3.5 py-2 text-[12.5px] font-medium text-fg transition-colors hover:border-brand-400"
+                >
+                  {s.cta}
+                  <IconArrow size={13} />
+                </Link>
+              )
             )}
           </li>
         ))}
