@@ -263,6 +263,29 @@ export function LeadImport({
 
   const [crmTag, setCrmTag] = useState("")
   const [busy, setBusy] = useState(false)
+
+  /*
+   * The real tags on the tenant's own sub-account.
+   *
+   * This used to be a text box, and that is half of why pulling a list works on
+   * one account and quietly returns nobody on the next: a tag matches exactly
+   * or not at all, so `Callback Requested` typed as `callback-requested` finds
+   * an empty list and looks like a broken feature rather than a typo. Nobody
+   * should be asked to remember a string they would have to go and look up.
+   */
+  const [crmTags, setCrmTags] = useState<string[] | null>(null)
+
+  useEffect(() => {
+    if (!crmConnected) return
+    let live = true
+    fetch("/api/crm/options")
+      .then(r => (r.ok ? r.json() : { tags: [] }))
+      .then((d: { tags?: string[] }) => { if (live) setCrmTags(d.tags ?? []) })
+      // A failed lookup falls back to typing, rather than blocking the import
+      // on a list we could not fetch.
+      .catch(() => { if (live) setCrmTags([]) })
+    return () => { live = false }
+  }, [crmConnected])
   const [progress, setProgress] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<Report | null>(null)
@@ -414,7 +437,28 @@ export function LeadImport({
           {error && <ErrorNote>{error}</ErrorNote>}
           {progress && <InfoNote>{progress}</InfoNote>}
 
-          {report && (
+          {/*
+            Nobody at all. Worth its own message rather than "0 added", which
+            reads as a broken feature — and this is the exact shape of the
+            complaint that "pulling by tag works on my account and not on the
+            other one". Almost always the tag is spelled differently there.
+          */}
+          {report && report.received === 0 && mode === "crm" && (
+            <div className="rounded-2xl border border-warning/40 bg-warning/[0.07] px-4 py-3.5">
+              <p className="text-[13px] font-medium text-warning">
+                Nobody in your CRM has that tag
+              </p>
+              <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted">
+                A tag has to match letter for letter, so{" "}
+                <span className="text-fg">Callback Requested</span> and{" "}
+                <span className="text-fg">callback-requested</span> are two
+                different tags and one of them has nobody on it. Check the
+                spelling on the contacts you expected to see here.
+              </p>
+            </div>
+          )}
+
+          {report && !(report.received === 0 && mode === "crm") && (
             <div className="rounded-2xl border border-line bg-field-soft px-4 py-3.5">
               <p className="text-[13px] font-medium">
                 {report.added.toLocaleString()} added
@@ -501,13 +545,26 @@ export function LeadImport({
                 </InfoNote>
               ) : (
                 <div className="space-y-4">
-                  <Field
-                    label="Tag"
-                    value={crmTag}
-                    onChange={e => setCrmTag(e.target.value)}
-                    placeholder="september-followup"
-                    hint="Everyone in your CRM carrying this tag is copied in. It's a snapshot — tagging someone afterwards won't add them to a campaign that's already running."
-                  />
+                  {crmTags === null ? (
+                    <p className="text-[13px] text-subtle">Reading your tags&hellip;</p>
+                  ) : crmTags.length > 0 ? (
+                    <Select
+                      label="Tag"
+                      value={crmTag}
+                      onChange={e => setCrmTag(e.target.value)}
+                      placeholder="Choose a tag…"
+                      options={crmTags.map(t => ({ value: t, label: t }))}
+                      hint="Everyone in your CRM carrying this tag is copied in. It's a snapshot — tagging someone afterwards won't add them to a campaign that's already running."
+                    />
+                  ) : (
+                    <Field
+                      label="Tag"
+                      value={crmTag}
+                      onChange={e => setCrmTag(e.target.value)}
+                      placeholder="september-followup"
+                      hint="We couldn't read the tags on your CRM, so type one exactly as it appears there — it has to match letter for letter."
+                    />
+                  )}
                   <SubmitButton
                     type="button" sheen={false} className="w-auto px-5"
                     loading={busy} disabled={!crmTag.trim()}
