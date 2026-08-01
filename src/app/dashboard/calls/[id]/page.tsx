@@ -135,14 +135,27 @@ export default async function CallDetailPage({
           <Card title="Recording">
             <div className="px-5 py-5">
               {call.recordingUrl ? (
+                /*
+                 * Served from our own path, never the provider's.
+                 *
+                 * The stored URL points at a private bucket and opens for
+                 * nobody — playing it and downloading it both returned an
+                 * authorisation error. It also named the vendor in the address
+                 * bar the moment anyone pressed Download, which nothing in this
+                 * platform is allowed to do.
+                 */
                 <div className="space-y-3">
                   {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                  <audio controls preload="none" src={call.recordingUrl} className="w-full">
+                  <audio
+                    controls
+                    preload="none"
+                    src={`/api/calls/${call.id}/recording`}
+                    className="w-full"
+                  >
                     Your browser does not support audio playback.
                   </audio>
                   <a
-                    href={call.recordingUrl}
-                    download
+                    href={`/api/calls/${call.id}/recording?download=1`}
                     className="inline-flex h-9 items-center rounded-field border border-line-strong bg-field px-3.5 text-[12.5px] font-medium transition-colors hover:bg-field-hover"
                   >
                     Download recording
