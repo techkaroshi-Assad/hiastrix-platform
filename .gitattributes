@@ -1,0 +1,20 @@
+# One line ending, decided here rather than by whichever machine last touched a
+# file. Without this, every commit made on Windows reports a hundred "LF will be
+# replaced by CRLF" warnings and, worse, a file round-tripped through a
+# different checkout shows as entirely rewritten in the diff.
+#
+# `text=auto eol=lf` means: normalise to LF in the repository, and check out LF
+# on every platform. Modern Windows tooling — VS Code, PowerShell, Next, Node —
+# all handle LF perfectly well, so there is nothing to gain from CRLF locally.
+* text=auto eol=lf
+
+# Binary, so git must not touch them at all.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.pdf  binary
+*.zip  binary

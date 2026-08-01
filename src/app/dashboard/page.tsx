@@ -46,7 +46,7 @@ import {
 import {
   loadAnalytics, rangeFromDays, changePct, connectionRate, CONNECTED_SECONDS,
 } from "@/lib/analytics"
-import { usd, duration } from "@/lib/format"
+import { usd, duration, titleCase } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Dashboard" }
@@ -324,10 +324,23 @@ export default async function DashboardPage() {
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-3">
-                          <Pill tone={callTone(call.status)}>
-                            {duration(call.durationSeconds)}
-                          </Pill>
-                          <span className="text-[12.5px] tabular-nums text-subtle">
+                          {/* Colour only when something is worth looking at.
+                              Every ordinary call is COMPLETED, so tinting the
+                              duration by status painted the whole list green
+                              and taught the eye to skip it — which is exactly
+                              the row you then miss when one goes wrong. */}
+                          {call.status === "COMPLETED" ? (
+                            <span className="text-[12.5px] tabular-nums text-muted">
+                              {duration(call.durationSeconds)}
+                            </span>
+                          ) : (
+                            <Pill tone={callTone(call.status)}>
+                              {call.status === "IN_PROGRESS"
+                                ? "Live"
+                                : titleCase(call.status)}
+                            </Pill>
+                          )}
+                          <span className="w-12 shrink-0 text-right text-[12.5px] tabular-nums text-subtle">
                             {usd(call.costCents)}
                           </span>
                         </div>

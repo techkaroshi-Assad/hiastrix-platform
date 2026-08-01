@@ -350,6 +350,20 @@ export function AreaChart({
  * No axis, no labels, no tooltip — deliberately. It answers "roughly what shape
  * did this take" and nothing more; the moment it tries to answer more than that
  * it competes with the number it sits under.
+ *
+ * ── TWO THINGS THAT LOOKED WRONG AND WERE ─────────────────────────────
+ *
+ * `preserveAspectRatio="none"` is right for the *line* — a sparkline is meant
+ * to fill its box regardless of shape, and that is why the stroke carries
+ * `non-scaling-stroke` to stay an even weight. It is wrong for anything with a
+ * shape of its own: a `<circle>` in a viewBox stretched two and a half times
+ * horizontally is not a circle, it is a lopsided blob, and the marker on the
+ * last point rendered as exactly that.
+ *
+ * The line also ran flush to the top and bottom edges, so a final upstroke
+ * looked like an arrow leaving the card rather than a value. A pixel of padding
+ * at each end fixes it, and costs nothing — the vertical scale here is relative
+ * anyway.
  */
 export function Sparkline({
   values,
@@ -369,16 +383,18 @@ export function Sparkline({
   const span = max - min || 1
   const W = 120
 
+  // Breathing room top and bottom, so a peak is a peak and not a clipped edge.
+  const PAD = 3
+
   const x = (i: number) => (i / (values.length - 1)) * W
-  const y = (v: number) => height - ((v - min) / span) * (height - 3) - 1.5
+  const y = (v: number) => height - PAD - ((v - min) / span) * (height - PAD * 2)
 
   const line = values.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")
-  const last = values[values.length - 1]!
 
   return (
     <svg
       viewBox={`0 0 ${W} ${height}`}
-      className="w-full"
+      className="w-full overflow-hidden"
       style={{ height }}
       preserveAspectRatio="none"
       role="img"
@@ -389,8 +405,15 @@ export function Sparkline({
         fill={seriesVar(colour)}
         opacity={0.14}
       />
-      <path d={line} fill="none" stroke={seriesVar(colour)} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-      <circle cx={W} cy={y(last)} r={2} fill={seriesVar(colour)} vectorEffect="non-scaling-stroke" />
+      <path
+        d={line}
+        fill="none"
+        stroke={seriesVar(colour)}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
     </svg>
   )
 }

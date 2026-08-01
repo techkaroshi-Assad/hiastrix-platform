@@ -40,11 +40,20 @@
  * spreadsheet.
  *
  * The atmosphere is carried through here — glass on the rail and the header, a
- * bloom behind the page title, grain over the whole frame, and content that
- * rises in on navigation. What is deliberately *not* carried through is the
- * canvas: it runs an animation loop forever, and this is a screen people leave
- * open all day on a laptop. A dashboard that costs battery is a dashboard
- * people close.
+ * bloom behind the page title, and content that rises in on navigation.
+ *
+ * Two things are deliberately NOT carried through.
+ *
+ * **The canvas.** It runs an animation loop forever, and this is a screen
+ * people leave open all day on a laptop. A dashboard that costs battery is a
+ * dashboard people close.
+ *
+ * **The grain.** This one was tried and removed, and the reason is worth
+ * writing down. Film grain over an animated gradient reads as texture; the same
+ * grain over a table of 12px tabular numbers reads as a dirty screen. It sat
+ * fixed above every element in the app and cost legibility on the one kind of
+ * content this product exists to show. Atmosphere belongs behind content, not
+ * on top of it — the bloom and the glass stay because they are behind things.
  */
 
 "use client"
@@ -82,10 +91,6 @@ export function Shell({
 
   return (
     <div className="relative flex min-h-screen bg-ink">
-      {/* Grain over everything, exactly as on the auth pages. Pointer-events
-          none and aria-hidden: it is texture, not content. */}
-      <div aria-hidden="true" className="grain pointer-events-none fixed inset-0 z-50 opacity-[0.5]" />
-
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       <aside className="sticky top-0 z-30 hidden h-screen w-[248px] shrink-0 flex-col border-r border-line px-4 py-6 lg:flex">
         {/* Glass, and a bloom behind it so the rail is not a flat slab. Both
