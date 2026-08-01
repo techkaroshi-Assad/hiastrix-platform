@@ -20,12 +20,22 @@
  * manual toggle, because somebody who wants the JSON should not have to break
  * their schema to get at it.
  *
- * ── WHY THE JSON IS STILL THE SOURCE OF TRUTH ─────────────────────────
+ * ── WHY THE ROWS ARE STATE, AND WHY THAT COST A DAY ───────────────────
  *
- * The form does not hold state that the draft does not. Every edit regenerates
- * the schema string and hands it up, and the field rows are derived back from
- * that string on render. One representation, so the two cannot drift — and the
- * JSON tab, which edits the same string directly, stays correct for free.
+ * This first shipped deriving the rows from the JSON on every render — one
+ * representation, nothing to drift, and the JSON tab correct for free. It was
+ * a nicer design and it was wrong, because a row nobody has named yet cannot
+ * survive the round trip: `toJsonSchema` drops unnamed rows (correctly — a
+ * key-less property is not a thing the provider will take), so "Add a field"
+ * emitted a byte-identical string, the rows re-derived unchanged, and the
+ * button appeared to do nothing at all. Which is this platform's recurring
+ * failure once again: not an error, just nothing happening.
+ *
+ * So the rows are held here, and the JSON is what they emit. Editing the JSON
+ * elsewhere still wins: when the incoming `value` is not the string this
+ * component last produced, the rows are rebuilt from it. Adjusting state during
+ * render rather than in an effect is deliberate — an effect would paint one
+ * frame of the old rows first.
  */
 
 import { useState } from "react"
@@ -50,17 +60,34 @@ export function SchemaBuilder({
   const parsed = fromJsonSchema(value)
   const [raw, setRaw] = useState(false)
 
+  const [fields, setFields] = useState<SchemaField[]>(parsed.simple ? parsed.fields : [])
+
+  /* The last string this component handed up. Anything else arriving in `value`
+   * came from somewhere the rows do not know about — the JSON editor, a
+   * template being applied, a draft being reset — and the rows are rebuilt. */
+  const [emitted, setEmitted] = useState(value)
+
+  if (value !== emitted) {
+    const fresh = fromJsonSchema(value)
+    setEmitted(value)
+    setFields(fresh.simple ? fresh.fields : [])
+  }
+
   /* Forced into the raw editor by content, or asked for by the tenant. The two
    * are distinguished because only one of them has a way back. */
   const forced = !parsed.simple
   const showRaw = forced || raw
 
-  const fields = parsed.simple ? parsed.fields : []
   const issues = fieldIssues(fields)
   const issueAt = (i: number) => issues.find(x => x.index === i)?.message
 
   function write(next: SchemaField[]) {
-    onChange(toJsonSchema(next))
+    const json = toJsonSchema(next)
+    setFields(next)
+    /* Recorded before it goes up, so the value coming back is recognised as our
+     * own and does not wipe out a row that has no name yet. */
+    setEmitted(json)
+    onChange(json)
   }
 
   const patch = (i: number, p: Partial<SchemaField>) =>
