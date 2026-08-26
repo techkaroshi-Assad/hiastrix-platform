@@ -8,7 +8,8 @@
  * flows. Styling mirrors Field so the two read as one system.
  */
 
-import { forwardRef, useId, useState } from "react"
+import { forwardRef, useEffect, useId, useState } from "react"
+import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
 import { IconChevron, IconClose } from "@/components/app/icons"
 import { Hint } from "@/components/ui/hint"
@@ -306,9 +307,30 @@ export function Panel({
   children: React.ReactNode
   footer?: React.ReactNode
 }) {
-  if (!open) return null
+  /*
+   * Portalled to `document.body` on purpose, not just for stacking.
+   *
+   * Any button that opens one of these can itself be inside `Page`'s sticky
+   * header (`app-shell.tsx`), which carries `backdrop-blur-xl` — a
+   * `backdrop-filter`, and like `transform` or `filter` it makes that header
+   * the containing block for every `position: fixed` descendant. Rendered in
+   * place, "fixed inset-0" resolved against the header's own (short) box
+   * instead of the viewport, so the drawer collapsed to header-height and the
+   * header's `overflow-hidden` clipped everything below that — including the
+   * footer, which is where every confirm/cancel button lives. It looked open,
+   * the copy was readable, and the one thing you came for was gone.
+   *
+   * A portal renders outside that subtree entirely, so `fixed` is always
+   * relative to the viewport regardless of what filter, transform or overflow
+   * the trigger happens to sit inside. `mounted` exists only because
+   * `document` does not exist during server rendering.
+   */
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
-  return (
+  if (!open || !mounted) return null
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end">
       <div
         className="absolute inset-0 bg-scrim backdrop-blur-sm animate-fade-in"
@@ -342,6 +364,7 @@ export function Panel({
           <footer className="border-t border-line px-6 py-4">{footer}</footer>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
