@@ -240,6 +240,13 @@ model PhoneNumber {
   vapiPhoneNumberId String      @unique @map("vapi_phone_number_id")
   phoneNumber       String      @map("phone_number")
   status            PhoneStatus @default(ACTIVE)
+  /// Raw value of Vapi's own `provider` field for this number — "vapi",
+  /// "twilio", "telnyx", "vonage", or "byo-phone-number". Set on every sync,
+  /// never hand-edited: "vapi" is the free, shared-pool number type that
+  /// carries a hard daily outbound-call cap, and the whole reason this
+  /// column exists is so nobody has to remember which numbers those are.
+  /// Null only for a row synced before this column existed, until the next sync.
+  provider          String?     @map("provider")
   createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenant            Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)

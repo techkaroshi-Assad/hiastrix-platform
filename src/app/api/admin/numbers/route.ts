@@ -11,7 +11,7 @@ import { getAdminContext } from "@/lib/admin"
 import { vapiPhoneNumbers } from "@/lib/vapi/client"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
-type VapiNumber = { id?: string; number?: string; status?: string }
+type VapiNumber = { id?: string; number?: string; status?: string; provider?: string }
 
 export async function POST() {
   try {
@@ -37,10 +37,13 @@ export async function POST() {
       })
 
       if (existing) {
-        // Refresh the display number only; allocation is ours to own.
+        // Refresh the display number and provider only; allocation is ours
+        // to own. Provider is refreshed too — a number's origin doesn't
+        // change, but an early row synced before this column existed should
+        // pick it up on the next sync rather than stay null forever.
         await prisma.phoneNumber.update({
           where: { id: existing.id },
-          data:  { phoneNumber: n.number },
+          data:  { phoneNumber: n.number, provider: n.provider ?? null },
         })
       } else {
         await prisma.phoneNumber.create({
@@ -48,6 +51,7 @@ export async function POST() {
             vapiPhoneNumberId: n.id,
             phoneNumber:       n.number,
             status:            "ACTIVE",
+            provider:          n.provider ?? null,
           },
         })
         added++

@@ -98,9 +98,10 @@ actions, no knowledge search, and no `endCall` either. This was silently
 breaking three separate features built this session, all at once, on every
 real outbound dial. **Fixed**: `toolsPayload()` exported from
 `lib/vapi/payload.ts` and now included in `campaignOverrides()`'s model
-object, same as the base assistant gets. **Untested since the fix** — run
-another campaign call with CRM tools on and confirm "What the agent did"
-shows the lookup.
+object, same as the base assistant gets. **Confirmed fixed** — a later
+campaign call ("Dynamic Chiropractic") showed a real action in the log
+(`endCall` firing, "Ended because: Assistant-ended-call"), proving campaign
+calls now carry their tools end to end.
 
 Also from that same call: the CRM contact name on file was the practice's
 own doctor, but a receptionist answered, and the (then-hardcoded) obligation
@@ -122,3 +123,22 @@ right person" the same as an outright refusal and ends the call — worth a
 prompt fix (in the tenant's own systemPrompt, not platform code) if it comes
 up again: a receptionist saying "no, not me" should prompt "who is, then?",
 not an immediate close.
+
+## Super admin — phone number type tagging (2026-08-27)
+
+After a campaign hit `call.start.error-vapi-number-outbound-daily-limit`
+(Vapi's hard cap on its free, shared-pool numbers), added a `provider`
+column to `PhoneNumber` (`prisma/schema.prisma`), populated from Vapi's own
+`provider` field (`"vapi"` vs `"twilio"`/`"telnyx"`/`"vonage"`/
+`"byo-phone-number"`) on every sync (`app/api/admin/numbers/route.ts`). The
+super admin numbers page (`app/admin/numbers/page.tsx`) now shows a "Type"
+column per number and a warning banner when any free Vapi-managed numbers
+are in inventory, explaining they're fine for testing but shouldn't sit
+behind a real campaign. **Requires a manual SQL migration** — this repo has
+no `prisma migrate` history, only hand-written SQL — the user still needs to
+run `ALTER TABLE phone_numbers ADD COLUMN provider text;` against the live
+database before this deploys cleanly. **Untested**: existing rows will show
+"Unknown" until the next "Sync inventory" click; needs one sync plus a look
+at the page to confirm the banner and Type column render as expected, and
+ideally a real Twilio number imported into Vapi to confirm it tags as
+non-free.

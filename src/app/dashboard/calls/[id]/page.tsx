@@ -8,6 +8,7 @@ import { Card, Pill, callTone } from "@/components/app/table"
 import { CallActions } from "@/components/app/call-actions"
 import { readConfig } from "@/lib/vapi/config"
 import { readActions, findUnbackedClaims } from "@/lib/calls/actions"
+import { friendlyEndedReason } from "@/lib/calls/reasons"
 import { usd, duration, dateTime, titleCase } from "@/lib/format"
 
 export const metadata: Metadata = { title: "Call detail" }
@@ -95,7 +96,7 @@ export default async function CallDetailPage({
     ["Billed",     `${call.minutesBilled} min`],
     ["Cost",       usd(call.costCents)],
     ...(call.endedReason
-      ? ([["Ended because", titleCase(call.endedReason)]] as [string, React.ReactNode][])
+      ? ([["Ended because", friendlyEndedReason(call.endedReason, titleCase)]] as [string, React.ReactNode][])
       : []),
   ]
 
