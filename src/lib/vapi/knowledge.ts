@@ -30,6 +30,19 @@ function htmlToText(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    /*
+     * The menu bar is not the page. Left in, "About Us Value Analysis
+     * Benefits Case Studies Industry Overview Services" reads exactly like
+     * real content to this stripper, and outweighs the one sentence that
+     * actually said what the site was for — a real site's nav can easily be
+     * longer than its homepage copy. `<nav>`, `<header>` and `<footer>` are
+     * about the site, on every page; `<aside>` is usually a sidebar of links
+     * to somewhere else. None of it is what a caller is asking about.
+     */
+    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+    .replace(/<header[\s\S]*?<\/header>/gi, " ")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+    .replace(/<aside[\s\S]*?<\/aside>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<(br|p|div|li|h[1-6]|tr)\b[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ")

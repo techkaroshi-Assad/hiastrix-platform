@@ -74,3 +74,12 @@ above is cleared. What the test actually surfaced:
   as if the caller interrupted) rather than a code bug — this needs
   confirming on a real phone call before spending more effort chasing it as
   a bug.
+- The preview feature worked and confirmed the kaizenus.com scrape did get
+  real text — but it was mostly the nav menu ("About Us Value Analysis
+  Benefits Case Studies Industry Overview Services") outweighing the one
+  actual line of substance ("Medical Billing Services for Small Practices").
+  `htmlToText` in `lib/vapi/knowledge.ts` now strips `<nav>`, `<header>`,
+  `<footer>`, `<aside>` before converting to text. **Untested** — remove and
+  re-add the kaizenus.com URL once this is deployed, check the new preview
+  reads like real page copy rather than menu labels, then re-run the same
+  "what do you do" question on a call.
