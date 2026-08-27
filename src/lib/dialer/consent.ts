@@ -28,7 +28,7 @@
 import { splitOption } from "@/lib/vapi/options"
 import { enforcedRules } from "@/lib/crm/guidance"
 import { readConfig } from "@/lib/vapi/config"
-import { effectiveTimeZone } from "@/lib/vapi/payload"
+import { effectiveTimeZone, toolsPayload } from "@/lib/vapi/payload"
 import { formatLeadContext, type LeadContext } from "@/lib/crm/lead-context"
 
 /**
@@ -66,12 +66,28 @@ export function campaignSystemPrompt(a: {
 
   obligations.push(
     "You called them, so say who you are and why you are calling before you ask them anything.",
-    // The variable being available was never the same as it being used — see
-    // lib/crm/lead-context.ts. An agent that already has a name and still
-    // opens with "who am I speaking with?" is the tell that it was optional.
+    /*
+     * Not the same instruction for a B2B list as for a consumer one, and
+     * treating it as the same is how a real call went wrong: the name on
+     * file was the practice's own doctor, a receptionist answered, and the
+     * old fixed wording here said to address whoever picked up by that name
+     * in the first sentence — exactly the hallucination this platform
+     * exists to prevent, just aimed at business calls instead of CRM
+     * lookups. The model quietly ignored the bad instruction rather than
+     * greet a receptionist as "Doctor" — the right outcome, but by luck of
+     * good judgement rather than by what it was told to do.
+     *
+     * Now a real choice rather than one guess baked into every call: see
+     * `leadContactRelationship` in lib/vapi/config.ts. "direct" is a
+     * personal contact list — a first name is very likely who answers.
+     * "front-desk" is a directory of business lines — the name is who to
+     * ask for, not who's on the line by default.
+     */
     a.leadContext.name
-      ? `Address them by name — ${a.leadContext.name} — starting with your first sentence, rather than asking who they are.`
-      : "You have not been given their name. Ask for it naturally rather than guessing one.",
+      ? config.leadContactRelationship === "front-desk"
+        ? `You have a name on file for this call — ${a.leadContext.name}. This is a business line, so whoever answers first is usually reception or other staff, not ${a.leadContext.name} — don't assume they are. Ask for ${a.leadContext.name} by name, or whoever handles this, rather than guessing who's on the line.`
+        : `Address them by name — ${a.leadContext.name} — starting with your first sentence, rather than asking who they are.`
+      : "You have not been given a name for this call. Ask who you're speaking with naturally rather than guessing one.",
     "If they ask not to be contacted again, say you will take them off the list, use the opt-out tool if you have it, and use your endCall function to end the call politely — right away, not after another push. Do not try to keep them talking.",
     "If they are busy or it is a bad time, offer to call back, then use your endCall function to end the call."
   )
@@ -119,12 +135,24 @@ export function campaignOverrides(a: {
   // saved before models carried a prefix.
   const m = splitOption(a.agentModel?.trim() || "gpt-4o-mini")
   const { variableValues } = formatLeadContext(a.leadContext)
+  const config = readConfig(a.agentConfig)
 
   const overrides: Record<string, unknown> = {
     model: {
       provider: m.provider,
       model:    m.id,
       messages: [{ role: "system", content: campaignSystemPrompt(a) }],
+      /*
+       * Without this, every campaign call ran with none of the agent's
+       * tools — this object replaces the assistant's `model` for the call
+       * rather than merging into it, so omitting `tools` here silently
+       * dropped CRM actions, the knowledge search tool, and the endCall
+       * function on every single outbound dial. Mirrors exactly what the
+       * base assistant gets built with in lib/vapi/payload.ts, so a
+       * campaign call and a direct inbound call have the same capabilities.
+       */
+      tools: toolsPayload(config),
+      ...(config.knowledgeToolId ? { toolIds: [config.knowledgeToolId] } : {}),
     },
     variableValues: {
       ...variableValues,

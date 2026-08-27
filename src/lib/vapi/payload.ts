@@ -157,7 +157,17 @@ const END_CALL_TOOL = { type: "endCall" } as const
  * tool list is identical before and after conversion, so nothing needs
  * re-syncing upstream.
  */
-function toolsPayload(config: AgentConfig): Record<string, unknown>[] {
+/**
+ * Exported so a per-call override can carry the same tools the base
+ * assistant has — see lib/dialer/consent.ts. A campaign call's
+ * `assistantOverrides.model` replaces the assistant's `model` object for
+ * that call rather than merging into it, so any override that sets `model`
+ * without also setting `tools` silently runs the call with none: no CRM
+ * actions, no knowledge search, no endCall. That is not a theoretical risk —
+ * it is what a live campaign call showed, tools switched on and zero tool
+ * calls logged.
+ */
+export function toolsPayload(config: AgentConfig): Record<string, unknown>[] {
   const structured = config.tools
     .map(toolPayload)
     .filter((t): t is Record<string, unknown> => t !== null)

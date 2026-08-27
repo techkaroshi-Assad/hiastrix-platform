@@ -818,6 +818,41 @@ export function AgentEditor({
                 </Target>
               )}
             </Block>
+
+            <Block
+              title="Who's on the list"
+              description="Only matters on outbound calls, and only when a name is imported with the list."
+            >
+              <Target id="lead-contact-relationship" flash={flash}>
+                <Select
+                  label="When a name is on file for the person being called"
+                  help={
+                    <>
+                      A CSV name is not a promise that whoever answers is
+                      that person. A personal contact list and a directory
+                      of business numbers behave completely differently — on
+                      one, the name is very likely who picks up; on the
+                      other, it&rsquo;s usually reception or staff first,
+                      and greeting them by a name that isn&rsquo;t theirs is
+                      exactly the kind of thing this platform exists to
+                      prevent.
+                    </>
+                  }
+                  helpHref="/dashboard/help#campaigns"
+                  value={c.leadContactRelationship}
+                  onChange={e =>
+                    setConfig({
+                      leadContactRelationship: e.target.value as AgentConfig["leadContactRelationship"],
+                    })
+                  }
+                  options={[
+                    { value: "direct", label: "Use the name freely — it's very likely who answers" },
+                    { value: "front-desk", label: "Ask for them by name — someone else usually answers first" },
+                  ]}
+                  hint="Set this per agent. A cold-calling list of clinics and a personal contact list need opposite defaults."
+                />
+              </Target>
+            </Block>
           </div>
         )}
 

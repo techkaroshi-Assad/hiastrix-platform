@@ -79,7 +79,46 @@ above is cleared. What the test actually surfaced:
   Benefits Case Studies Industry Overview Services") outweighing the one
   actual line of substance ("Medical Billing Services for Small Practices").
   `htmlToText` in `lib/vapi/knowledge.ts` now strips `<nav>`, `<header>`,
-  `<footer>`, `<aside>` before converting to text. **Untested** — remove and
-  re-add the kaizenus.com URL once this is deployed, check the new preview
-  reads like real page copy rather than menu labels, then re-run the same
-  "what do you do" question on a call.
+  `<footer>`, `<aside>` before converting to text. **Confirmed fixed** — the
+  re-added URL's preview came back as real prose ("Kaizen helps healthcare
+  providers across the USA improve cash flow with reliable medical
+  billing...").
+
+## First live campaign test (2026-08-27) — found and fixed a severe bug
+
+User ran a real campaign call ("Nancy" / Kaizen Systems, outbound to a
+practice's front desk). The call detail page said "This agent has no tools
+switched on" even though the agent's CRM tools were actively toggled on and
+saved. Traced it: `campaignOverrides()` in `lib/dialer/consent.ts` builds a
+per-call `assistantOverrides.model` object with `provider`/`model`/`messages`
+but never `tools` or `toolIds`. A call override replaces the assistant's
+`model` object for that call rather than merging into it, so every campaign
+call — not just this one — ran with **none** of the agent's tools: no CRM
+actions, no knowledge search, and no `endCall` either. This was silently
+breaking three separate features built this session, all at once, on every
+real outbound dial. **Fixed**: `toolsPayload()` exported from
+`lib/vapi/payload.ts` and now included in `campaignOverrides()`'s model
+object, same as the base assistant gets. **Untested since the fix** — run
+another campaign call with CRM tools on and confirm "What the agent did"
+shows the lookup.
+
+Also from that same call: the CRM contact name on file was the practice's
+own doctor, but a receptionist answered, and the (then-hardcoded) obligation
+telling the agent to "address them by name in your first sentence" would
+have had it greet her as "Doctor" — the model quietly didn't do this, good
+judgement rather than being told not to. Per the user's explicit request,
+this is no longer a fixed platform rule: added `leadContactRelationship`
+("direct" | "front-desk") to `AgentConfigSchema` in `lib/vapi/config.ts`,
+exposed as a Select under Call control → "Who's on the list" in
+`agent-editor.tsx`, and `campaignSystemPrompt()` in `consent.ts` now branches
+on it instead of always assuming the name is who answers. Defaults to
+"direct" (today's old behaviour) so nothing changes for an agent until the
+tenant sets it. **Untested** — set this Kaizen agent to "front-desk" and
+confirm the next call to a practice number asks for the name rather than
+assuming it.
+
+Separately, the tenant's own prompt for this agent treats "that's not the
+right person" the same as an outright refusal and ends the call — worth a
+prompt fix (in the tenant's own systemPrompt, not platform code) if it comes
+up again: a receptionist saying "no, not me" should prompt "who is, then?",
+not an immediate close.

@@ -160,6 +160,21 @@ export const AgentConfigSchema = z.object({
   voicemailDetectionEnabled: z.boolean().default(false),
   voicemailMessage: z.string().max(1000).default(""),
 
+  /**
+   * Who is likely to actually answer an outbound call, versus who a
+   * campaign's list has a name for.
+   *
+   * A CSV name is not a promise that whoever picks up is that person — a
+   * personal contact list and a directory of business numbers behave
+   * completely differently, and treating them the same is how a call to a
+   * medical practice's front desk had the agent poised to greet a
+   * receptionist as "Doctor". "direct" keeps today's behaviour: use the
+   * name freely, it's very likely the person on the list. "front-desk"
+   * tells the agent someone else usually answers first, so the name is
+   * something to ask for, not something to assume.
+   */
+  leadContactRelationship: z.enum(["direct", "front-desk"]).default("direct"),
+
   /* Analysis */
   summaryEnabled: z.boolean().default(true),
   successEvaluationEnabled: z.boolean().default(false),
