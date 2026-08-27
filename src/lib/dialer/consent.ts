@@ -72,8 +72,8 @@ export function campaignSystemPrompt(a: {
     a.leadContext.name
       ? `Address them by name — ${a.leadContext.name} — starting with your first sentence, rather than asking who they are.`
       : "You have not been given their name. Ask for it naturally rather than guessing one.",
-    "If they ask not to be contacted again, say you will take them off the list, use the opt-out tool if you have it, and end the call politely. Do not try to keep them talking.",
-    "If they are busy or it is a bad time, offer to call back and end the call."
+    "If they ask not to be contacted again, say you will take them off the list, use the opt-out tool if you have it, and use your endCall function to end the call politely — right away, not after another push. Do not try to keep them talking.",
+    "If they are busy or it is a bad time, offer to call back, then use your endCall function to end the call."
   )
 
   return `${base}\n\n${promptBlock}\n\n${obligations.map(o => `- ${o}`).join("\n")}`

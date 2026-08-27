@@ -61,6 +61,25 @@ function nowBlock(timeZone: string): string {
     .join("\n")
 }
 
+/* ── Hanging up ─────────────────────────────────────────────────────────── */
+
+/**
+ * The provider gives every agent an `endCall` function now (see
+ * lib/vapi/payload.ts) — a capability, not a behaviour, same as everything
+ * else in this file. Without this block the model has a way to hang up and no
+ * instruction to ever use it, which is indistinguishable from not having it:
+ * the caller says goodbye and the agent just keeps talking.
+ *
+ * The middle line is the cold-calling nuance directly: one objection is not a
+ * goodbye, and an agent that hangs up the instant someone hesitates is worse
+ * than one that never hangs up at all.
+ */
+const CALL_END_LINES = [
+  "You have an endCall function — use it to actually hang up. Saying goodbye out loud does not end the call by itself; you must call the function.",
+  "End the call once the caller says goodbye, makes clear they have nothing further to add, or asks you to stop calling or leave them alone. Give a brief, natural sign-off first, then call endCall — never mid-sentence, and never right after you've just asked them something.",
+  "A single objection or \"I'm not interested\" is not the same as goodbye — respond to it once and keep the conversation going. Only end the call if they repeat that they're not interested, say goodbye, or explicitly ask you to stop.",
+]
+
 /* ── The non-negotiable part ───────────────────────────────────────────── */
 
 /**
@@ -78,7 +97,12 @@ export function enforcedRules(
   // CRM tools at all still gets asked what day Thursday falls on.
   const context = `\n\n---\nRight now (set by Hi-Astrix):\n${nowBlock(timeZone)}`
 
-  if (!anyCrm(tools)) return context
+  // Same story for ending the call: every agent gets the endCall function
+  // now, so every agent needs to be told when to use it — not just the ones
+  // with CRM tools switched on.
+  const callControl = `\n\n---\nEnding the call (set by Hi-Astrix):\n${CALL_END_LINES.map(l => `- ${l}`).join("\n")}`
+
+  if (!anyCrm(tools)) return context + callControl
 
   const lines: string[] = []
 
@@ -132,7 +156,7 @@ export function enforcedRules(
 
   lines.push("Never read an id, a reference or a system message aloud to the caller.")
 
-  return `${context}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
+  return `${context}${callControl}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
 }
 
 /* ── The editable draft ────────────────────────────────────────────────── */

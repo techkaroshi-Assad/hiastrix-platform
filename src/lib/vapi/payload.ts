@@ -137,6 +137,20 @@ const toolName = (t: Record<string, unknown>) =>
   (t?.function as { name?: string } | undefined)?.name
 
 /**
+ * The provider's own hang-up function — not a tenant setting, because every
+ * agent needs a way to actually end a call rather than just talk toward one.
+ *
+ * Before this, nothing in the payload gave the model a way to hang up at all:
+ * `endCallPhrases` (below) only fires if the assistant happens to speak one of
+ * a tenant-configured list of exact phrases, which defaults to empty and, even
+ * configured, is a fragile substring match on the assistant's own transcript —
+ * not something the model is deciding to do. This is the mechanism Vapi
+ * actually recommends for "the model judges when the conversation is over":
+ * a function it calls on purpose. See enforcedRules() for when it's told to.
+ */
+const END_CALL_TOOL = { type: "endCall" } as const
+
+/**
  * Structured tools first, then any un-migrated legacy JSON, de-duped by name.
  *
  * Emitting both is what makes the one-off migration safe: an agent's effective
@@ -148,22 +162,25 @@ function toolsPayload(config: AgentConfig): Record<string, unknown>[] {
     .map(toolPayload)
     .filter((t): t is Record<string, unknown> => t !== null)
 
-  if (!config.toolsJson.trim()) return structured
+  let legacy: Record<string, unknown>[] = []
+  if (config.toolsJson.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(config.toolsJson)
+      if (Array.isArray(parsed)) legacy = parsed as Record<string, unknown>[]
+    } catch {
+      legacy = []
+    }
+  }
 
   const taken = new Set(structured.map(toolName))
+  const rest = legacy.filter(t => !taken.has(toolName(t)))
 
-  let legacy: unknown = []
-  try {
-    legacy = JSON.parse(config.toolsJson)
-  } catch {
-    legacy = []
-  }
-  if (!Array.isArray(legacy)) return structured
+  // Respect a tenant's legacy JSON if it already declared its own endCall
+  // entry, rather than sending the provider two tools of the same built-in
+  // type — which it rejects outright.
+  const hasEndCall = [...structured, ...rest].some(t => t.type === "endCall")
 
-  return [
-    ...structured,
-    ...(legacy as Record<string, unknown>[]).filter(t => !taken.has(toolName(t))),
-  ]
+  return [...structured, ...rest, ...(hasEndCall ? [] : [END_CALL_TOOL])]
 }
 
 export type AgentCore = {
