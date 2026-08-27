@@ -41,3 +41,36 @@ and it's fine — then delete the relevant line(s).
   — the "What happened" column links to the full call record when one
   exists. Should work off existing data (no new webhook behaviour), but
   hasn't been clicked on a real campaign yet.
+
+## First live test (2026-08-27) — findings
+
+User tested a browser call against "Nancy" (Kaizen Systems). Confirmed
+`knowledge_search` as the function name is correct — matches Vapi's query
+tool docs and `lib/vapi/client.ts` exactly, so that specific unverified risk
+above is cleared. What the test actually surfaced:
+
+- Nancy looped on "may I ask your name" through two outright refusals, and
+  separately re-opened with "good morning" mid-call more than once. Neither
+  is something this platform coded on purpose — most likely the tenant's own
+  prompt has no fallback when a caller declines, compounded by a rough
+  connection. Added an unconditional instruction against both in
+  `lib/crm/guidance.ts` (`CONVERSATION_LINES`) as a safety net regardless of
+  root cause. **Untested** — needs the same kind of call again to confirm it
+  actually stops.
+- The knowledge base didn't answer a question about what Kaizen Systems
+  does, despite a website URL being added. Root cause not confirmed — could
+  be the page being JavaScript-rendered (this platform has no browser to
+  execute it, only a raw fetch) producing little or no real text, or the
+  model simply never calling the tool. Added a preview of the actually-
+  extracted text plus a "this looks thin" warning to the knowledge editor UI
+  (`components/agents/knowledge-editor.tsx`) so this is diagnosable without
+  guessing next time. **Action for the user**: re-open that agent's
+  knowledge section and look at the preview under the Kaizen Systems URL —
+  if it's a warning and a near-empty snippet, the page needs a JS-rendering
+  workaround (not yet built); if it looks like real page text, the problem
+  is the model not calling the tool, which is a different fix.
+- The repeated "good morning" and noticeable delay may substantially be a
+  browser-mic-test artifact (speaker audio bleeding into the mic, read back
+  as if the caller interrupted) rather than a code bug — this needs
+  confirming on a real phone call before spending more effort chasing it as
+  a bug.

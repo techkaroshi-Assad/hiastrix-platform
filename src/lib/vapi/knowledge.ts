@@ -61,9 +61,19 @@ export async function uploadKnowledgeFile(
  * matters here, since this is a server making an outbound request to
  * whatever address a tenant types in.
  */
+/**
+ * Below this, a fetch almost certainly landed on a JavaScript shell rather
+ * than real content — a `<div id="root">` and a script tag, no visible text.
+ * This platform has no browser to render a page with; it only ever reads
+ * what the server sent back. Worth surfacing at the point of upload rather
+ * than let a tenant discover it three questions into a call, the way "why
+ * doesn't it know what we do" surfaced here.
+ */
+const THIN_CONTENT_CHARS = 200
+
 export async function fetchUrlAsKnowledgeFile(
   url: string
-): Promise<{ vapiFileId: string; name: string }> {
+): Promise<{ vapiFileId: string; name: string; preview: string; thin: boolean }> {
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -94,7 +104,12 @@ export async function fetchUrlAsKnowledgeFile(
     `${parsed.hostname.replace(/[^a-z0-9.-]/gi, "_")}.txt`,
     "text/plain"
   )
-  return { vapiFileId: created.id, name: `${parsed.hostname}${parsed.pathname}`.replace(/\/+$/, "") }
+  return {
+    vapiFileId: created.id,
+    name: `${parsed.hostname}${parsed.pathname}`.replace(/\/+$/, ""),
+    preview: text.slice(0, 220),
+    thin: text.length < THIN_CONTENT_CHARS,
+  }
 }
 
 /**

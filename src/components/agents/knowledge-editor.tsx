@@ -116,22 +116,50 @@ export function KnowledgeEditor({
       {files.length > 0 && (
         <ul className="divide-y divide-line-soft overflow-hidden rounded-field border border-line">
           {files.map(f => (
-            <li key={f.id} className="flex items-center justify-between gap-3 bg-field px-3.5 py-2.5">
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-medium text-fg">{f.name}</p>
-                <p className="text-[11.5px] text-subtle">
-                  {f.source === "url" ? "From a web page" : "Uploaded file"}
-                </p>
+            <li key={f.id} className="bg-field px-3.5 py-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium text-fg">{f.name}</p>
+                  <p className="text-[11.5px] text-subtle">
+                    {f.source === "url" ? "From a web page" : "Uploaded file"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => remove(f.id)}
+                  disabled={busy !== null}
+                  aria-label={`Remove ${f.name}`}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-field-hover hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {busy === f.id ? "…" : <IconDelete size={15} />}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => remove(f.id)}
-                disabled={busy !== null}
-                aria-label={`Remove ${f.name}`}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-subtle transition-colors hover:bg-field-hover hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {busy === f.id ? "…" : <IconDelete size={15} />}
-              </button>
+
+              {/* What we actually got from the page, so a thin or garbled
+                  scrape is obvious here rather than three questions into a
+                  call. There is no browser on this platform to render a page
+                  with — a site built in JavaScript fetches down to an empty
+                  shell, and this is the only place that would show it. */}
+              {f.source === "url" && f.preview && (
+                <div
+                  className={
+                    f.thin
+                      ? "mt-2 rounded-field border border-warning/30 bg-warning/[0.06] px-3 py-2"
+                      : "mt-2 rounded-field border border-line-soft bg-field-soft px-3 py-2"
+                  }
+                >
+                  {f.thin && (
+                    <p className="mb-1 text-[11.5px] font-medium text-warning">
+                      This looks like very little real text — the page may need
+                      JavaScript to load its content, which this can&rsquo;t run.
+                      Try a PDF or text export of the page instead.
+                    </p>
+                  )}
+                  <p className="text-[11.5px] leading-relaxed text-subtle">
+                    &ldquo;{f.preview}&rdquo;
+                  </p>
+                </div>
+              )}
             </li>
           ))}
         </ul>

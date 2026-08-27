@@ -141,7 +141,7 @@ export async function POST(
       const parsed = UrlBodySchema.safeParse(await request.json().catch(() => null))
       if (!parsed.success) return apiError("I need a file or a web address.")
 
-      let result: { vapiFileId: string; name: string }
+      let result: { vapiFileId: string; name: string; preview: string; thin: boolean }
       try {
         result = await fetchUrlAsKnowledgeFile(parsed.data.url)
       } catch (err) {
@@ -156,6 +156,8 @@ export async function POST(
         vapiFileId: result.vapiFileId,
         source: "url",
         sourceUrl: parsed.data.url,
+        preview: result.preview,
+        thin: result.thin,
       }
     }
 

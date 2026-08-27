@@ -96,6 +96,17 @@ export const KnowledgeFileSchema = z.object({
   vapiFileId: z.string().max(120),
   source: z.enum(["upload", "url"]),
   sourceUrl: z.string().max(2000).optional(),
+  /**
+   * The first ~220 characters of what was actually extracted, url source
+   * only. This platform has no browser to render a page with — a
+   * JavaScript-built site fetches down to an empty shell, and without this
+   * a tenant has no way to know their agent was handed nothing until it
+   * fails to answer a question mid-call. See lib/vapi/knowledge.ts.
+   */
+  preview: z.string().max(300).optional(),
+  /** True when the extracted text was suspiciously short — almost certainly
+   *  a JS shell rather than real content. */
+  thin: z.boolean().optional(),
 })
 export type KnowledgeFile = z.infer<typeof KnowledgeFileSchema>
 

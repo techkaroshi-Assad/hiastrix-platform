@@ -80,6 +80,26 @@ const CALL_END_LINES = [
   "A single objection or \"I'm not interested\" is not the same as goodbye — respond to it once and keep the conversation going. Only end the call if they repeat that they're not interested, say goodbye, or explicitly ask you to stop.",
 ]
 
+/**
+ * Two failure modes that show up as the same thing on the caller's end: the
+ * conversation stops moving forward. One live test looped a caller through
+ * "may I ask your name" five times in a row, past two outright refusals,
+ * ignoring every question the caller actually asked; a rough connection on
+ * the same call had the assistant re-introduce itself and re-open with
+ * "good morning" mid-conversation, more than once, as if the call had just
+ * started.
+ *
+ * Both are cheap to stop at the instruction level regardless of why the
+ * model started doing it — a garbled turn, an overlapping interruption, a
+ * tenant's own prompt asking for the same field without a fallback — so
+ * this is unconditional, the same as the call-ending block above.
+ */
+const CONVERSATION_LINES = [
+  "You already greeted the caller once, at the very start of this call. Never repeat your opening greeting or reintroduce yourself again later in the same call — not even if the audio glitches or you're unsure what was just said. Just continue naturally from wherever the conversation actually is.",
+  "Never ask for the same piece of information more than twice. If the caller doesn't answer, deflects, or declines after two asks, drop it for the rest of the call and keep helping them without it.",
+  "Answer the question the caller actually just asked before you ask them anything of your own. If you don't have the information to answer it, say so plainly rather than steering back to what you wanted to ask.",
+]
+
 /* ── The non-negotiable part ───────────────────────────────────────────── */
 
 /**
@@ -102,7 +122,12 @@ export function enforcedRules(
   // with CRM tools switched on.
   const callControl = `\n\n---\nEnding the call (set by Hi-Astrix):\n${CALL_END_LINES.map(l => `- ${l}`).join("\n")}`
 
-  if (!anyCrm(tools)) return context + callControl
+  // And this one has nothing to do with CRM tools at all — it is about the
+  // model not looping on itself, which every agent can do regardless of
+  // what it's connected to.
+  const conversation = `\n\n---\nStaying on track (set by Hi-Astrix):\n${CONVERSATION_LINES.map(l => `- ${l}`).join("\n")}`
+
+  if (!anyCrm(tools)) return context + callControl + conversation
 
   const lines: string[] = []
 
@@ -156,7 +181,7 @@ export function enforcedRules(
 
   lines.push("Never read an id, a reference or a system message aloud to the caller.")
 
-  return `${context}${callControl}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
+  return `${context}${callControl}${conversation}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
 }
 
 /* ── The editable draft ────────────────────────────────────────────────── */
