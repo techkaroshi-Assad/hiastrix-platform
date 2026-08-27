@@ -70,6 +70,16 @@ export const DIAL_CONCURRENCY = 3
 /** Per provider request inside the tick. The client's own default is longer. */
 export const PROVIDER_TIMEOUT_MS = 10_000
 
+/**
+ * The pre-dial CRM lookup, per lead.
+ *
+ * Bounded well under the provider timeout above so a slow CRM degrades to
+ * "we don't know who this is" rather than delaying — or, at DIAL_CONCURRENCY
+ * lookups running at once, meaningfully slowing — the tick itself. See
+ * lib/crm/lead-context.ts.
+ */
+export const CRM_PRECALL_LOOKUP_TIMEOUT_MS = 3_000
+
 /* ── Recovery ───────────────────────────────────────────────────────── */
 
 /**

@@ -92,6 +92,10 @@ export type ColumnGuess = {
   lastName: number | null
   fullName: number | null
   email: number | null
+  /** Kept apart from the personal-name fields on purpose — a lead is often a
+   *  business, not a person, and the two get surfaced to the agent separately.
+   *  See lib/crm/lead-context.ts. */
+  business: number | null
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "")
@@ -104,6 +108,8 @@ const FULL   = ["name", "fullname", "contact", "contactname", "customer", "clien
 // No single letters, and nothing shorter than the substring pass will accept.
 // An "e" here matched "Vehicle" and quietly imported a van as an email address.
 const EMAIL  = ["email", "emailaddress", "mail"]
+const BUSINESS = ["business", "businessname", "company", "companyname", "organization",
+                  "organisation", "organizationname", "organisationname", "firm", "dba"]
 
 /**
  * Two passes, and the order is load-bearing.
@@ -160,11 +166,16 @@ export function guessColumns(headers: string[]): ColumnGuess {
   // only name column is "Name" resolves to one field rather than being carved up.
   // A sheet with a real first/last pair matches those exactly, and fullName then
   // finds nothing left — which is the outcome we want.
+  // `business` is offered to the matcher before `fullName` so a header like
+  // "Business Name" cannot be stolen by fullName's own "name" substring —
+  // the same trap the comment above describes for last-name-vs-full-name,
+  // one substring pass earlier.
   const m = pickAll(headers, {
     phone: PHONE,
     email: EMAIL,
     firstName: FIRST,
     lastName: LAST,
+    business: BUSINESS,
     fullName: FULL,
   })
 
@@ -177,6 +188,7 @@ export function guessColumns(headers: string[]): ColumnGuess {
     lastName: m.lastName,
     fullName: hasPair ? null : m.fullName,
     email: m.email,
+    business: m.business,
   }
 }
 
@@ -185,24 +197,31 @@ export type ImportRow = {
   phone: string
   name?: string
   email?: string
-  /** Everything else in the row, available to the agent's opening line. */
+  /** Everything else in the row, available to the agent's opening line. Carries
+   *  a `business` key when that column was mapped — see lib/crm/lead-context.ts,
+   *  which is what actually surfaces it to the agent as its own fact rather
+   *  than an anonymous merge value. */
   fields?: Record<string, string>
 }
 
 export function toImportRows(parsed: ParsedCsv, map: ColumnGuess): ImportRow[] {
   const at = (r: string[], i: number | null) => (i === null ? "" : (r[i] ?? "").trim())
-  const mapped = new Set([map.phone, map.firstName, map.lastName, map.fullName, map.email]
-    .filter((i): i is number => i !== null))
+  const mapped = new Set(
+    [map.phone, map.firstName, map.lastName, map.fullName, map.email, map.business]
+      .filter((i): i is number => i !== null)
+  )
 
   return parsed.rows.map(r => {
     const name = map.fullName !== null
       ? at(r, map.fullName)
       : [at(r, map.firstName), at(r, map.lastName)].filter(Boolean).join(" ")
+    const business = at(r, map.business)
 
     // Unmapped columns ride along as merge values rather than being discarded —
     // "your quote for {{vehicle}}" is the whole point of importing a spreadsheet
     // rather than a list of numbers.
     const fields: Record<string, string> = {}
+    if (business) fields.business = business
     parsed.headers.forEach((h, i) => {
       if (mapped.has(i)) return
       const v = (r[i] ?? "").trim()

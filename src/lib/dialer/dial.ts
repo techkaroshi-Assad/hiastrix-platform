@@ -23,7 +23,8 @@
 import { prisma } from "@/lib/prisma"
 import { vapiCalls } from "@/lib/vapi/client"
 import { campaignOverrides } from "@/lib/dialer/consent"
-import { PROVIDER_TIMEOUT_MS, CONNECT_LEASE_SECONDS } from "@/lib/dialer/config"
+import { lookupCrmContact, lookupCrmContactById, buildLeadContext } from "@/lib/crm/lead-context"
+import { PROVIDER_TIMEOUT_MS, CONNECT_LEASE_SECONDS, CRM_PRECALL_LOOKUP_TIMEOUT_MS } from "@/lib/dialer/config"
 import type { ClaimedLead } from "@/lib/dialer/claim"
 
 export type CallerNumber = {
@@ -47,6 +48,9 @@ export type DialContext = {
   contactDailyCap: number
   /** Merge values available to the agent's opening line. */
   campaignName: string
+  /** Null when the tenant has no CRM connected. Used only for the pre-dial
+   *  lookup — never trusted from anything in the lead row itself. */
+  crmLocationId: string | null
 
   /*
    * What the agent is obliged to say on this campaign's calls, composed at dial
@@ -146,6 +150,39 @@ export async function placeCall(
   const number = pickNumber(ctx)
   if (!number) return { kind: "no_number" }
 
+  /*
+   * Who is this, really — asked once, before the ledger row even exists.
+   *
+   * A lead pulled from a CRM tag already carries its contact id (see
+   * lib/dialer/import.ts); one from a spreadsheet never has, so it is looked
+   * up here by phone number. Bounded and best-effort: a slow or unreachable
+   * CRM must never be the reason a call did not go out, so a miss or a
+   * timeout simply means the agent is told nothing rather than something
+   * wrong. Found or not, the outcome feeds the same lead-context shape used
+   * everywhere else a call is briefed — see lib/crm/lead-context.ts.
+   */
+  const crmContact = lead.crmContactId
+    ? await lookupCrmContactById(ctx.crmLocationId, lead.crmContactId, CRM_PRECALL_LOOKUP_TIMEOUT_MS)
+    : await lookupCrmContact(ctx.crmLocationId, lead.phoneE164, CRM_PRECALL_LOOKUP_TIMEOUT_MS)
+
+  // Newly discovered, not previously linked — worth writing back so the next
+  // attempt (a retry, a callback) does not pay for the same lookup again, and
+  // so the lead's own record reflects it. Never worth failing the dial over.
+  if (crmContact && !lead.crmContactId) {
+    try {
+      await prisma.campaignLead.update({
+        where: { id: lead.leadId },
+        data:  { crmContactId: crmContact.id },
+      })
+    } catch { /* cosmetic; the dial proceeds either way */ }
+  }
+
+  const leadContext = buildLeadContext({
+    name: lead.contactName,
+    fields: lead.fields,
+    crmContact,
+  })
+
   /* ── 1. The ledger row, before the provider hears about it ──────────── */
 
   let attemptId: string
@@ -194,8 +231,7 @@ export async function placeCall(
           agentModel:        ctx.agentModel,
           consentLine:       ctx.consentLine,
           campaignName:      ctx.campaignName,
-          contactName:       lead.contactName,
-          fields:            lead.fields,
+          leadContext,
           voicemailMessage:  ctx.voicemailMessage,
         }),
       },

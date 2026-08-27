@@ -33,7 +33,7 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
     prisma.campaign.findUnique({
       where: { id: campaignId },
       include: {
-        tenant: { select: { id: true, maxConcurrentCalls: true } },
+        tenant: { select: { id: true, maxConcurrentCalls: true, crmLocationId: true } },
         agent:  { select: { id: true, vapiAssistantId: true, config: true, systemPrompt: true, model: true } },
       },
     }),
@@ -102,6 +102,9 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
       numberDailyCap: settings?.numberDailyCallCap ?? 200,
       contactDailyCap: settings?.contactDailyCap ?? 2,
       campaignName:   campaign.name,
+      /** Null when the tenant has no CRM connected — the pre-dial lookup is
+       *  simply skipped, same as everywhere else that reads this. */
+      crmLocationId:  campaign.tenant.crmLocationId,
 
       agentSystemPrompt: campaign.agent.systemPrompt,
       agentConfig:       campaign.agent.config,

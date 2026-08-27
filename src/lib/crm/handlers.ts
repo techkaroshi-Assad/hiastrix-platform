@@ -80,6 +80,17 @@ export function phoneVariants(raw: string): string[] {
 const displayName = (c: { firstName?: string; lastName?: string }) =>
   [c.firstName, c.lastName].filter(Boolean).join(" ").trim() || "that contact"
 
+/**
+ * What a found contact is tagged, spoken rather than left implicit.
+ *
+ * The enforced rule tells the agent to use whatever the lookup actually
+ * returned rather than assume anything about a caller it just identified —
+ * tags are the one piece of that beyond a name and an id, and omitting them
+ * here would leave the instruction with nothing to act on.
+ */
+const tagSuffix = (c: { tags?: string[] }) =>
+  c.tags?.length ? ` Tagged: ${c.tags.join(", ")}.` : ""
+
 /** Midnight UTC for a YYYY-MM-DD. The provider wants epoch milliseconds and
  *  applies the time zone itself when laying out the slots. */
 function dayMs(date: string, endOfDay = false): number | null {
@@ -121,7 +132,7 @@ export async function runCrmAction(
         }
       }
 
-      if (exact) return `Found ${displayName(exact)}, contact id ${exact.id}.`
+      if (exact) return `Found ${displayName(exact)}, contact id ${exact.id}.${tagSuffix(exact)}`
 
       const found = await crmContacts.search(locationId, query)
       if (!found.length) {
@@ -130,7 +141,7 @@ export async function runCrmAction(
 
       const [first] = found
       const extra = found.length > 1 ? ` (${found.length - 1} other close matches)` : ""
-      return `Found ${displayName(first)}, contact id ${first.id}${extra}.`
+      return `Found ${displayName(first)}, contact id ${first.id}${extra}.${tagSuffix(first)}`
     }
 
     case "crm.contact.create": {

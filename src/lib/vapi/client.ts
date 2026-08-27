@@ -110,6 +110,73 @@ export const vapiPhoneNumbers = {
     }),
 }
 
+// ─── Files ────────────────────────────────────────────────────────────────────
+
+export const vapiFiles = {
+  /**
+   * Upload one file, multipart.
+   *
+   * Deliberately not built on `vapiRequest`: that helper always sends
+   * `Content-Type: application/json`, which is exactly wrong here — a
+   * multipart body needs fetch to set its own boundary, and forcing JSON
+   * would have the provider try to parse a file as one. Kept small and
+   * separate rather than teaching the shared helper an exception.
+   */
+  async upload(
+    content: Buffer,
+    filename: string,
+    mimeType: string,
+    opts: { timeoutMs?: number } = {}
+  ): Promise<{ id: string; name?: string }> {
+    const form = new FormData()
+    form.append("file", new Blob([new Uint8Array(content)], { type: mimeType }), filename)
+
+    let res: Response
+    try {
+      res = await fetch(`${VAPI_BASE_URL}/file`, {
+        method: "POST",
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),
+        headers: { Authorization: `Bearer ${process.env.VAPI_API_KEY}` },
+        body: form,
+      })
+    } catch (err) {
+      if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+        throw new Error(`Vapi API error 408: file upload timed out`)
+      }
+      throw err
+    }
+
+    if (!res.ok) throw new Error(`Vapi API error ${res.status}: ${await res.text()}`)
+    return res.json()
+  },
+
+  delete: (id: string) => vapiRequest(`/file/${id}`, { method: "DELETE" }),
+}
+
+// ─── Tools (knowledge / query) ─────────────────────────────────────────────────
+
+export const vapiTools = {
+  /**
+   * A "query" tool wraps one or more file-backed knowledge bases and is what
+   * an assistant's `model.toolIds` actually references — see
+   * lib/vapi/knowledge.ts for why this is recreated rather than edited in
+   * place whenever the file list changes.
+   */
+  createQuery: (data: { name: string; description: string; fileIds: string[] }) =>
+    vapiRequest<{ id: string }>("/tool", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "query",
+        function: { name: "knowledge_search" },
+        knowledgeBases: [
+          { provider: "google", name: data.name, description: data.description, fileIds: data.fileIds },
+        ],
+      }),
+    }),
+
+  delete: (id: string) => vapiRequest(`/tool/${id}`, { method: "DELETE" }),
+}
+
 // ─── Calls ───────────────────────────────────────────────────────────────────
 
 /** What we get back from placing a call. Only `id` is relied on. */

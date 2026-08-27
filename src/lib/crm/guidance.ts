@@ -87,7 +87,17 @@ export function enforcedRules(
       // Named explicitly rather than left as "their phone number", because the
       // agent that failed did have a lookup rule — it just had no number, so it
       // asked, and an email read aloud is the least reliable identifier there is.
-      "Look the caller up by the number above before you ask them for anything. Only ask for a phone number or an email address if that number is blank, or if it finds nobody."
+      //
+      // This is also the whole answer, for now, to "does the agent know who's
+      // calling" on an inbound call: there is no per-caller briefing before
+      // the phone even rings — that would mean every number resolving its
+      // assistant dynamically per call rather than the fixed assignment the
+      // on/off switch in lib/agents/availability.ts depends on, which is a
+      // bigger and separately-verified change. Looked up in the first seconds
+      // of the call, before anything substantive is said, is the safe version
+      // of the same outcome with none of that risk.
+      "Look the caller up by the number above before you say anything beyond your greeting. Only ask for a phone number or an email address if that number is blank, or if it finds nobody.",
+      "If the lookup finds them, that is who you are speaking with — greet them as an existing contact and use whatever it tells you about them. Do not claim anything about them beyond what the lookup actually returned."
     )
   }
   if (has(tools, "crm.contact.create")) {

@@ -608,6 +608,13 @@ export function LeadImport({
                             onChange={setCol("lastName")} />
                   </div>
                 )}
+                <Select
+                  label="Business"
+                  options={columnOptions}
+                  value={map?.business === null || map?.business === undefined ? "" : String(map.business)}
+                  onChange={setCol("business")}
+                  hint="Told to the agent separately from a person's name — set this if the list is of businesses, not individuals."
+                />
               </div>
 
               <div className="overflow-x-auto rounded-2xl border border-line">

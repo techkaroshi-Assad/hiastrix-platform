@@ -28,6 +28,8 @@
 import { splitOption } from "@/lib/vapi/options"
 import { enforcedRules } from "@/lib/crm/guidance"
 import { readConfig } from "@/lib/vapi/config"
+import { effectiveTimeZone } from "@/lib/vapi/payload"
+import { formatLeadContext, type LeadContext } from "@/lib/crm/lead-context"
 
 /**
  * The system prompt the agent should run with on this call.
@@ -43,10 +45,19 @@ export function campaignSystemPrompt(a: {
   agentConfig: unknown
   consentLine: string
   campaignName: string
+  leadContext: LeadContext
 }): string {
   const config = readConfig(a.agentConfig)
 
-  const base = (a.agentSystemPrompt ?? "").trim() + enforcedRules(config.tools)
+  // Same timezone the assistant is actually built with (see
+  // lib/vapi/payload.ts) — omitting this here meant every campaign call
+  // computed "today" and "tomorrow" against UTC regardless of the agent's own
+  // calendar, which is exactly the class of bug the date block exists to
+  // prevent in the first place.
+  const base = (a.agentSystemPrompt ?? "").trim()
+    + enforcedRules(config.tools, { timeZone: effectiveTimeZone(config) })
+
+  const { promptBlock } = formatLeadContext(a.leadContext)
 
   const obligations: string[] = []
 
@@ -55,11 +66,17 @@ export function campaignSystemPrompt(a: {
 
   obligations.push(
     "You called them, so say who you are and why you are calling before you ask them anything.",
+    // The variable being available was never the same as it being used — see
+    // lib/crm/lead-context.ts. An agent that already has a name and still
+    // opens with "who am I speaking with?" is the tell that it was optional.
+    a.leadContext.name
+      ? `Address them by name — ${a.leadContext.name} — starting with your first sentence, rather than asking who they are.`
+      : "You have not been given their name. Ask for it naturally rather than guessing one.",
     "If they ask not to be contacted again, say you will take them off the list, use the opt-out tool if you have it, and end the call politely. Do not try to keep them talking.",
     "If they are busy or it is a bad time, offer to call back and end the call."
   )
 
-  return `${base}\n\n${obligations.map(o => `- ${o}`).join("\n")}`
+  return `${base}\n\n${promptBlock}\n\n${obligations.map(o => `- ${o}`).join("\n")}`
 }
 
 /**
@@ -91,8 +108,9 @@ export function campaignOverrides(a: {
   agentModel: string | null
   consentLine: string
   campaignName: string
-  contactName: string | null
-  fields: Record<string, unknown>
+  /** Everything known about who is being called — CSV columns, and a CRM
+   *  match if one was found before dialling. See lib/crm/lead-context.ts. */
+  leadContext: LeadContext
   /** Set when the campaign leaves voicemails, so the agent knows what to say. */
   voicemailMessage?: string | null
 }): Record<string, unknown> {
@@ -100,6 +118,7 @@ export function campaignOverrides(a: {
   // the provider's own namespace, which is also the right fallback for an agent
   // saved before models carried a prefix.
   const m = splitOption(a.agentModel?.trim() || "gpt-4o-mini")
+  const { variableValues } = formatLeadContext(a.leadContext)
 
   const overrides: Record<string, unknown> = {
     model: {
@@ -108,11 +127,8 @@ export function campaignOverrides(a: {
       messages: [{ role: "system", content: campaignSystemPrompt(a) }],
     },
     variableValues: {
-      name: a.contactName ?? "",
+      ...variableValues,
       campaign: a.campaignName,
-      ...Object.fromEntries(
-        Object.entries(a.fields).map(([k, v]) => [k, String(v ?? "")])
-      ),
     },
   }
 

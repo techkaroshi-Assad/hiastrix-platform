@@ -89,6 +89,16 @@ const StructuredSchemaJson = z
     { message: "Schema must be a JSON object." }
   )
 
+export const KnowledgeFileSchema = z.object({
+  /** Ours, not the provider's — stable even if the file is ever re-uploaded. */
+  id: z.string(),
+  name: z.string().max(200),
+  vapiFileId: z.string().max(120),
+  source: z.enum(["upload", "url"]),
+  sourceUrl: z.string().max(2000).optional(),
+})
+export type KnowledgeFile = z.infer<typeof KnowledgeFileSchema>
+
 export const AgentConfigSchema = z.object({
   /* Conversation opening */
   firstMessageMode: z
@@ -103,7 +113,25 @@ export const AgentConfigSchema = z.object({
   /* Model tuning */
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens:   z.number().int().min(50).max(4000).default(250),
+
+  /**
+   * DEPRECATED — a raw id pointing at a self-hosted knowledge base, from
+   * before the built-in one existed. Nothing in the UI writes this anymore;
+   * still read and still sent, on the same principle as `toolsJson` below.
+   */
   knowledgeBaseId: z.string().max(120).default(""),
+
+  /**
+   * Documents the agent can answer from — uploaded files, or a website page
+   * fetched and converted server-side. See lib/vapi/knowledge.ts. Stored here
+   * rather than in a table because it is small, per-agent, and only ever read
+   * or written alongside the rest of the config.
+   */
+  knowledgeFiles: z.array(KnowledgeFileSchema).max(20).default([]),
+  /** The provider tool built from `knowledgeFiles`. Recreated whenever that
+   *  list changes rather than edited — see lib/vapi/knowledge.ts — so this is
+   *  always either empty or the one tool actually attached right now. */
+  knowledgeToolId: z.string().max(120).default(""),
 
   /* Transcription */
   transcriber: z.string().default("deepgram:nova-2"),

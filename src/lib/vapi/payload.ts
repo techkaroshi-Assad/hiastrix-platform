@@ -249,12 +249,32 @@ export function buildAssistantPayload(
           role: "system",
           content:
             core.systemPrompt +
-            enforcedRules(config.tools, { timeZone: effectiveTimeZone(config) }),
+            enforcedRules(config.tools, { timeZone: effectiveTimeZone(config) }) +
+            /*
+             * A knowledge tool being attached is a capability, not a
+             * behaviour — the same gap enforcedRules exists to close for CRM
+             * tools. Vapi's own docs are explicit that the tool's description
+             * alone does not get it used: the prompt has to name it. The
+             * function name here must match what lib/vapi/knowledge.ts
+             * actually creates the tool as.
+             */
+            (config.knowledgeToolId
+              ? "\n\n---\nYou have documents available (set by Hi-Astrix):\n" +
+                "- When the caller asks something your uploaded documents might answer, " +
+                "use the 'knowledge_search' tool before answering from general knowledge. " +
+                "If it finds nothing relevant, say so rather than guessing."
+              : ""),
         },
       ],
       ...(config.knowledgeBaseId
         ? { knowledgeBaseId: config.knowledgeBaseId }
         : {}),
+      // Only sent when a knowledge tool actually exists. Vapi's inline `tools`
+      // and id-referenced `toolIds` are documented separately from each
+      // other — mixing them is a reasonable reading of the API, not a
+      // verified one, which is exactly why this stays opt-in: an agent with
+      // no knowledge files attached is completely unaffected.
+      ...(config.knowledgeToolId ? { toolIds: [config.knowledgeToolId] } : {}),
       // Always sent, including as an empty array. Omitting the key on an update
       // risks the provider deep-merging `model` and keeping a tool the tenant
       // just deleted — an agent that still books appointments after you removed
