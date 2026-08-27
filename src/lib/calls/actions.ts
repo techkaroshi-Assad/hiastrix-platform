@@ -134,6 +134,16 @@ export function readActions(
       const res  = id ? results.get(id) : undefined
       const result = typeof res?.result === "string" ? res.result : null
 
+      /*
+       * `endCall` is the one tool whose entire job is to end the conversation
+       * it was called on — the connection can drop before its result ever
+       * gets written back, which for every other tool means "never came
+       * back" and a red failure pill. Here it means it worked exactly as
+       * intended, so it is scored on that basis rather than on whether a
+       * reply arrived in time to be recorded.
+       */
+      const endedTheCall = name === "endCall"
+
       out.push({
         id: id || `${name}-${out.length}`,
         name,
@@ -141,7 +151,7 @@ export function readActions(
         args: parseArgs(raw),
         argsRaw: raw,
         result,
-        outcome: outcomeOf(result),
+        outcome: endedTheCall && result === null ? "ok" : outcomeOf(result),
         secondsFromStart:
           typeof m.secondsFromStart === "number" ? m.secondsFromStart : null,
         latencyMs:
@@ -277,8 +287,23 @@ export const ACTION_LABEL: Record<string, string> = {
   "crm.appointment.book":          "Booked an appointment",
 }
 
+/**
+ * The provider's own built-in tools — never in `typeByName` because they
+ * are not something a tenant configures in the tool builder, so they are
+ * looked up by the raw function name the model actually called instead of
+ * by our own type.
+ */
+const BUILTIN_LABEL: Record<string, string> = {
+  endCall:      "Ended the call",
+  transferCall: "Transferred the call",
+  sms:          "Sent a text",
+  dtmf:         "Entered keypad digits",
+  apiRequest:   "Called an external API",
+}
+
 export function labelFor(action: CallAction): string {
-  return (action.type && ACTION_LABEL[action.type]) || action.name
+  if (action.type && ACTION_LABEL[action.type]) return ACTION_LABEL[action.type]
+  return BUILTIN_LABEL[action.name] || action.name
 }
 
 /**

@@ -160,6 +160,10 @@ export function CallActions({
                     >
                       {action.result}
                     </p>
+                  ) : action.name === "endCall" ? (
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-subtle">
+                      The call ended right after this — there is nothing further to report.
+                    </p>
                   ) : (
                     <p className="mt-1.5 text-[12.5px] leading-relaxed text-danger">
                       Never came back. The agent carried on without an answer.

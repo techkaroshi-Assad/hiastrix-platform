@@ -60,6 +60,15 @@ export default async function CampaignPage({
         id: true, phoneE164: true, contactName: true, state: true,
         attemptNo: true, lastOutcome: true, note: true,
         nextAttemptAt: true, updatedAt: true,
+        // Only the id of whatever was actually dialled — matched against
+        // `Call.vapiCallId` below so "What happened" can link straight to the
+        // full record (transcript, recording, every tool call) instead of
+        // just the one-line outcome stored on the lead itself.
+        attempts: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { providerCallId: true },
+        },
       },
     }),
     prisma.campaignLead.count({ where }),
@@ -104,6 +113,28 @@ export default async function CampaignPage({
       },
     }),
   ])
+
+  /*
+   * `DialAttempt.providerCallId` and `Call.vapiCallId` are the same string,
+   * but there is no foreign key between them — a campaign is dialler
+   * bookkeeping, and a call is a Vapi webhook's record of what happened, and
+   * the two are written by completely different code paths that only agree
+   * by convention. This is the one join that bridges them, done here rather
+   * than with a relation so neither model has to know the other exists.
+   */
+  const callIds = leads
+    .map(l => l.attempts[0]?.providerCallId)
+    .filter((v): v is string => Boolean(v))
+  const callIdByVapiId = callIds.length
+    ? new Map(
+        (
+          await prisma.call.findMany({
+            where: { vapiCallId: { in: callIds }, tenantId: tenant.id },
+            select: { id: true, vapiCallId: true },
+          })
+        ).map(c => [c.vapiCallId, c.id])
+      )
+    : new Map<string, string>()
 
   const countOf = (s: string) => counts.find(c => c.state === s)?._count._all ?? 0
   const all = counts.reduce((n, c) => n + c._count._all, 0)
@@ -313,7 +344,25 @@ export default async function CampaignPage({
                       </TD>
                       <TD align="right" muted className="tabular-nums">{l.attemptNo}</TD>
                       <TD align="right" muted>
-                        {l.note ?? (l.state === "PENDING" ? "Not called yet" : "—")}
+                        {(() => {
+                          const text = l.note ?? (l.state === "PENDING" ? "Not called yet" : "—")
+                          const callId = l.attempts[0]?.providerCallId
+                            ? callIdByVapiId.get(l.attempts[0].providerCallId)
+                            : undefined
+                          // Only ever a link once there is a full call record to
+                          // land on — "Not called yet" and a bare "—" stay plain
+                          // text rather than pointing at a page with nothing on it.
+                          return callId ? (
+                            <Link
+                              href={`/dashboard/calls/${callId}`}
+                              className="text-brand-on-tint underline decoration-brand-500/40 underline-offset-2 hover:decoration-brand-500"
+                            >
+                              {text}
+                            </Link>
+                          ) : (
+                            text
+                          )
+                        })()}
                       </TD>
                     </tr>
                   ))
