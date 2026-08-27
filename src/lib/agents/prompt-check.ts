@@ -86,6 +86,7 @@ export type FieldTarget =
   | "voicemail-detect"
   | "voicemail-message"
   | "structured-schema"
+  | "lead-contact-relationship"
 
 export type CheckInput = {
   systemPrompt: string
