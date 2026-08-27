@@ -88,7 +88,11 @@ async function saveKnowledgeFiles(
   )
 
   await prisma.agent.update({ where: { id: agent.id }, data: { config: nextConfig } })
-  return nextConfig.knowledgeFiles
+  // Both are handed back, not just the files — the caller's local draft holds
+  // a full copy of `config` and has to replace both together, or a save made
+  // moments later would re-send a knowledgeToolId that no longer matches the
+  // file list it was just rebuilt from.
+  return { files: nextConfig.knowledgeFiles, knowledgeToolId: nextConfig.knowledgeToolId }
 }
 
 export async function POST(
@@ -155,8 +159,8 @@ export async function POST(
       }
     }
 
-    const files = await saveKnowledgeFiles(agent, [...stored.knowledgeFiles, entry])
-    return Response.json({ files })
+    const result = await saveKnowledgeFiles(agent, [...stored.knowledgeFiles, entry])
+    return Response.json(result)
   } catch (error) {
     return apiError(sanitiseError(error, "agents/knowledge/add"))
   }
@@ -181,8 +185,8 @@ export async function DELETE(
       return apiError(ERRORS.NOT_FOUND, 404)
     }
 
-    const files = await saveKnowledgeFiles(agent, remaining)
-    return Response.json({ files })
+    const result = await saveKnowledgeFiles(agent, remaining)
+    return Response.json(result)
   } catch (error) {
     return apiError(sanitiseError(error, "agents/knowledge/remove"))
   }

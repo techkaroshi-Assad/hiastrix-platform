@@ -43,6 +43,7 @@ import {
   type AgentTool,
 } from "@/lib/vapi/config"
 import { ToolsEditor } from "@/components/agents/tools-editor"
+import { KnowledgeEditor } from "@/components/agents/knowledge-editor"
 import { JsonEditor } from "@/components/agents/json-editor"
 import { SchemaBuilder } from "@/components/agents/schema-builder"
 import {
@@ -576,13 +577,14 @@ export function AgentEditor({
 
             <Block
               title="Knowledge"
-              description="Give the agent documents it can answer from."
+              description="Give the agent documents it can answer from — a PDF, a spreadsheet, or a page from your website."
             >
-              <Field
-                label="Knowledge base ID"
-                value={c.knowledgeBaseId}
-                onChange={e => setConfig({ knowledgeBaseId: e.target.value })}
-                placeholder="Leave blank for none"
+              <KnowledgeEditor
+                agentId={agentId}
+                files={c.knowledgeFiles}
+                onChange={(knowledgeFiles, knowledgeToolId) =>
+                  setConfig({ knowledgeFiles, knowledgeToolId })
+                }
               />
             </Block>
 
