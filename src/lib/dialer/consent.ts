@@ -26,7 +26,7 @@
  */
 
 import { splitOption } from "@/lib/vapi/options"
-import { enforcedRules, ivrRulesFrom } from "@/lib/crm/guidance"
+import { enforcedRules, ivrRulesFrom, DELIVERY_CLOSER } from "@/lib/crm/guidance"
 import { analysisPlanPayload } from "@/lib/vapi/analysis"
 import { readConfig } from "@/lib/vapi/config"
 import { effectiveTimeZone, toolsPayload } from "@/lib/vapi/payload"
@@ -56,7 +56,14 @@ export function campaignSystemPrompt(a: {
   // calendar, which is exactly the class of bug the date block exists to
   // prevent in the first place.
   const base = (a.agentSystemPrompt ?? "").trim()
-    + enforcedRules(config.tools, { timeZone: effectiveTimeZone(config), ivr: ivrRulesFrom(config) })
+    + enforcedRules(config.tools, {
+        timeZone: effectiveTimeZone(config),
+        ivr: ivrRulesFrom(config),
+        // The campaign obligations below are appended after this, so the
+        // no-narration closer is added at the very end instead of here —
+        // it is only "the last word" if nothing follows it.
+        closing: false,
+      })
 
   const { promptBlock } = formatLeadContext(a.leadContext)
 
@@ -104,7 +111,7 @@ export function campaignSystemPrompt(a: {
     "If they are busy or it is a bad time, offer to call back, then hang up. Say goodbye like a person would and end the call without commenting on it."
   )
 
-  return `${base}\n\n${promptBlock}\n\n${obligations.map(o => `- ${o}`).join("\n")}`
+  return `${base}\n\n${promptBlock}\n\n${obligations.map(o => `- ${o}`).join("\n")}\n\n---\n${DELIVERY_CLOSER}`
 }
 
 /**

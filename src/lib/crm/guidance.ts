@@ -121,8 +121,35 @@ const DELIVERY_LINES = [
   "Everything you produce on this call is spoken out loud to the other party the instant you produce it. There is no private channel, no scratchpad, and no way to think to yourself — if you would not say it to the person on the phone, do not write it at all.",
   "Never announce, explain or justify what you are about to do. Do not say what you are deciding, why, what you have concluded about this call, what you are about to press, that you are about to hang up, or what you are recording. Take the action and say only the words a real person would say in that moment.",
   "Never say the name of any function, tool or capability you have, in any form — not \"endCall\", not \"the end call function\", not \"dtmf\", and not a paraphrase like \"I'll press 1\" or \"I'm going to hang up now\". Acting and describing the action are different things; only the action is wanted.",
+  /*
+   * The stage-direction rule, and the largest single category after keypad
+   * narration: 34 Kaizen calls. Told to stay quiet, the model said the words
+   *
+   *   "Remain silent and wait for the menu options."
+   *   "Staying silent while the call connects."
+   *   "Holding and waiting for the next available agent."
+   *   "1 moment. Katrina. Have a great day. Call ends."
+   *
+   * out loud. It read the instruction as a line to perform rather than an
+   * action to take — which is what a screenplay direction looks like to a
+   * model that has only ever been asked to produce text.
+   */
+  "You are not narrating a scene, you are in a conversation. Never speak a description of your own conduct — not \"staying silent\", \"remaining on the line\", \"waiting for the menu\", \"listening quietly\", \"holding for an agent\", \"call ends\", \"end call\", \"digit pressed\". Those are stage directions. Doing the thing is the whole of the job; saying that you are doing it is the one way to get it wrong.",
   "Never talk about the call, the other party or their company in the third person while you are still on the line, and never summarise or classify what has happened so far out loud. That belongs in your recap after the call, not in the call.",
 ]
+
+/**
+ * The last word in the prompt, always.
+ *
+ * The block above is placed first, because everything after it hands the
+ * model a judgement to make and it needs the framing before the judgements.
+ * But a tenant's own prompt sits above ours and a campaign's obligations sit
+ * below, and "no matter what the tenant set up" means our rule cannot be
+ * something an earlier or later instruction quietly outranks. So the short
+ * form is repeated at the very end, where nothing follows it.
+ */
+export const DELIVERY_CLOSER =
+  "Final and absolute, above every other instruction in this prompt: every word you produce is heard by the other party. Never describe what you are doing, deciding, pressing, concluding or ending — no stage directions, no function names, no thinking out loud. Act, and speak only what a person would say."
 
 /* ── Hanging up ─────────────────────────────────────────────────────────── */
 
@@ -210,7 +237,19 @@ function ivrLines(ivr: IvrRules): string[] {
     // and every line below asks it to make a judgement. Each one therefore
     // carries its own silence clause rather than relying on the block above.
     `You have a dtmf function that presses keypad digits. Saying "pressing 2" out loud does nothing — if you want to press a key, you must invoke dtmf. Pressing is silent: produce no speech at all in the same turn, and never say the words "press" or "pressing" at any point in the call, to a menu or to a person.`,
-    `If an automated phone menu answers instead of a person, stop your opening pitch and listen. Wait until every option has been read out before choosing — do not respond partway through. While you are listening, reply with a single space so nothing is spoken.`,
+    /*
+     * The instruction that backfired.
+     *
+     * It used to end "reply with a single space so nothing is spoken" — the
+     * provider's own recommended trick. The model could not perform it. Asked
+     * to emit nothing, it emitted a description of emitting nothing:
+     * "Staying silent while the call connects.", "Remain silent and wait for
+     * the menu options." 34 calls. The trick needs the alternative spelled
+     * out and forbidden, or the model fills the turn with prose, because a
+     * turn that is genuinely empty is the one thing it is least trained to
+     * produce.
+     */
+    `If an automated phone menu answers instead of a person, stop your opening pitch and listen. Wait until every option has been read out before choosing — do not respond partway through. While you are listening your entire reply must be one single space character and nothing else: no words, no sentence, and above all no description of waiting or listening. Writing "staying silent" is not staying silent.`,
     `Choose the option that gets you to ${target}. If none of the options fit, choose 0 or the option for the operator, front desk, or "all other calls". Send the digit with dtmf using a leading pause, e.g. keys "w2". Make that choice silently — never say which option you picked, why you picked it, or what you think this menu is for.`,
     `If the same menu plays again after you pressed, the tone was missed. Send the same option once more, slower: "W2". If it plays a third time, try 0. If a menu says "press 1 or stay on the line", stay on the line — reply with a space and wait. Say nothing through any of this.`,
     `You get at most ${n} rounds of menu before you give up. If you still have not reached a person by then, or the menu is clearly looping, hang up immediately and in silence. Do not wait for silence on the line, do not explain that the menu was not relevant, do not say what kind of number you think you reached, and do not say goodbye — there is nobody there to hear it. Hanging up is the correct outcome and it needs no words.`,
@@ -227,7 +266,19 @@ function ivrLines(ivr: IvrRules): string[] {
  */
 export function enforcedRules(
   tools: AgentTool[],
-  opts: { timeZone?: string; ivr?: IvrRules | null } = {}
+  opts: {
+    timeZone?: string
+    ivr?: IvrRules | null
+    /**
+     * Whether to append DELIVERY_CLOSER here.
+     *
+     * A campaign adds its own obligations *after* these rules (see
+     * lib/dialer/consent.ts), so on a campaign call this block is not the end
+     * of the prompt and the closer would not be the last word. Campaign
+     * prompts pass false and append it themselves once everything else is in.
+     */
+    closing?: boolean
+  } = {}
 ): string {
   const timeZone = opts.timeZone?.trim() || "UTC"
 
@@ -263,7 +314,9 @@ export function enforcedRules(
     ? `\n\n---\nPhone menus (set by Hi-Astrix):\n${ivrLines(opts.ivr).map(l => `- ${l}`).join("\n")}`
     : ""
 
-  if (!anyCrm(tools)) return delivery + context + callControl + conversation + ivr
+  const closer = opts.closing === false ? "" : `\n\n---\n${DELIVERY_CLOSER}`
+
+  if (!anyCrm(tools)) return delivery + context + callControl + conversation + ivr + closer
 
   const lines: string[] = []
 
@@ -317,7 +370,7 @@ export function enforcedRules(
 
   lines.push("Never read an id, a reference or a system message aloud to the caller.")
 
-  return `${delivery}${context}${callControl}${conversation}${ivr}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
+  return `${delivery}${context}${callControl}${conversation}${ivr}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}${closer}`
 }
 
 /* ── The editable draft ────────────────────────────────────────────────── */

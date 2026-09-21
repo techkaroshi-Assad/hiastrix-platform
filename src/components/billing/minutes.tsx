@@ -40,6 +40,7 @@
 import { Card } from "@/components/app/table"
 import { usd } from "@/lib/format"
 import { minutesLabel, type AllowanceView } from "@/lib/billing/allowance"
+import type { CreditComposition } from "@/lib/billing/credit"
 
 function Row({
   label,
@@ -94,6 +95,13 @@ function Row({
 
 export function MinutesBreakdown({
   a,
+  /**
+   * Where the balance came from, when the page has loaded the ledger.
+   *
+   * Without it this card can only say "your balance", which for a tenant
+   * running entirely on credit we allocated is not true. See lib/billing/credit.ts.
+   */
+  credit,
   /** Minutes used in the page's own window, when that isn't the billing month. */
   windowMinutes,
   /** Length of that window, in days. */
@@ -103,12 +111,16 @@ export function MinutesBreakdown({
   className,
 }: {
   a: AllowanceView
+  credit?: CreditComposition
   windowMinutes?: number
   windowDays?: number
   windowChargedCents?: number
   className?: string
 }) {
   const hasPlan = a.includedMinutes > 0
+  const granted = credit?.fullyGranted ?? false
+  /** "your balance" is a claim about whose money it is. Only make it when true. */
+  const balanceWord = granted ? "the credit allocated to you" : "your balance"
 
   return (
     <Card title="Minutes" className={className}>
@@ -149,7 +161,7 @@ export function MinutesBreakdown({
               tone={a.overageMinutes > 0 ? "warning" : "muted"}
             />
             <Row
-              label="What your balance would buy"
+              label={granted ? "What your allocated credit would buy" : "What your balance would buy"}
               hint={
                 a.overageRateCents > 0
                   ? `${usd(a.balanceCents)} at ${usd(a.overageRateCents)} a minute — only used once the included minutes are gone`
@@ -191,6 +203,58 @@ export function MinutesBreakdown({
           </>
         )}
       </div>
+
+      {/*
+       * Where the credit came from.
+       *
+       * Stated as a sum over the ledger rather than as an attribution: which
+       * dollars a given call burned is an accounting choice, not a fact, and
+       * any choice eventually disagrees with the balance. These figures
+       * reconcile by construction, whatever the tenant's arrangement.
+       */}
+      {credit && !credit.empty && (
+        <div className="border-t border-line px-5 py-1">
+          <div className="pt-2 pb-1 text-[11.5px] font-medium uppercase tracking-[0.08em] text-subtle">
+            Where this credit came from
+          </div>
+          {credit.grantedCents > 0 && (
+            <Row
+              label="Allocated by Hi-Astrix"
+              hint="Credit we added to this account — not billed to you"
+              value={`+${usd(credit.grantedCents)}`}
+            />
+          )}
+          {credit.purchasedCents > 0 && (
+            <Row label="Paid by you" value={`+${usd(credit.purchasedCents)}`} />
+          )}
+          {credit.refundedCents > 0 && (
+            <Row label="Refunded back" value={`+${usd(credit.refundedCents)}`} tone="muted" />
+          )}
+          {credit.spentCents > 0 && (
+            <Row
+              label="Used on calls"
+              hint={hasPlan ? "Charged before your current plan started, or beyond its allowance" : undefined}
+              value={`−${usd(credit.spentCents)}`}
+              tone="muted"
+            />
+          )}
+          {credit.adjustedCents > 0 && (
+            <Row label="Adjustments" value={`−${usd(credit.adjustedCents)}`} tone="muted" />
+          )}
+          <Row
+            label={granted ? "Credit remaining" : "Balance now"}
+            value={usd(credit.netCents)}
+            tone="total"
+            rule
+          />
+          {granted && (
+            <p className="px-0 pb-4 pt-3 text-[12px] leading-relaxed text-subtle">
+              This account has never been charged. Everything above was allocated
+              by Hi-Astrix, so {balanceWord} is not money you have paid in.
+            </p>
+          )}
+        </div>
+      )}
 
       {/*
        * The reconciling footnote.

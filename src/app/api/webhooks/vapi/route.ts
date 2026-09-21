@@ -20,6 +20,7 @@ import { processCallEnded } from "@/lib/billing/cap-enforcement"
 import { authorisedByVapiSecret as authorised } from "@/lib/vapi/webhook-auth"
 import { releaseAttempt, markAttemptConnected, advanceCampaign } from "@/lib/dialer/advance"
 import { classifyReached } from "@/lib/calls/reached"
+import { detectNarration } from "@/lib/calls/narration"
 
 export const dynamic = "force-dynamic"
 
@@ -193,6 +194,20 @@ export async function POST(request: NextRequest) {
           structuredData: analysis.structuredData,
         })
 
+        /*
+         * Did the agent narrate itself out loud?
+         *
+         * Runs on every call, for every tenant, whatever they configured.
+         * The prompt rules that prevent this are probabilistic — the provider
+         * has no output filter, and its own IVR guide offers nothing stronger
+         * than "avoid saying anything if using the dtmf tool" — so prevention
+         * can fail quietly. It failed quietly on 124 of Kaizen's first 667
+         * calls, 34 of them with a real person listening, and nothing in the
+         * platform noticed for three weeks. Measuring it is what makes that
+         * impossible a second time. See lib/calls/narration.ts.
+         */
+        const narration = detectNarration(messages)
+
         const record = await prisma.call.upsert({
           where: { vapiCallId },
           create: {
@@ -210,6 +225,8 @@ export async function POST(request: NextRequest) {
             endedReason,
             reached,
             ivrSeen,
+            narrationKinds: narration.kinds,
+            narrationTurns: narration.turns,
             ...(analysisPayload ? { analysis: analysisPayload } : {}),
             ...(messages ? { messages } : {}),
             startedAt: call.startedAt ? new Date(call.startedAt) : null,
@@ -224,6 +241,8 @@ export async function POST(request: NextRequest) {
             endedReason,
             reached,
             ivrSeen,
+            narrationKinds: narration.kinds,
+            narrationTurns: narration.turns,
             ...(analysisPayload ? { analysis: analysisPayload } : {}),
             ...(messages ? { messages } : {}),
             endedAt: call.endedAt ? new Date(call.endedAt) : new Date(),

@@ -1,0 +1,93 @@
+Measure agent self-narration on every call; separate granted credit from paid
+
+── HOW BAD IT ACTUALLY IS ──────────────────────────────────────────
+
+My first count was 48 calls. It was wrong in both directions: it missed
+the dominant failure and it flagged ordinary courtesy as a defect. The
+real figure, from the shipped detector run over every call:
+
+  Kaizen Systems US   124 of 694 calls (17.9%), 231 flagged turns
+  HashirCare            0 of  19
+  ILM Healing           0 of  16
+  astrixdigitalmedia    0 of  16
+
+  34 of the 124 were heard by a person. 11 went onto voicemail, where
+  they are recorded.
+
+By category: keypad 100 calls, stage directions 34, mechanism 20,
+hang-up 8, tooling 2, records 1. Still running at ~20% on 18 and 21
+September — current, not historical.
+
+The category I had missed entirely is the damning one. Told to "reply
+with a single space so nothing is spoken", the model said the words out
+loud instead:
+
+  "Remain silent and wait for the menu options."
+  "Staying silent while the call connects."
+  "Holding and waiting for the next available agent."
+  "1 moment. Katrina. Have a great day. Call ends."
+
+It read the instruction as a line to perform rather than an action to
+take. My instruction caused that, and the provider's own IVR guide
+recommends the same trick, so it needed the alternative spelled out and
+forbidden rather than left implicit.
+
+── WHAT CAN AND CANNOT BE GUARANTEED ───────────────────────────────
+
+There is no output filter anywhere in the provider's API. Its IVR guide
+offers exactly one lever — "avoid saying anything if using the dtmf
+tool" — and that is a prompt. So prevention is probabilistic and saying
+otherwise would be a lie.
+
+What is now structural is that it cannot go unnoticed:
+
+  - lib/calls/narration.ts — one detector, six categories, with the
+    rationale for each anchored to a real spoken line. Validated on 59
+    hand-labelled turns from production: 29/29 caught, 30/30 clean. The
+    first audit and the first fix disagreed by a factor of two precisely
+    because the regex lived in a SQL console and not in a file.
+  - Runs in the end-of-call webhook on EVERY call of EVERY tenant,
+    whatever they configured, and writes calls.narration_kinds /
+    narration_turns. Backfilled over all history: 124 calls, 231 turns.
+  - Partial index on the flagged minority so it stays cheap.
+
+And prompt-side, the parts a tenant cannot switch off:
+
+  - A stage-direction rule, naming the exact phrasings observed.
+  - The silence instruction rewritten: "your entire reply must be one
+    single space character and nothing else ... Writing 'staying silent'
+    is not staying silent."
+  - DELIVERY_CLOSER is now the literal last line of every prompt, after
+    the tenant's own text AND after the campaign obligations. Callers
+    that append their own blocks pass closing:false and re-add it at the
+    end, so nothing outranks it by sitting later.
+
+── CREDIT: GRANTED IS NOT PAID ─────────────────────────────────────
+
+Kaizen's full ledger:
+
+  MANUAL_CREDIT     4 entries   +$130.00   allocated from super admin
+  CALL_DEDUCTION  174 entries    -$76.65
+  OVERAGE_CHARGE   48 entries    -$29.40
+  REFUND            1 entry      +$29.40
+  TOP_UP            0 entries
+  PACKAGE_PURCHASE  0 entries
+
+They have never paid us a penny. Every screen called it "your balance"
+and priced it as overage fuel.
+
+lib/billing/credit.ts states the account rather than attributing spend:
+what came in and from where, what went out and on what. Deciding which
+dollars a given call burned is an accounting choice dressed as a fact,
+and any such choice eventually disagrees with the balance. These sums
+reconcile by construction — verified against the real ledger (net 5335
+== balance 5335) and across five scenarios: no plan/granted only, plan
+with purchases, plan exhausted into overage, mixed granted+purchased,
+and an empty ledger.
+
+The balance card is now labelled by provenance ("Credit allocated to
+you"), and the breakdown carries a "Where this credit came from"
+section ending, where true: "This account has never been charged."
+
+Migration applied to the live database already: calls.narration_kinds,
+calls.narration_turns, calls_narration_idx.

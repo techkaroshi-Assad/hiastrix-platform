@@ -14,7 +14,7 @@
 import { splitOption } from "./options"
 import { transcriberPayload } from "./catalog"
 import { crmToolParameters } from "@/lib/crm/tool-schema"
-import { enforcedRules, ivrRulesFrom } from "@/lib/crm/guidance"
+import { enforcedRules, ivrRulesFrom, DELIVERY_CLOSER } from "@/lib/crm/guidance"
 import { analysisPlanPayload } from "@/lib/vapi/analysis"
 import type { AgentConfig } from "./config"
 import type { AgentTool } from "./tools"
@@ -293,7 +293,14 @@ export function buildAssistantPayload(
           role: "system",
           content:
             core.systemPrompt +
-            enforcedRules(config.tools, { timeZone: effectiveTimeZone(config), ivr: ivrRulesFrom(config) }) +
+            // closing: false because the knowledge block below is appended
+            // after — the no-narration closer is re-added at the very end so
+            // nothing outranks it by sitting later in the prompt.
+            enforcedRules(config.tools, {
+              timeZone: effectiveTimeZone(config),
+              ivr: ivrRulesFrom(config),
+              closing: false,
+            }) +
             /*
              * A knowledge tool being attached is a capability, not a
              * behaviour — the same gap enforcedRules exists to close for CRM
@@ -307,7 +314,8 @@ export function buildAssistantPayload(
                 "- When the caller asks something your uploaded documents might answer, " +
                 "use the 'knowledge_search' tool before answering from general knowledge. " +
                 "If it finds nothing relevant, say so rather than guessing."
-              : ""),
+              : "") +
+            `\n\n---\n${DELIVERY_CLOSER}`,
         },
       ],
       ...(config.knowledgeBaseId

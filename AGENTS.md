@@ -10,6 +10,25 @@ The user has not yet confirmed these on a real Vapi call. Do not treat them as
 working, and do not remove this section until the user says they've tested
 and it's fine — then delete the relevant line(s).
 
+- **No-narration block** (`lib/crm/guidance.ts`'s `DELIVERY_LINES`,
+  tightened `CALL_END_LINES` and `ivrLines`, `lib/dialer/consent.ts`
+  obligations) — stops the agent speaking its own reasoning down the phone.
+  Measured before the change: 48 of 506 Kaizen calls in three weeks, e.g.
+  "Since this menu isn't specific to billing ... I'll hang up now and note
+  this as a central line. Using the end call function now." Needs a real
+  campaign run over menu-heavy numbers, then re-run the detector in
+  `## Detecting narration` below and confirm the count drops. **Do not add
+  a config toggle for this** — see the comment block above `DELIVERY_LINES`
+  for why it is deliberately unconditional.
+- **Minutes breakdown** (`components/billing/minutes.tsx`,
+  `lib/billing/allowance.ts`'s `overageCents`, Billing and Analytics pages)
+  — included vs overage vs balance-funded minutes as separate labelled
+  rows, with a footnote reconciling a rolling window against the billing
+  month. Analytics now reads the same `readAllowance()` as Billing, and
+  under a plan its headline card measures minutes per person reached rather
+  than dollars. Needs a look at both pages on a tenant *with* overage —
+  Kaizen currently has none, so the overage rows have only been exercised
+  at zero.
 - **Lead context / CRM pre-dial lookup** (`lib/crm/lead-context.ts`,
   `lib/dialer/dial.ts`, `lib/dialer/consent.ts`) — CSV business-name column,
   pre-dial CRM lookup by phone/contact id, and injecting the result into the
@@ -368,3 +387,103 @@ database before this deploys cleanly. **Untested**: existing rows will show
 at the page to confirm the banner and Type column render as expected, and
 ideally a real Twilio number imported into Vapi to confirm it tags as
 non-free.
+
+## The agent read its own reasoning down the phone (2026-09-22, latest)
+
+Reported as "sometime agent says its own instructions in the call". It is not
+instruction text: a search for verbatim prompt strings across 1,845 agent
+turns from 526 Kaizen calls found **zero**. What leaks is the *reasoning*,
+reconstructed live in the model's own words and spoken aloud:
+
+    "Since this menu isn't specific to billing or claims for the practice
+     itself, and it seems to direct patients based on last names, I'll hang
+     up now and note this as a central line or unrelated menu. Letting the
+     call go further would not be productive. Using the end call function
+     now. Thanks for your time. Have a good day."
+
+    "1 moment. Since the phone menu didn't provide a billing option, I'll
+     press 1 to speak with a—"
+
+**48 of 506 calls.** Roughly one in ten.
+
+### Why
+
+On a phone call there is one output channel and it goes to a loudspeaker. The
+model has nowhere to think. Every enforced block hands it a judgement — is
+this menu relevant, has the caller said goodbye, is this the third loop — in
+second-person imperative, which is also the register used for narration.
+Nothing said the working-out is not part of the answer.
+
+Watch what it did with the one ban that existed. `ivrLines` said never say
+"pressing" or "press" **to a phone menu**. So it said "I'll press 1" while
+addressing itself, and "Using the end call function now" instead of
+"pressing". **A narrow ban teaches paraphrase.** The fix is stated as a
+property of the channel, not a list of forbidden words, because the model
+cannot route around a fact about where its output goes.
+
+Second contributor: every place that wrote "use your endCall function" in
+second person put that name into the agent's speaking vocabulary. Those are
+gone from `lib/dialer/consent.ts`; the capability is now introduced exactly
+once, in `guidance.ts`, together with the rule never to mention it.
+
+### Detecting narration
+
+Re-run this after any prompt change. It is the query the 48 came from.
+
+```sql
+WITH t AS (SELECT id FROM tenants WHERE company_name ILIKE '%kaizen%'),
+turns AS (
+  SELECT c.id AS call_id, m->>'role' AS role, m->>'message' AS msg
+  FROM calls c, t, jsonb_array_elements(c.messages) m
+  WHERE c.tenant_id = t.id
+    AND c.created_at >= now() - interval '21 days'
+    AND jsonb_typeof(c.messages) = 'array'
+)
+SELECT
+  count(*) FILTER (WHERE role IN ('bot','assistant')) AS agent_turns,
+  count(DISTINCT call_id) FILTER (
+    WHERE role IN ('bot','assistant')
+      AND ( msg ~* '\m(i''ll|i will|let me|i''m going to)\M.{0,40}\m(press|hang up|end the call|note this|mark this|transfer)\M'
+         OR msg ~* '^\s*(since|it seems|it appears|given that)\M' )
+  ) AS calls_narrating,
+  count(DISTINCT call_id) AS calls_total
+FROM turns;
+```
+
+Baseline before the fix: 1,845 agent turns, 48 narrating, 506 calls.
+
+## Minutes were right and read as wrong (2026-09-22, latest)
+
+Reported as "the minutes are not accurately presented — included in package
+versus the overage must be clearly shown". Four figures on screen at once:
+
+| Where | Figure |
+| --- | --- |
+| Billing card | 766 used · 85% of this month · **134 minutes left** |
+| Plans header | **286 minutes left in total** |
+| Analytics | **985 minutes** over the last 30 days |
+| Analytics | **"$76.65 charged in total"** beside Billing's "Within allowance" |
+
+Every one arithmetically correct. Verified in the database:
+
+- `cost_cents` before package assignment (8 Sept): **7665**. After: **0**.
+  The entire $76.65 is pay-as-you-go spend from before the plan, caught by a
+  rolling 30-day window that reaches back past it, and labelled "charged in
+  total" as though it were current.
+- 286 = 134 included + the 152 minutes $53.35 buys at the $0.35 overage
+  rate. **A different kind of minute**, only reachable once the included ones
+  are gone.
+- 985 is a rolling window. 766 is the billing month. Different periods.
+
+Nothing miscalculated. Three different things were all called "minutes left"
+or "charged" with nothing on screen saying which.
+
+**The rule this leaves behind:** never render a total that is a sum of
+unlike parts without showing the parts, and never label a windowed figure
+with a period word ("this month") that the window is not. `MinutesBreakdown`
+exists to make that structural rather than a thing each page remembers.
+
+**Also renamed:** "Overage charged" → "Charged to balance" on Analytics, the
+campaign outcome cards and the Excel report. A call's `cost_cents` is
+whatever came out of the balance — under pay-as-you-go that is *every* call.
+Calling all of it overage was wrong on both plan types.

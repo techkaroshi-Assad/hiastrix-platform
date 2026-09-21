@@ -9,6 +9,7 @@ import { stripeConfigured } from "@/lib/stripe"
 import { readAllowance, minutesLabel } from "@/lib/billing/allowance"
 import { subscriptionIsLive } from "@/lib/billing/subscription"
 import { MinutesBreakdown } from "@/components/billing/minutes"
+import { creditComposition, balanceLabel } from "@/lib/billing/credit"
 import { TopUp } from "./topup"
 import { Plans } from "./plans"
 import { SubscriptionControls } from "./subscription-card"
@@ -22,11 +23,23 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
   const { tenant } = await requireTenant()
   const sp = await searchParams
 
-  const [ledger, payments, plans, settings] = await Promise.all([
+  const [ledger, ledgerTotals, payments, plans, settings] = await Promise.all([
     prisma.creditLedger.findMany({
       where: { tenantId: tenant.id },
       orderBy: { createdAt: "desc" },
       take: 50,
+    }),
+    /*
+     * The WHOLE ledger, aggregated — deliberately not the 50 rows above.
+     *
+     * The composition has to reconcile to the balance, and a balance derived
+     * from the most recent 50 entries out of 227 would be wrong in a way
+     * that looks authoritative. One GROUP BY, no pagination to get wrong.
+     */
+    prisma.creditLedger.groupBy({
+      by: ["type"],
+      where: { tenantId: tenant.id },
+      _sum: { amountCents: true },
     }),
     prisma.payment.findMany({
       where: { tenantId: tenant.id },
@@ -56,6 +69,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
     minutesUsed:      tenant.minutesUsed,
     balanceCents:     tenant.creditBalanceCents,
   })
+
+  // Where the balance came from — granted by us, or paid for. See
+  // lib/billing/credit.ts for why this is stated and never attributed.
+  const credit = creditComposition(
+    ledgerTotals.map(r => ({ type: r.type, amountCents: r._sum.amountCents ?? 0 }))
+  )
 
   /*
    * A subscription is *how the plan is paid for*, never *whether there is a
@@ -219,13 +238,20 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
         />
         {/* Money and minutes together — "$1.30" alone tells nobody whether that
             is an afternoon or a fortnight. */}
+        {/* The label is a claim about whose money this is. Kaizen has never
+            paid us a penny and this card said "Balance" for $130 of credit we
+            allocated ourselves. */}
         <StatCard
-          label="Balance"
+          label={balanceLabel(credit)}
           value={usd(a.balanceCents)}
           meta={
-            a.overageRateCents > 0
-              ? `about ${minutesLabel(a.balanceMinutes)} at your rate`
-              : "Available credit"
+            credit.fullyGranted
+              ? a.overageRateCents > 0
+                ? `Allocated by Hi-Astrix · about ${minutesLabel(a.balanceMinutes)}`
+                : "Allocated by Hi-Astrix"
+              : a.overageRateCents > 0
+                ? `about ${minutesLabel(a.balanceMinutes)} at your rate`
+                : "Available credit"
           }
         />
       </div>
@@ -233,7 +259,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
       {/* The arithmetic behind the four cards above, because the cards alone
           left a reader to work out why two "minutes left" figures differed. */}
       <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
-        <MinutesBreakdown a={a} />
+        <MinutesBreakdown a={a} credit={credit} />
       </div>
 
       <div className="mt-5">

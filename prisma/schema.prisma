@@ -304,6 +304,15 @@ model Call {
   /// True if an automated menu was heard at any point, even if a person
   /// answered afterwards.
   ivrSeen         Boolean       @default(false) @map("ivr_seen")
+  /// Which kinds of self-narration the agent spoke aloud on this call —
+  /// keypad, stage, hang-up, mechanism, records, tooling. Empty is the
+  /// normal case. Set at end-of-call by lib/calls/narration.ts on every
+  /// call of every tenant, whatever they configured: the prompt rule that
+  /// prevents this is probabilistic, so the measurement is not optional.
+  narrationKinds  String[]      @default([]) @map("narration_kinds")
+  /// How many separate turns were flagged. One slip and a call that did it
+  /// six times are different problems.
+  narrationTurns  Int           @default(0) @map("narration_turns")
   startedAt       DateTime?     @map("started_at") @db.Timestamptz(6)
   endedAt         DateTime?     @map("ended_at") @db.Timestamptz(6)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
