@@ -20,6 +20,7 @@
 
 import { buildXlsx, type Sheet, type Cell } from "@/lib/xlsx"
 import { REACHED_LABEL } from "@/lib/calls/reached"
+import { friendlyEndedReason } from "@/lib/calls/reasons"
 import {
   rollup, total, callbacksDue, applyRefused,
   type CallOutcomeRow, type CampaignOutcomes, type RefusedRow,
@@ -120,7 +121,8 @@ export function buildCampaignWorkbook(a: {
         r.reached ? REACHED_LABEL[r.reached] : "", r.ivrSeen ? "Yes" : "No",
         r.reachedDecisionMaker ? "Yes" : "No", r.interest, r.callbackRequested ? "Yes" : "No", r.callbackWhen ?? "",
         r.bestNumber ?? "", r.objection ?? "", r.nextAction, r.ivrOutcome ?? "", r.keyFacts.join("; "), r.summary ?? "",
-        r.durationSeconds, money(r.costCents), r.endedReason ?? "", r.callId,
+        r.durationSeconds, money(r.costCents),
+        r.endedReason ? friendlyEndedReason(r.endedReason) : "", r.callId,
       ]),
     ],
     widths: [18, 26, 16, 22, 22, 16, 18, 10, 12, 14, 10, 24, 16, 30, 14, 14, 40, 50, 10, 12, 28, 38],

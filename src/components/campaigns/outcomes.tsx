@@ -144,9 +144,9 @@ export function CampaignOutcomesSection({
           />
           {o.refusedBeforeDial > 0 && (
             <p className="px-5 pb-2 text-[12px] leading-relaxed text-warning">
-              {o.refusedBeforeDial.toLocaleString()} more attempt{o.refusedBeforeDial === 1 ? "" : "s"} never became a call — the
-              provider refused to start {o.refusedBeforeDial === 1 ? "it" : "them"}
-              {o.refusedReason ? `: "${o.refusedReason}"` : "."} Those people are back in the queue, not counted as reached or failed.
+              {o.refusedBeforeDial.toLocaleString()} further attempt{o.refusedBeforeDial === 1 ? " was" : "s were"} not placed.{" "}
+              {o.refusedReason ?? "These calls could not be placed."} Those people are back in the queue,
+              not counted as reached or failed.
             </p>
           )}
           {o.ivrSeen > 0 && (

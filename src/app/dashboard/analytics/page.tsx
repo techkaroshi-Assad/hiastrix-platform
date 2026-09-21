@@ -297,7 +297,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
                           </Link>
                         </TD>
                         <TD align="right">{c.dials.toLocaleString()}</TD>
-                        <TD align="right" muted><span title={c.refusedReason ?? undefined}>{c.refusedBeforeDial || "—"}</span></TD>
+                        <TD align="right" muted>{c.refusedBeforeDial || "—"}</TD>
                         <TD align="right" muted>
                           {c.reached.HUMAN} · {c.dials ? Math.round((c.reached.HUMAN / c.dials) * 100) : 0}%
                         </TD>

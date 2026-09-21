@@ -44,3 +44,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch verification script; delete it
+vs-check.ts
+vs-recheck.ts

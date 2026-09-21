@@ -16,6 +16,7 @@ import { loadAnalytics, safeZone, type Range } from "@/lib/analytics"
 import { loadCampaignCallRows, loadRefusedAttempts, applyRefused, rollup, total, callbacksDue, type CampaignOutcomes, type CallOutcomeRow } from "@/lib/campaigns/insights"
 import { REACHED_LABEL, type Reached } from "@/lib/calls/reached"
 import { friendlyEndedReason } from "@/lib/calls/reasons"
+import { scrubVendors } from "@/lib/vendor-safe"
 import { Pdf, type RGB } from "@/lib/pdf"
 
 export type ActivityReport = {
@@ -284,7 +285,7 @@ export function renderActivityPdf(r: ActivityReport, opts: { audience?: Audience
     pdf.paragraph(
       internal
         ? `${ct.refusedBeforeDial} further attempt${ct.refusedBeforeDial === 1 ? "" : "s"} never became a call: the calling provider refused to start ${ct.refusedBeforeDial === 1 ? "it" : "them"}` +
-          (ct.refusedReason ? ` ("${ct.refusedReason}").` : ".") + " Those leads were returned to the queue."
+          (ct.refusedReason ? ` ${scrubVendors(ct.refusedReason)}` : ".") + " Those leads were returned to the queue."
         : `A further ${ct.refusedBeforeDial} call attempt${ct.refusedBeforeDial === 1 ? "" : "s"} could not be placed in this period and ${ct.refusedBeforeDial === 1 ? "has" : "have"} been rescheduled.`,
       { size: 8.5, colour: MUTED }
     )

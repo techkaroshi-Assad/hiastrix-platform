@@ -24,6 +24,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { classifyOutcome, scheduleNext, withinWindow, nextWindowOpen } from "@/lib/dialer/outcome"
+import { refusalPausedReason } from "@/lib/vendor-safe"
 import { claimDueLeads, releaseClaimed, campaignIsDrained } from "@/lib/dialer/claim"
 import { loadCampaignContext } from "@/lib/dialer/context"
 import { placeCall } from "@/lib/dialer/dial"
@@ -413,10 +414,10 @@ export async function advanceCampaign(
             where: { id: campaignId, state: "RUNNING" },
             data: {
               state: "PAUSED",
-              pausedReason:
-                `The calling provider refused to start calls: "${result.reason}" ` +
-                "This affects every call, not just one number, so the campaign has been paused. " +
-                "Fix the cause (attach a purchased number, top up the provider account) and press Resume — nobody on the list has been marked as failed.",
+              // Our words, from the refusal's category. The provider's own
+              // message stays in dial_attempts.error for operators and never
+              // reaches a tenant screen.
+              pausedReason: refusalPausedReason(result.reason),
             },
           })
           return

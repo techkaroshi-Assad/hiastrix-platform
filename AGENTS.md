@@ -215,6 +215,40 @@ been seen on a live call yet. The pieces, and what to check:
   `+13134584952` to Kaizen and attach it to Nancy so she rotates across
   two purchased numbers.
 
+## Vendor names must never render (2026-09-22, latest)
+
+**This was broken in production and is the most serious regression of the
+sprint.** A tenant's campaign page printed the calling provider's own error
+sentence verbatim — vendor names and all — because the raw message was
+carried from the dialer into a React component. White-label is the product;
+this cannot happen again.
+
+`lib/vendor-safe.ts` is now the only way provider text reaches a screen:
+- `refusalSentence()` / `refusalPausedReason()` classify a refusal and build
+  **our** sentence. The raw text is read to classify, then discarded, so its
+  wording has no path to a screen. Tenant surfaces use these.
+- `scrubVendors()` is a net, not a plan — for text that must stay roughly
+  verbatim (internal report only). It only removes names it knows about.
+- `containsVendor()` for guards and tests.
+
+Four leaks fixed: the campaign-page refusal paragraph (the screenshot), an
+analytics tooltip, `advance.ts`'s paused-campaign reason, and
+`friendlyEndedReason`'s `titleCase(raw)` fallback which rendered codes like
+"Call.Start.Error Vapi Number Outbound Daily Limit" on the call page. The
+Excel "Ended because" column now maps through `friendlyEndedReason` instead
+of dumping raw codes. Carrier-prefixed codes
+(`twilio-failed-to-connect-call` et al) are mapped explicitly because their
+slugs carry the carrier's name.
+
+Verified with a script over the real refusal strings from Kaizen's data and
+every ended-reason code in the database, asserting `containsVendor()` is
+false for every rendered output — including through the old `titleCase`
+caller style. All pass. Super admin is deliberately exempt (operators need
+to know which provider a number came from).
+
+**Rule for anything added later: never render a provider string. Classify
+it and write your own sentence.**
+
 ## Per-number daily call cap (2026-09-22, latest)
 
 `phone_numbers.daily_call_cap` (nullable int) — **migration already applied

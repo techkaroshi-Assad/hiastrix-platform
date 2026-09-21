@@ -29,6 +29,7 @@
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import type { Reached } from "@/lib/calls/reached"
+import { refusalSentence } from "@/lib/vendor-safe"
 
 export type Interest = "interested" | "maybe" | "not-interested" | "unknown"
 export type NextAction = "call-back" | "send-info" | "remove-from-list" | "done" | "unknown"
@@ -347,10 +348,16 @@ export async function loadRefusedAttempts(a: {
   }))
 }
 
-/** The provider's sentence out of its JSON error, for people to read. */
+/**
+ * Our sentence for why these attempts never became calls.
+ *
+ * Classified from the provider's message and then built from scratch — the
+ * raw text is never carried forward. A campaign page once printed that raw
+ * text verbatim, vendor names and all, on a tenant's screen. See
+ * lib/vendor-safe.ts.
+ */
 function humanRefusal(raw: string): string {
-  const json = /"message"\s*:\s*"([^"]+)"/.exec(raw)
-  return (json?.[1] ?? raw).replace(/\s+/g, " ").trim().slice(0, 200)
+  return refusalSentence(raw)
 }
 
 /** Merge refused attempts into a rollup, creating an entry for a campaign that has no calls at all. */

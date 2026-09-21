@@ -103,7 +103,7 @@ export default async function CallDetailPage({
     ["Billed",     `${call.minutesBilled} min`],
     ["Cost",       usd(call.costCents)],
     ...(call.endedReason
-      ? ([["Ended because", friendlyEndedReason(call.endedReason, titleCase)]] as [string, React.ReactNode][])
+      ? ([["Ended because", friendlyEndedReason(call.endedReason)]] as [string, React.ReactNode][])
       : []),
   ]
 

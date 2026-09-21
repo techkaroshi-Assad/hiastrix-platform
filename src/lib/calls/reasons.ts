@@ -16,6 +16,8 @@
  * nothing.
  */
 
+import { scrubVendors } from "@/lib/vendor-safe"
+
 const REASONS: Record<string, string> = {
   /* ── Account and billing — the ones worth a tenant's attention ────────── */
   "call.start.error-vapi-number-outbound-daily-limit":
@@ -40,6 +42,14 @@ const REASONS: Record<string, string> = {
   /* ── Normal outcomes — not failures, just worth a plain-language label ── */
   "customer-did-not-answer": "Nobody picked up.",
   "customer-busy": "The line was busy.",
+
+  /* Carrier-side placement failures. Mapped explicitly rather than left to
+   * the fallback because the raw codes carry the carrier's name in the
+   * slug, and a tenant screen must never show it. */
+  "twilio-failed-to-connect-call": "The call couldn't be connected to this number.",
+  "telnyx-failed-to-connect-call": "The call couldn't be connected to this number.",
+  "vonage-failed-to-connect-call": "The call couldn't be connected to this number.",
+  "vapi-failed-to-connect-call":   "The call couldn't be connected to this number.",
   "assistant-ended-call": "The agent ended the call.",
   "assistant-ended-call-after-message-spoken": "The agent finished what it had to say and ended the call.",
   "assistant-said-end-call-phrase": "The agent said its sign-off and the call ended.",
@@ -56,6 +66,22 @@ function normalise(reason: string): string {
   return reason.trim().toLowerCase().replace(/_/g, "-")
 }
 
-export function friendlyEndedReason(reason: string, fallback: (s: string) => string): string {
-  return REASONS[normalise(reason)] ?? fallback(reason)
+/**
+ * A sentence for why a call ended.
+ *
+ * The fallback used to be `titleCase(raw)`, which rendered unmapped
+ * provider codes straight onto the call page — including the ones with a
+ * vendor name in the slug ("Call.Start.Error Vapi Number Outbound Daily
+ * Limit"). Unmapped codes now get a generic sentence, and anything that
+ * does come through a caller's fallback is scrubbed on the way out.
+ */
+export function friendlyEndedReason(reason: string, fallback?: (s: string) => string): string {
+  const mapped = REASONS[normalise(reason)]
+  if (mapped) return mapped
+  // An error-shaped code says nothing a tenant can act on; a plain one
+  // (e.g. "customer-ended-call") is safe to prettify.
+  if (/error|fault|\./.test(normalise(reason))) {
+    return "This call couldn't be completed."
+  }
+  return scrubVendors(fallback ? fallback(reason) : reason)
 }
