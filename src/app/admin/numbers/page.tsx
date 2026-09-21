@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/admin"
 import { Page } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
+import { dateTime } from "@/lib/format"
 import { SyncButton, AllocateSelect, DailyCapInput } from "./numbers-admin-client"
 
 export const metadata: Metadata = { title: "Phone numbers" }
@@ -88,12 +89,52 @@ export default async function AdminNumbersPage() {
   const unallocated = numbers.filter(n => !n.tenantId).length
   const freeCount = numbers.filter(n => n.provider === "vapi").length
 
+  /*
+   * Numbers the provider has stopped recognising.
+   *
+   * This is the loudest thing on the page, above the free-number notice,
+   * because it is the failure that costs the most and shows the least. A
+   * Twilio number was re-imported on the provider side, the id stored here
+   * stopped resolving, and every dial was refused instantly — 174 in two
+   * hours, on a live campaign, with nothing anywhere saying so. The tenant's
+   * other number was never tried, because refused attempts don't count
+   * toward a daily cap, so the dead number stayed "least used" and won
+   * rotation every time.
+   */
+  const broken = numbers.filter(n => n.providerError)
+
   return (
     <Page
       heading="Phone numbers"
       description="The upstream inventory and who each number belongs to."
       actions={<SyncButton />}
     >
+      {broken.length > 0 && (
+        <div className="mb-5 rounded-2xl border border-danger/40 bg-danger/[0.08] px-5 py-4">
+          <p className="text-[13px] font-medium text-danger">
+            {broken.length} number{broken.length === 1 ? "" : "s"} can&rsquo;t place calls
+          </p>
+          <p className="mt-1 text-[13px] leading-relaxed text-muted">
+            The upstream provider no longer recognises {broken.length === 1 ? "this number" : "these numbers"},
+            so every call on {broken.length === 1 ? "it" : "them"} is refused before it rings.
+            {broken.length === 1 ? " It has" : " They have"} been taken out of dialling
+            automatically — campaigns carry on using the tenant&rsquo;s other numbers.
+            Re-import in the provider dashboard, then press <strong>Sync inventory</strong> to
+            clear this.
+          </p>
+          <ul className="mt-3 space-y-1.5">
+            {broken.map(n => (
+              <li key={n.id} className="text-[12.5px] text-muted">
+                <span className="font-medium tabular-nums">{n.phoneNumber}</span>
+                {n.providerErrorAt && (
+                  <span className="text-subtle"> · stopped working {dateTime(n.providerErrorAt)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {freeCount > 0 && (
         <div className="mb-5 rounded-2xl border border-warning/30 bg-warning/[0.06] px-5 py-4">
           <p className="text-[13px] font-medium text-warning">
@@ -146,8 +187,11 @@ export default async function AdminNumbersPage() {
                       <Pill tone={info.tone}>{info.label}</Pill>
                     </TD>
                     <TD>
-                      <Pill tone={n.status === "ACTIVE" ? "success" : "neutral"}>
-                        {n.status === "ACTIVE" ? "Active" : "Inactive"}
+                      {/* A number the provider has stopped recognising is
+                          not "Active" in any sense a reader cares about — it
+                          reads as healthy while refusing every call. */}
+                      <Pill tone={n.providerError ? "danger" : n.status === "ACTIVE" ? "success" : "neutral"}>
+                        {n.providerError ? "Not at provider" : n.status === "ACTIVE" ? "Active" : "Inactive"}
                       </Pill>
                     </TD>
                     <TD muted>{n.agent?.name ?? "—"}</TD>

@@ -82,7 +82,20 @@ export default async function CampaignPage({
     }),
     prisma.campaignLead.findMany({
       where,
-      orderBy: [{ updatedAt: "desc" }],
+      /*
+       * Most recently called first — and `updatedAt` is not that.
+       *
+       * Any bulk operation rewrites updatedAt on every row it touches: the
+       * phone-menu re-queue rewrote 1,026 leads in a single statement, so
+       * they all sorted as if called at the same instant and an 08:25 call
+       * sat above calls made hours later. `lastAttemptAt` only ever moves
+       * when the lead is actually dialled. Leads never called yet fall to
+       * the bottom, where "not called yet" belongs.
+       */
+      orderBy: [
+        { lastAttemptAt: { sort: "desc", nulls: "last" } },
+        { updatedAt: "desc" },
+      ],
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       select: {

@@ -396,6 +396,30 @@ export async function advanceCampaign(
           })
           break
 
+        /*
+         * One dead number, not a dead account.
+         *
+         * The lead goes straight back in the queue with its attempt count
+         * intact — nothing about the lead was wrong. The number has already
+         * been flagged by placeCall, so the next tick rebuilds its context
+         * without it and reaches for a healthy one. The campaign keeps
+         * running: pausing it would be the wrong answer when the tenant has
+         * a second number that works, which is the whole reason they were
+         * told to add one.
+         */
+        case "number_dead": {
+          abandoned.push(...queue.splice(0).map(l => l.leadId))
+          await prisma.campaignLead.updateMany({
+            where: { id: lead.leadId, state: "DIALING" },
+            data: {
+              state: "PENDING", attemptNo: { decrement: 1 }, leaseExpiresAt: null,
+              nextAttemptAt: now,
+              note: "The call never went out — back in the queue, on a different number.",
+            },
+          })
+          break
+        }
+
         case "account_blocked": {
           // Not this lead's fault, and not the next lead's either. Give the
           // attempt back, stop the tick, pause the campaign with the

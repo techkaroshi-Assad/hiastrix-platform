@@ -51,7 +51,24 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
    * and a spam-labelled number does not get answered.
    */
   const numbers = await prisma.phoneNumber.findMany({
-    where:  { agentId: campaign.agentId, tenantId: campaign.tenantId, status: "ACTIVE" },
+    /*
+     * `providerError: null` is the important half of this filter.
+     *
+     * A number whose id no longer resolves at the provider refuses every
+     * dial instantly, and because refused attempts are excluded from the
+     * daily count (so a failure cannot burn the cap) it stays permanently
+     * the least-used number — which made `pickNumber` prefer it over a
+     * healthy one, forever. One dead number took a tenant's whole campaign
+     * down for two hours at three rejections a minute while their working
+     * number sat untouched. Flagged numbers are simply not eligible; the
+     * flag is cleared by a successful re-sync.
+     */
+    where:  {
+      agentId:  campaign.agentId,
+      tenantId: campaign.tenantId,
+      status:   "ACTIVE",
+      providerError: null,
+    },
     select: { id: true, vapiPhoneNumberId: true, phoneNumber: true, dailyCallCap: true },
   })
 

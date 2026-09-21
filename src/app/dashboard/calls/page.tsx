@@ -44,7 +44,20 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
   const [calls, total, agents, everAny] = await Promise.all([
     prisma.call.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      /*
+       * Sorted by the column that is actually displayed.
+       *
+       * The row shows `startedAt ?? createdAt` but this used to sort on
+       * `createdAt` alone — when the call record was written by the webhook,
+       * not when the call happened. Those two disagree whenever webhooks
+       * arrive out of order or are retried, which is often under a campaign,
+       * so the list showed an 08:25 call above calls placed hours later.
+       * Nulls last, because a row with no start time is one we never saw ring.
+       */
+      orderBy: [
+        { startedAt: { sort: "desc", nulls: "last" } },
+        { createdAt: "desc" },
+      ],
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: {

@@ -112,6 +112,13 @@ export type DialResult =
    * with the provider's words; the attempt is handed back.
    */
   | { kind: "account_blocked"; reason: string }
+  /**
+   * This one number is unusable at the provider — its id no longer resolves.
+   * The number is flagged and skipped; the lead goes back in the queue and
+   * the next tick reaches for a different number. The campaign does NOT
+   * pause: the account is healthy and the other numbers still work.
+   */
+  | { kind: "number_dead"; reason: string; phoneNumberId: string }
   /** Rate limited. The campaign backs off wholesale. */
   | { kind: "throttled"; retryAfterMs: number }
   /** Placed or not — we could not tell. The reaper resolves it. */
@@ -127,6 +134,45 @@ export type DialResult =
  * ceiling, and a missing/invalid assistant or number id (which would fail
  * every lead identically).
  */
+/**
+ * The provider refusing ONE number, rather than the account.
+ *
+ * ── THE TWO HOURS THIS COST ───────────────────────────────────────────
+ *
+ * A Twilio number was re-imported on the provider side, so the id we had
+ * stored stopped resolving. Every dial came back:
+ *
+ *   Vapi API error 400: `phoneNumber` `93e506d7-…` does not exist.
+ *
+ * `accountLevelRefusal` did not match it — its pattern is
+ * `phone-number-not-found`, and the provider's actual wording here is
+ * "does not exist" — so it fell through to the generic per-lead path:
+ * re-queue the lead, try again next tick, forever. 174 rejected attempts
+ * in two hours, zero calls placed.
+ *
+ * It was self-sustaining, and that is the part worth understanding.
+ * Rejected attempts are deliberately excluded from a number's daily count
+ * (so a failure cannot burn the cap), which left the dead number
+ * permanently the least-used one — so `pickNumber` chose it every single
+ * time, and the tenant's healthy second number was never tried once.
+ *
+ * This is deliberately NOT account-level: the account is fine, the other
+ * numbers are fine, and pausing the whole campaign would be the wrong
+ * response. The right response is to take this one number out of
+ * rotation, flag it for re-sync, and carry on with the others.
+ */
+export function numberLevelRefusal(message: string): string | null {
+  const m = message.toLowerCase()
+  const hit =
+    // "`phoneNumber` `<uuid>` does not exist."
+    /`?phonenumber`?\s*`?[0-9a-f-]*`?\s*does not exist/.test(m) ||
+    /phone(?:-| )?number(?:-| )?(?:not(?:-| )?found|does not exist|no longer exists)/.test(m) ||
+    /phonenumberid.*(?:invalid|not found|does not exist)/.test(m)
+  if (!hit) return null
+  const json = /"message"\s*:\s*"([^"]+)"/.exec(message)
+  return (json?.[1] ?? message).replace(/\s+/g, " ").trim().slice(0, 240)
+}
+
 export function accountLevelRefusal(message: string): string | null {
   const m = message.toLowerCase()
   const hit =
@@ -266,6 +312,21 @@ export async function placeCall(
       select: { id: true },
     })
     attemptId = attempt.id
+
+    /*
+     * Stamp the lead with when it was actually dialled.
+     *
+     * Written here, beside the attempt itself, because this is the only
+     * moment that means "called". `updatedAt` cannot stand in for it: any
+     * bulk operation rewrites that across every row at once, which is how
+     * the campaign's call log ended up showing an 08:25 call above calls
+     * placed hours later. Best-effort — a failed stamp must not cost a
+     * call that is about to be placed.
+     */
+    await prisma.campaignLead.update({
+      where: { id: lead.leadId },
+      data:  { lastAttemptAt: new Date() },
+    }).catch(() => {})
   } catch (err) {
     // The partial unique index fired: someone else is on the phone to this
     // person right now. Nothing reached the provider.
@@ -338,6 +399,25 @@ export async function placeCall(
        * account-level refusal stops the campaign, hands the attempt back,
        * and tells the operator the provider's actual words.
        */
+      /*
+       * Checked BEFORE the account-level test, because a dead number is the
+       * narrower diagnosis and the one that must not pause a healthy
+       * campaign. Flagged here rather than by the caller so that a number
+       * cannot be chosen again even within this same tick — the loop that
+       * burned 174 attempts did so at three a minute.
+       */
+      const dead = numberLevelRefusal(reason)
+      if (dead) {
+        await prisma.phoneNumber.update({
+          where: { id: number.id },
+          data:  { providerError: dead, providerErrorAt: new Date() },
+        }).catch(() => {
+          // Flagging is best-effort: failing to record it must not turn a
+          // recoverable refusal into a lost attempt.
+        })
+        return { kind: "number_dead", reason: dead, phoneNumberId: number.id }
+      }
+
       const account = accountLevelRefusal(reason)
       if (account) return { kind: "account_blocked", reason: account }
       return { kind: "rejected", reason }

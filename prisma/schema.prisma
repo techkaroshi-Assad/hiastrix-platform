@@ -240,6 +240,15 @@ model PhoneNumber {
   vapiPhoneNumberId String      @unique @map("vapi_phone_number_id")
   phoneNumber       String      @map("phone_number")
   status            PhoneStatus @default(ACTIVE)
+
+  /// Set when the provider refuses this specific number — most often its id
+  /// no longer resolves because the number was re-imported there. Non-null
+  /// takes the number out of dialer rotation and shows it in super admin as
+  /// needing a re-sync, instead of letting every dial fail silently. A dead
+  /// number used to be *preferred* by rotation, because rejected attempts
+  /// don't count toward its daily total, so it stayed the least-used one.
+  providerError     String?     @map("provider_error")
+  providerErrorAt   DateTime?   @map("provider_error_at") @db.Timestamptz(6)
   /// Raw value of Vapi's own `provider` field for this number — "vapi",
   /// "twilio", "telnyx", "vonage", or "byo-phone-number". Set on every sync,
   /// never hand-edited: "vapi" is the free, shared-pool number type that
@@ -586,6 +595,11 @@ model CampaignLead {
   faultNo         Int        @default(0) @map("fault_no")
 
   nextAttemptAt   DateTime   @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  /// When this lead was last dialled. Distinct from `updatedAt`, which any
+  /// bulk operation rewrites across every row at once — the phone-menu
+  /// re-queue touched 1,026 leads in one statement and destroyed the
+  /// ordering of the campaign's call log. This is the column that list sorts by.
+  lastAttemptAt   DateTime?  @map("last_attempt_at") @db.Timestamptz(6)
   leaseExpiresAt  DateTime?  @map("lease_expires_at") @db.Timestamptz(6)
   lastOutcome     String?    @map("last_outcome")
   /// Why this lead ended where it did, in words a tenant can read.
