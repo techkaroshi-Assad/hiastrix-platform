@@ -4,6 +4,9 @@
  *   ?from=YYYY-MM-DD&to=YYYY-MM-DD   inclusive, in the tenant's campaign
  *                                    timezone; default the last 30 days
  *   ?days=N                          shorthand
+ *   ?audience=internal               adds provider detail, end reasons and
+ *                                    billing; default is the client-safe
+ *                                    version with none of that
  *
  * Everything the workspace did in the window: every call, campaign
  * outcomes, callbacks, objections, agents, cost. Works for any tenant with
@@ -63,12 +66,13 @@ export async function GET(req: NextRequest) {
     to ??= now
     if (to < from || to.getTime() - from.getTime() > MAX_DAYS * DAY) return apiError("That report range isn't valid.", 400)
 
+    const audience = q.get("audience") === "internal" ? "internal" : "client"
     const report = await loadActivityReport({ tenantId, from, to, timeZone })
-    const pdf = renderActivityPdf(report)
+    const pdf = renderActivityPdf(report, { audience })
 
     const stamp = (d: Date) => d.toISOString().slice(0, 10)
     const base = ctx.tenant.companyName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "workspace"
-    const filename = `hiastrix-${base}-activity-${stamp(from)}-to-${stamp(to)}.pdf`
+    const filename = `hiastrix-${base}-activity-${stamp(from)}-to-${stamp(to)}${audience === "internal" ? "-internal" : ""}.pdf`
 
     return new Response(new Uint8Array(pdf), {
       status: 200,

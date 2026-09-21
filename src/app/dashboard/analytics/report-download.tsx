@@ -51,6 +51,15 @@ export function ReportDownload({ defaultDays = 30 }: { defaultDays?: number }) {
         PDF report
       </a>
       <a
+        href={valid ? `/api/reports/activity?${qs}&audience=internal` : undefined}
+        aria-disabled={!valid}
+        title="Adds why calls ended, provider refusals and billing. Not for clients."
+        className={`${btn} border-line bg-field text-fg hover:border-line-strong hover:bg-field-hover ${valid ? "" : "pointer-events-none opacity-50"}`}
+      >
+        <IconDownload size={14} />
+        Internal PDF
+      </a>
+      <a
         href={valid ? `/api/reports/campaign?${qs}${transcripts ? "&transcripts=1" : ""}` : undefined}
         aria-disabled={!valid}
         className={`${btn} border-line bg-field text-fg hover:border-line-strong hover:bg-field-hover ${valid ? "" : "pointer-events-none opacity-50"}`}

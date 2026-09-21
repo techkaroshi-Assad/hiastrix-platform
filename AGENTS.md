@@ -215,6 +215,25 @@ been seen on a live call yet. The pieces, and what to check:
   `+13134584952` to Kaizen and attach it to Nancy so she rotates across
   two purchased numbers.
 
+## Client-facing PDF, dialer limits in super admin (2026-09-22, later still)
+
+- The PDF activity report is **client-facing by default**: no prices,
+  plan, balance or charges (only "Minutes this period"); no provider
+  names, error text or setup nags; raw end reasons omitted; campaign
+  names anonymised to "Campaign N" / "Optimisation step N"
+  (`campaignLabels()` — small or test-looking runs become optimisation
+  steps); outcome columns only appear when the agent actually recorded
+  outcomes. `?audience=internal` (the "Internal PDF" button on Analytics)
+  restores the operator detail: refusal reasons, why-calls-ended, the
+  minutes-and-billing reconciliation. Verified by grepping the client
+  PDF's text for vapi/twilio/provider/$/plan/campaign names — none.
+- **Dialer limits are now on super admin → Settings → Outbound dialer**:
+  master on/off, calls per number per day (the 200 cap), calls per
+  contact per day, platform and per-tenant concurrency, consent line.
+  These columns always existed in `platform_settings`; the page never
+  showed them. **Untested in the browser** — save a value and confirm it
+  round-trips.
+
 ## Billing bug + provider refusals (2026-09-22, later)
 
 - **Admin package assignment did not reset `minutesUsed`** (the Stripe path

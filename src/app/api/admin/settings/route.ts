@@ -16,6 +16,19 @@ const BodySchema = z.object({
   overageRateCents: z.number().int().min(0).max(10_000).optional(),
   lowBalancePct:    z.number().int().min(1).max(90).optional(),
   supportEmail:     z.string().email().optional(),
+
+  /*
+   * The dialer's platform-wide limits. These existed in the database from
+   * the start and were only ever changed by hand, which is how an operator
+   * came to be told "raise it in super admin" about a setting super admin
+   * did not show. Same row, now editable.
+   */
+  dialerEnabled:       z.boolean().optional(),
+  maxConcurrentCalls:  z.number().int().min(1).max(500).optional(),
+  tenantMaxConcurrent: z.number().int().min(1).max(200).optional(),
+  numberDailyCallCap:  z.number().int().min(1).max(5_000).optional(),
+  contactDailyCap:     z.number().int().min(1).max(20).optional(),
+  consentLine:         z.string().trim().min(10).max(500).optional(),
 })
 
 export async function PATCH(request: NextRequest) {

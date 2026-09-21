@@ -190,7 +190,36 @@ const usd = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minim
 const pct = (n: number, of: number) => (of > 0 ? `${Math.round((n / of) * 100)}%` : "—")
 const mmss = (s: number) => `${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, "0")}s`
 
-export function renderActivityPdf(r: ActivityReport): Buffer {
+export type Audience = "client" | "internal"
+
+/**
+ * Campaign labels for a client-facing report.
+ *
+ * Internal campaign names ("New_Prompt run", "Data Pipeline Run 1-75") are
+ * ours, not the client's, and they leak how the sausage was made. In
+ * client mode campaigns are numbered in the order they were first dialled;
+ * small runs that read as testing become "Optimisation step N", because
+ * that is what they were.
+ */
+function campaignLabels(campaigns: CampaignOutcomes[], audience: Audience): Map<string, string> {
+  const out = new Map<string, string>()
+  if (audience === "internal") {
+    for (const c of campaigns) out.set(c.campaignId, c.campaignName)
+    return out
+  }
+  const isOptimisation = (c: CampaignOutcomes) =>
+    /\b(test|run|prompt|pipeline|optim|trial|pilot|another)\b/i.test(c.campaignName) || c.dials + c.refusedBeforeDial <= 30
+  // Order by size descending inside each group, so "Campaign 1" is the main one.
+  const main = campaigns.filter(c => !isOptimisation(c)).sort((x, y) => (y.dials + y.refusedBeforeDial) - (x.dials + x.refusedBeforeDial))
+  const opt = campaigns.filter(isOptimisation).sort((x, y) => (y.dials + y.refusedBeforeDial) - (x.dials + x.refusedBeforeDial))
+  main.forEach((c, i) => out.set(c.campaignId, `Campaign ${i + 1}`))
+  opt.forEach((c, i) => out.set(c.campaignId, `Optimisation step ${i + 1}`))
+  return out
+}
+
+export function renderActivityPdf(r: ActivityReport, opts: { audience?: Audience } = {}): Buffer {
+  const audience: Audience = opts.audience ?? "client"
+  const internal = audience === "internal"
   const fmtDay = (d: Date) =>
     new Intl.DateTimeFormat("en-US", { timeZone: r.timeZone, year: "numeric", month: "long", day: "numeric" }).format(d)
   const fmtStamp = (d: Date | null) =>
@@ -198,12 +227,19 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
 
   const pdf = new Pdf({ title: `${r.tenantName} — activity report`, size: "A4", margin: 46 })
   const answered = r.reached.HUMAN + r.reached.IVR + r.reached.VOICEMAIL
+  const ct = r.campaignTotal
+  const label = campaignLabels(r.campaigns, audience)
+  const nameOf = (id: string, fallback: string) => label.get(id) ?? fallback
+  // Outcome detail (decision-makers, interest, callbacks) only exists when
+  // the agent recorded it. When it didn't, the client version leaves it
+  // out rather than printing a column of zeros with an excuse.
+  const hasOutcomes = ct.extracted > 0
 
   /* ── Cover block ──────────────────────────────────────────────────── */
   pdf.rect(pdf.margin, pdf.margin, pdf.contentWidth, 96, { fill: [40, 32, 90] })
   pdf.text("HI-ASTRIX", pdf.margin + 18, pdf.margin + 24, { size: 8, font: "bold", colour: [200, 190, 255] })
   pdf.text(`${r.tenantName}`, pdf.margin + 18, pdf.margin + 52, { size: 22, font: "bold", colour: [255, 255, 255], maxWidth: pdf.contentWidth - 36 })
-  pdf.text("Activity report", pdf.margin + 18, pdf.margin + 72, { size: 12, colour: [225, 220, 255] })
+  pdf.text(internal ? "Activity report (internal)" : "Activity report", pdf.margin + 18, pdf.margin + 72, { size: 12, colour: [225, 220, 255] })
   pdf.text(`${fmtDay(r.from)} to ${fmtDay(r.to)}`, pdf.width - pdf.margin - 18, pdf.margin + 52, { size: 10, colour: [225, 220, 255], align: "right" })
   pdf.text(`Generated ${fmtStamp(r.generatedAt)} (${r.timeZone.replace(/_/g, " ")})`, pdf.width - pdf.margin - 18, pdf.margin + 72, { size: 8, colour: [200, 190, 255], align: "right" })
   pdf.y = pdf.margin + 96 + 18
@@ -211,21 +247,20 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
   /* ── Headline ─────────────────────────────────────────────────────── */
   pdf.heading("At a glance")
   pdf.kpis([
-    { label: "Calls", value: r.totals.calls.toLocaleString(), sub: `${r.byDirection.map(d => `${d.calls} ${d.key.toLowerCase()}`).join(" · ")}` },
+    { label: "Calls", value: r.totals.calls.toLocaleString(), sub: `${r.byDirection.map(d => `${d.calls} ${d.key.toLowerCase()}`).join(" - ")}` },
     { label: "Reached a person", value: pct(r.totals.humans, r.totals.calls), sub: `${r.totals.humans.toLocaleString()} calls a person answered` },
-    { label: "Minutes billed", value: r.totals.minutes.toLocaleString(), sub: r.totals.medianHumanSeconds ? `typical conversation ${mmss(r.totals.medianHumanSeconds)}` : undefined },
-    r.billing.packageName
-      ? { label: "Plan allowance", value: `${Math.min(r.billing.minutesUsedOfAllowance, r.billing.minutesIncluded).toLocaleString()} / ${r.billing.minutesIncluded.toLocaleString()} min`, sub: r.billing.minutesUsedOfAllowance > r.billing.minutesIncluded ? `${r.billing.minutesUsedOfAllowance - r.billing.minutesIncluded} min over - see Minutes and billing` : `${r.billing.minutesIncluded - r.billing.minutesUsedOfAllowance} min left on ${r.billing.packageName}` }
-      : { label: "Pay as you go", value: usd(r.billing.payPerMinuteCents), sub: "charged per minute in this period" },
+    { label: "Minutes this period", value: r.totals.minutes.toLocaleString(), sub: r.totals.medianHumanSeconds ? `typical conversation ${mmss(r.totals.medianHumanSeconds)}` : undefined },
+    ct.dials > 0
+      ? { label: "People reached", value: ct.peopleReached.toLocaleString(), sub: `across ${r.campaigns.length} campaign${r.campaigns.length === 1 ? "" : "s"}` }
+      : { label: "Conversations", value: r.totals.humans.toLocaleString() },
   ])
 
-  const ct = r.campaignTotal
-  if (ct.dials > 0) {
+  if (ct.dials > 0 && hasOutcomes) {
     pdf.kpis([
-      { label: "Campaign calls", value: ct.dials.toLocaleString(), sub: ct.refusedBeforeDial ? `${ct.peopleReached} people reached - ${ct.refusedBeforeDial} attempts refused before dialing` : `${ct.peopleReached} people reached` },
       { label: "Decision-makers", value: ct.decisionMakers.toLocaleString(), sub: ct.reached.HUMAN ? `${pct(ct.decisionMakers, ct.reached.HUMAN)} of people reached` : undefined },
-      { label: "Interested", value: (ct.interest.interested + ct.interest.maybe).toLocaleString(), sub: `${ct.interest.interested} yes · ${ct.interest.maybe} maybe · ${ct.interest["not-interested"]} no` },
+      { label: "Interested", value: (ct.interest.interested + ct.interest.maybe).toLocaleString(), sub: `${ct.interest.interested} yes - ${ct.interest.maybe} maybe - ${ct.interest["not-interested"]} no` },
       { label: "Callbacks owed", value: ct.callbacksRequested.toLocaleString() },
+      { label: "Asked to be removed", value: ct.nextAction["remove-from-list"].toLocaleString() },
     ])
   }
 
@@ -247,10 +282,11 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
   pdf.bars(reachedRows, { format: v => `${v} (${pct(v, r.totals.calls)})`, max: r.totals.calls })
   if (ct.refusedBeforeDial > 0) {
     pdf.paragraph(
-      `${ct.refusedBeforeDial} further attempt${ct.refusedBeforeDial === 1 ? "" : "s"} never became a call: the calling provider refused to start ${ct.refusedBeforeDial === 1 ? "it" : "them"}` +
-      (ct.refusedReason ? ` ("${ct.refusedReason}").` : ".") +
-      " Those people were not reached and were not marked as failed; they remain in the queue.",
-      { size: 8.5, colour: AMBER }
+      internal
+        ? `${ct.refusedBeforeDial} further attempt${ct.refusedBeforeDial === 1 ? "" : "s"} never became a call: the calling provider refused to start ${ct.refusedBeforeDial === 1 ? "it" : "them"}` +
+          (ct.refusedReason ? ` ("${ct.refusedReason}").` : ".") + " Those leads were returned to the queue."
+        : `A further ${ct.refusedBeforeDial} call attempt${ct.refusedBeforeDial === 1 ? "" : "s"} could not be placed in this period and ${ct.refusedBeforeDial === 1 ? "has" : "have"} been rescheduled.`,
+      { size: 8.5, colour: MUTED }
     )
   }
   if (ct.ivrSeen > 0) {
@@ -267,45 +303,50 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
   if (r.campaigns.length) {
     pdf.newPage()
     pdf.heading("Campaigns")
-    if (r.extractedShare.humans > 0 && r.extractedShare.extracted === 0) {
+    if (internal && r.extractedShare.humans > 0 && r.extractedShare.extracted === 0) {
       pdf.paragraph(
-        "Interest, decision-maker and callback figures show as 0 because the campaign agent was not set up to record them during this period. " +
+        "Interest, decision-maker and callback figures are absent because the campaign agent was not set up to record them during this period. " +
         "Switch on the \"Outbound cold call\" extraction preset on the agent and these fill in for every call from then on.",
         { size: 8.5, colour: AMBER }
       )
     }
+    const cols: { header: string; width: number; align?: "left" | "right" }[] = [
+      { header: "Campaign", width: 1.5 },
+      { header: "Calls", width: 0.6, align: "right" },
+      ...(internal ? [{ header: "Refused", width: 0.78, align: "right" as const }] : []),
+      { header: "People", width: 0.7, align: "right" },
+      { header: "Reached", width: 0.8, align: "right" },
+      { header: "Menu only", width: 0.85, align: "right" },
+      { header: "Voicemail", width: 0.9, align: "right" },
+      ...(hasOutcomes
+        ? [
+            { header: "Decision-makers", width: 1.4, align: "right" as const },
+            { header: "Interested", width: 0.9, align: "right" as const },
+            { header: "Callbacks", width: 0.85, align: "right" as const },
+          ]
+        : []),
+      { header: "Minutes", width: 0.75, align: "right" },
+    ]
+    const rowFor = (c: CampaignOutcomes, name: string) => [
+      name, c.dials,
+      ...(internal ? [c.refusedBeforeDial || ""] : []),
+      c.peopleReached, pct(c.reached.HUMAN, c.dials), c.reached.IVR, c.reached.VOICEMAIL,
+      ...(hasOutcomes ? [c.decisionMakers, c.interest.interested + c.interest.maybe, c.callbacksRequested] : []),
+      c.minutes,
+    ]
+    const ordered = [...r.campaigns].sort((x, y) => nameOf(x.campaignId, x.campaignName).localeCompare(nameOf(y.campaignId, y.campaignName), undefined, { numeric: true }))
     pdf.table({
-      columns: [
-        { header: "Campaign", width: 1.3 },
-        { header: "Calls", width: 0.55, align: "right" },
-        { header: "Refused", width: 0.78, align: "right" },
-        { header: "People", width: 0.7, align: "right" },
-        { header: "Reached", width: 0.75, align: "right" },
-        { header: "Menu only", width: 0.8, align: "right" },
-        { header: "Voicemail", width: 0.85, align: "right" },
-        { header: "Decision-makers", width: 1.4, align: "right" },
-        { header: "Interested", width: 0.9, align: "right" },
-        { header: "Callbacks", width: 0.85, align: "right" },
-        { header: "Minutes", width: 0.72, align: "right" },
-      ],
+      columns: cols,
       size: 7.5,
       rows: [
-        ...r.campaigns.map(c => [
-          c.campaignName, c.dials, c.refusedBeforeDial || "", c.peopleReached, pct(c.reached.HUMAN, c.dials), c.reached.IVR, c.reached.VOICEMAIL,
-          c.decisionMakers, c.interest.interested + c.interest.maybe, c.callbacksRequested, c.minutes,
-        ]),
-        ...(r.campaigns.length > 1
-          ? [["All campaigns", ct.dials, ct.refusedBeforeDial || "", ct.peopleReached, pct(ct.reached.HUMAN, ct.dials), ct.reached.IVR, ct.reached.VOICEMAIL,
-              ct.decisionMakers, ct.interest.interested + ct.interest.maybe, ct.callbacksRequested, ct.minutes]]
-          : []),
+        ...ordered.map(c => rowFor(c, nameOf(c.campaignId, c.campaignName))),
+        ...(r.campaigns.length > 1 ? [rowFor(ct, "All campaigns")] : []),
       ],
       zebra: true,
       boldLast: r.campaigns.length > 1,
     })
 
-    // Only when the extraction actually ran — a chart of zeros says
-    // nothing the warning above didn't.
-    if (ct.reached.HUMAN > 0 && ct.extracted > 0) {
+    if (ct.reached.HUMAN > 0 && hasOutcomes) {
       pdf.heading("Where the conversations went", { size: 12 })
       pdf.bars([
         { label: "Reached the decision-maker", value: ct.decisionMakers, colour: GREEN },
@@ -313,7 +354,6 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
         { label: "Interested", value: ct.interest.interested, colour: GREEN },
         { label: "Maybe / later", value: ct.interest.maybe, colour: [190, 160, 60] },
         { label: "Not interested", value: ct.interest["not-interested"], colour: GREY },
-        { label: "Interest not recorded", value: ct.interest.unknown, colour: [210, 208, 220] },
         { label: "Asked for a callback", value: ct.callbacksRequested, colour: BRAND },
         { label: "Asked to be removed", value: ct.nextAction["remove-from-list"], colour: RED },
       ], { max: ct.reached.HUMAN, format: v => `${v} (${pct(v, ct.reached.HUMAN)})`, labelWidth: 150 })
@@ -338,7 +378,7 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
         ],
         rows: r.callbacks.map(c => [
           c.contactName ?? c.leadName ?? "Unknown", c.contactRole ?? "", c.callbackWhen ?? "", c.bestNumber ?? c.phone ?? "",
-          c.campaignName, c.interest, fmtStamp(c.at),
+          nameOf(c.campaignId, c.campaignName), c.interest, fmtStamp(c.at),
         ]),
         zebra: true,
       })
@@ -351,8 +391,8 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
     }
   }
 
-  /* ── Agents and reasons ───────────────────────────────────────────── */
-  pdf.ensure(160)
+  /* ── Agents ───────────────────────────────────────────────────────── */
+  pdf.ensure(120)
   pdf.heading("By agent", { size: 12 })
   pdf.table({
     columns: [
@@ -365,51 +405,52 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
     zebra: true,
   })
 
-  if (r.endedReasons.length) {
-    pdf.heading("Why calls ended", { size: 12 })
-    pdf.bars(r.endedReasons.map(e => ({ label: e.label, value: e.calls, colour: [150, 140, 200] })), { labelWidth: 230, format: v => `${v}` })
-  }
-
-  /* ── Minutes and billing ──────────────────────────────────────────── */
-  const b = r.billing
-  pdf.ensure(170)
-  pdf.heading("Minutes and billing", { size: 12 })
-  if (b.packageName) {
-    const used = b.minutesUsedOfAllowance
-    const left = Math.max(0, b.minutesIncluded - used)
-    const over = Math.max(0, used - b.minutesIncluded)
-    pdf.kpis([
-      { label: "Plan", value: b.packageName, sub: `${b.minutesIncluded.toLocaleString()} min included - ${usd(b.packagePriceCents)}${b.assignedAt ? ` - since ${fmtDay(b.assignedAt)}` : ""}` },
-      { label: "Minutes this period", value: b.minutesInPeriod.toLocaleString(), sub: "billed per started minute" },
-      { label: "Allowance used", value: `${Math.min(used, b.minutesIncluded).toLocaleString()} / ${b.minutesIncluded.toLocaleString()}`, sub: over ? `${over} min over the allowance` : `${left} min left` },
-      { label: "Overage this period", value: usd(b.overageCents), sub: b.overageCents ? `${b.overageMinutes} min x ${usd(b.overageRateCents)}/min` : `none - ${usd(b.overageRateCents)}/min past the allowance` },
-    ])
-    pdf.paragraph(
-      `Minutes inside the plan cost nothing beyond the plan itself. Only minutes past ${b.minutesIncluded.toLocaleString()} are charged, at ${usd(b.overageRateCents)} per minute, from the credit balance. ` +
-      (b.payPerMinuteCents ? `${usd(b.payPerMinuteCents)} of this period's calls were charged per minute before the plan was assigned. ` : "") +
-      (b.refundsCents ? `${usd(b.refundsCents)} was refunded to the balance in this period. ` : "") +
-      (b.creditsAddedCents ? `${usd(b.creditsAddedCents)} of credit was added. ` : "") +
-      `Credit balance now: ${usd(b.balanceCents)}.`,
-      { size: 8.5, colour: MUTED }
-    )
-  } else {
-    pdf.kpis([
-      { label: "Plan", value: "Pay as you go", sub: `${usd(b.overageRateCents)}/min from the credit balance` },
-      { label: "Minutes this period", value: b.minutesInPeriod.toLocaleString(), sub: "billed per started minute" },
-      { label: "Charged this period", value: usd(b.payPerMinuteCents) },
-      { label: "Credit balance", value: usd(b.balanceCents), sub: b.creditsAddedCents ? `${usd(b.creditsAddedCents)} added in period` : undefined },
-    ])
+  /* ── Internal only: end reasons and billing ───────────────────────── */
+  if (internal) {
+    if (r.endedReasons.length) {
+      pdf.heading("Why calls ended", { size: 12 })
+      pdf.bars(r.endedReasons.map(e => ({ label: e.label, value: e.calls, colour: [150, 140, 200] })), { labelWidth: 230, format: v => `${v}` })
+    }
+    const b = r.billing
+    pdf.ensure(170)
+    pdf.heading("Minutes and billing", { size: 12 })
+    if (b.packageName) {
+      const used = b.minutesUsedOfAllowance
+      const left = Math.max(0, b.minutesIncluded - used)
+      const over = Math.max(0, used - b.minutesIncluded)
+      pdf.kpis([
+        { label: "Plan", value: b.packageName, sub: `${b.minutesIncluded.toLocaleString()} min included - ${usd(b.packagePriceCents)}${b.assignedAt ? ` - since ${fmtDay(b.assignedAt)}` : ""}` },
+        { label: "Minutes this period", value: b.minutesInPeriod.toLocaleString(), sub: "billed per started minute" },
+        { label: "Allowance used", value: `${Math.min(used, b.minutesIncluded).toLocaleString()} / ${b.minutesIncluded.toLocaleString()}`, sub: over ? `${over} min over the allowance` : `${left} min left` },
+        { label: "Overage this period", value: usd(b.overageCents), sub: b.overageCents ? `${b.overageMinutes} min x ${usd(b.overageRateCents)}/min` : `none - ${usd(b.overageRateCents)}/min past the allowance` },
+      ])
+      pdf.paragraph(
+        `Minutes inside the plan cost nothing beyond the plan itself. Only minutes past ${b.minutesIncluded.toLocaleString()} are charged, at ${usd(b.overageRateCents)} per minute, from the credit balance. ` +
+        (b.payPerMinuteCents ? `${usd(b.payPerMinuteCents)} of this period's calls were charged per minute before the plan was assigned. ` : "") +
+        (b.refundsCents ? `${usd(b.refundsCents)} was refunded to the balance in this period. ` : "") +
+        (b.creditsAddedCents ? `${usd(b.creditsAddedCents)} of credit was added. ` : "") +
+        `Credit balance now: ${usd(b.balanceCents)}.`,
+        { size: 8.5, colour: MUTED }
+      )
+    } else {
+      pdf.kpis([
+        { label: "Plan", value: "Pay as you go", sub: `${usd(b.overageRateCents)}/min from the credit balance` },
+        { label: "Minutes this period", value: b.minutesInPeriod.toLocaleString(), sub: "billed per started minute" },
+        { label: "Charged this period", value: usd(b.payPerMinuteCents) },
+        { label: "Credit balance", value: usd(b.balanceCents), sub: b.creditsAddedCents ? `${usd(b.creditsAddedCents)} added in period` : undefined },
+      ])
+    }
   }
 
   /* ── Method ───────────────────────────────────────────────────────── */
-  pdf.ensure(120)
+  pdf.ensure(100)
   pdf.rule()
   pdf.heading("How these numbers are counted", { size: 10, colour: MUTED })
   pdf.paragraph(
-    "Every call is classified at the moment it ends by what actually picked up: a person, an automated phone menu, a voicemail greeting, no answer, or a failure to connect. " +
-    "The classification uses the agent's own post-call extraction when available and the transcript otherwise. \"Reached a person\" is that classification, not call length. " +
-    "Decision-maker, interest, callback and objection figures come from the agent's post-call extraction and refer to the person who answered, never to the agent. " +
-    "Minutes are billed per started minute. A plan's included minutes are used first; only minutes beyond the allowance are charged, at the plan's overage rate, and those are the only call charges that appear on the credit ledger.",
+    "Every call is classified when it ends by what actually picked up: a person, an automated phone menu, a voicemail greeting, no answer, or a call that could not connect. " +
+    "\"Reached a person\" is that classification, not call length. " +
+    (hasOutcomes ? "Decision-maker, interest, callback and objection figures are taken from each conversation and refer to the person who answered. " : "") +
+    "Minutes are counted per started minute of call time.",
     { size: 7.5, colour: MUTED }
   )
 

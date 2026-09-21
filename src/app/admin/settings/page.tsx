@@ -8,6 +8,7 @@ import { stripeConfigured } from "@/lib/stripe"
 import { emailConfigured } from "@/lib/email"
 import { crmConfigured } from "@/lib/crm/client"
 import { PlatformSettingsForm } from "./settings-client"
+import { DialerSettingsForm } from "./dialer-client"
 
 export const metadata: Metadata = { title: "Settings" }
 export const dynamic = "force-dynamic"
@@ -114,6 +115,26 @@ export default async function AdminSettingsPage() {
             marked “Not set” means that capability is simply hidden from tenants
             rather than failing.
           </p>
+        </Card>
+      </div>
+
+      <div className="mt-5">
+        <Card
+          title="Outbound dialer"
+          note="Applies to every campaign on the platform. Saved values take effect on the next dialer tick."
+        >
+          <DialerSettingsForm
+            canEdit={admin.role === "SUPER_ADMIN"}
+            initial={{
+              dialerEnabled:       settings?.dialerEnabled ?? true,
+              maxConcurrentCalls:  settings?.maxConcurrentCalls ?? 40,
+              tenantMaxConcurrent: settings?.tenantMaxConcurrent ?? 10,
+              numberDailyCallCap:  settings?.numberDailyCallCap ?? 200,
+              contactDailyCap:     settings?.contactDailyCap ?? 2,
+              consentLine:         settings?.consentLine
+                ?? "Let the person know this call may be recorded, in your first sentence, before anything else.",
+            }}
+          />
         </Card>
       </div>
 
