@@ -120,6 +120,8 @@ export async function releaseAttempt(a: {
   providerCallId: string
   endedReason: string | null
   durationSeconds: number
+  /** From lib/calls/reached.ts, when the caller computed it. See classifyOutcome. */
+  reached?: "HUMAN" | "IVR" | "VOICEMAIL" | "NO_ANSWER" | "FAILED" | null
   metadata?: Record<string, unknown> | null
 }): Promise<Released | null> {
   const attempt = await findAttempt(a)
@@ -151,6 +153,7 @@ export async function releaseAttempt(a: {
   const outcome = classifyOutcome({
     endedReason: a.endedReason,
     durationSeconds: a.durationSeconds,
+    reached: a.reached ?? null,
   })
 
   const now = new Date()

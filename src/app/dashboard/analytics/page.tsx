@@ -55,6 +55,7 @@ import {
 } from "@/lib/analytics"
 import { usd, duration, titleCase } from "@/lib/format"
 import { RangePicker } from "./range"
+import { ReportDownload } from "./report-download"
 import { loadCampaignCallRows, rollup, total, callbacksDue } from "@/lib/campaigns/insights"
 import { CampaignOutcomesSection } from "@/components/campaigns/outcomes"
 import Link from "next/link"
@@ -146,8 +147,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
       heading="Analytics"
       description={`The last ${days} days across your agents.`}
     >
-      <div className="mb-5">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <RangePicker />
+        <ReportDownload defaultDays={days} />
       </div>
 
       {t.calls === 0 ? (

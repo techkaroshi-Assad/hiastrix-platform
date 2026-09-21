@@ -215,6 +215,36 @@ been seen on a live call yet. The pieces, and what to check:
   `+13134584952` to Kaizen and attach it to Nancy so she rotates across
   two purchased numbers.
 
+## PDF activity report + honest lead states (2026-09-22)
+
+- **Dialer no longer calls a menu "Spoke to them".** `classifyOutcome()` in
+  `lib/dialer/outcome.ts` takes `reached` (from the webhook); IVR → new
+  outcome `IVR_ONLY` (retries on a 2h/20h curve, note "Reached a phone
+  menu, not a person"), VOICEMAIL/HUMAN from the transcript classifier
+  win over the duration rule. Campaign page "Spoke to a person" and the
+  campaigns list "Spoke to" now count distinct leads with a HUMAN call.
+  **Data correction applied in Supabase at the user's request**: 321
+  COMPLETED leads whose latest call was IVR/voicemail/no-answer were put
+  back to RETRY_WAIT (next attempt +2h) across 6 campaigns, 4 with no
+  attempts left relabelled EXHAUSTED; the 5 finished campaigns holding
+  re-queued leads were set to PAUSED with a pausedReason saying why.
+  75-560 was left RUNNING. **Untested**: watch a menu-only call land as
+  "Trying again later" with the new note rather than "Spoke to them".
+- **`lib/pdf.ts`** — dependency-free PDF 1.4 writer (Helvetica AFM
+  widths, deflate streams, tables with wrapped/repeated headers, KPI
+  boxes, bar/column charts). Validated: pypdf parses, pdftoppm renders,
+  visually checked. **`lib/reports/activity.ts`** — the tenant activity
+  report (every call + campaign outcomes + callbacks + objections +
+  agents + method note); `GET /api/reports/activity?from=&to=` streams
+  it. Analytics page has a date-range picker with PDF / Excel buttons;
+  campaign pages have a PDF button. Kaizen's 1 Sept–21 Sept report was
+  generated offline from the same code and the live data and handed to
+  the user. **Untested in the app**: click the PDF button after deploy —
+  first suspect if it 500s is `dayStart()` timezone maths in the route.
+- Known limits of the PDF writer: ASCII/WinAnsi only (non-Latin text
+  becomes "?"), no images, no embedded fonts. Fine for this report;
+  revisit if a tenant needs a non-Latin script.
+
 ## Super admin — phone number type tagging (2026-08-27)
 
 After a campaign hit `call.start.error-vapi-number-outbound-daily-limit`

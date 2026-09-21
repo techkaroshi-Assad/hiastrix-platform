@@ -42,6 +42,7 @@ export function CampaignOutcomesSection({
   o,
   callbacks,
   reportHref,
+  pdfHref,
   /** True when the agent behind these calls doesn't use the outbound preset. */
   noExtraction,
   agentHref,
@@ -49,6 +50,8 @@ export function CampaignOutcomesSection({
   o: CampaignOutcomes
   callbacks: CallOutcomeRow[]
   reportHref: string
+  /** The PDF activity report over the same window, when the page has one. */
+  pdfHref?: string
   noExtraction: boolean
   agentHref?: string
 }) {
@@ -64,13 +67,24 @@ export function CampaignOutcomesSection({
             Counted from who actually picked up, not from call length — a phone menu is not a conversation.
           </p>
         </div>
-        <Link
-          href={reportHref}
-          className="inline-flex h-9 items-center gap-2 rounded-field border border-line bg-field px-3.5 text-[12.5px] font-medium text-fg transition-colors hover:border-line-strong hover:bg-field-hover"
-        >
-          <IconDownload size={14} />
-          Download report (Excel)
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {pdfHref && (
+            <Link
+              href={pdfHref}
+              className="inline-flex h-9 items-center gap-2 rounded-field border border-brand-500/60 bg-brand-500/12 px-3.5 text-[12.5px] font-medium text-brand-on-tint transition-colors hover:bg-brand-500/20"
+            >
+              <IconDownload size={14} />
+              PDF report
+            </Link>
+          )}
+          <Link
+            href={reportHref}
+            className="inline-flex h-9 items-center gap-2 rounded-field border border-line bg-field px-3.5 text-[12.5px] font-medium text-fg transition-colors hover:border-line-strong hover:bg-field-hover"
+          >
+            <IconDownload size={14} />
+            Excel (every call)
+          </Link>
+        </div>
       </div>
 
       {noExtraction && humans > 0 && (

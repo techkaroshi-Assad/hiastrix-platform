@@ -253,6 +253,7 @@ export async function POST(request: NextRequest) {
           providerCallId:  vapiCallId,
           endedReason,
           durationSeconds,
+          reached,
           metadata: (call.metadata ?? null) as Record<string, unknown> | null,
         })
 

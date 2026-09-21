@@ -72,6 +72,8 @@ export type CampaignOutcomes = {
   agentName: string
   /** Every call the campaign placed that produced a call record. */
   dials: number
+  /** Distinct people a person answered for — a lead called twice counts once. */
+  peopleReached: number
   reached: Record<Reached, number>
   /** Calls where the agent reached a person AND the extraction ran. */
   extracted: number
@@ -88,6 +90,8 @@ export type CampaignOutcomes = {
 
 export type CallOutcomeRow = {
   callId: string
+  /** The campaign lead this dial was for — people are counted by this, not by call. */
+  leadId: string | null
   campaignId: string
   campaignName: string
   at: Date | null
@@ -123,8 +127,9 @@ const emptyNext = (): Record<NextAction, number> =>
 
 /* ── Per-call rows ─────────────────────────────────────────────────────── */
 
-type RawRow = {
+export type RawRow = {
   call_id: string
+  lead_id: string | null
   campaign_id: string
   campaign_name: string
   agent_name: string
@@ -165,6 +170,7 @@ export async function loadCampaignCallRows(a: {
   const rows = await prisma.$queryRaw<RawRow[]>`
     SELECT DISTINCT ON (c.id)
            c.id                 AS call_id,
+           da.campaign_lead_id  AS lead_id,
            cp.id                AS campaign_id,
            cp.name              AS campaign_name,
            ag.name              AS agent_name,
@@ -186,57 +192,66 @@ export async function loadCampaignCallRows(a: {
      ORDER BY c.id, da.created_at DESC
   `
 
-  return rows.map(r => {
-    const sd = (r.structured && typeof r.structured === "object" && !Array.isArray(r.structured)
-      ? r.structured
-      : {}) as Record<string, unknown>
-    const facts = Array.isArray(sd.keyFacts)
-      ? sd.keyFacts.map(f => String(f)).filter(Boolean)
-      : typeof sd.keyFacts === "string" && sd.keyFacts.trim() ? [sd.keyFacts] : []
-    const str = (k: string) => {
-      const v = sd[k]
-      return typeof v === "string" && v.trim() ? v.trim() : null
-    }
-    return {
-      callId: r.call_id,
-      campaignId: r.campaign_id,
-      campaignName: r.campaign_name,
-      at: r.started_at ?? r.created_at,
-      phone: r.phone,
-      contactName: str("contactName"),
-      leadName: r.lead_name,
-      durationSeconds: r.duration_seconds,
-      costCents: r.cost_cents,
-      reached: (r.reached as Reached | null) ?? null,
-      ivrSeen: r.ivr_seen,
-      endedReason: r.ended_reason,
-      summary: r.summary,
-      whoAnswered: normWhoAnswered(sd.whoAnswered),
-      reachedDecisionMaker: truthy(sd.reachedDecisionMaker),
-      contactRole: str("contactRole"),
-      interest: normInterest(sd.interestLevel),
-      callbackRequested: truthy(sd.callbackRequested),
-      callbackWhen: str("callbackWhen"),
-      bestNumber: str("bestNumber"),
-      objection: str("objection"),
-      keyFacts: facts,
-      nextAction: normNextAction(sd.nextAction),
-      ivrOutcome: str("ivrOutcome"),
-      transcript: r.transcript,
-    }
-  })
+  return rows.map(rowFromRaw)
+}
+
+/**
+ * One raw row → one CallOutcomeRow. Exported and pure so a report can be
+ * rendered from rows fetched elsewhere (a script, a test) without a
+ * database round trip.
+ */
+export function rowFromRaw(r: RawRow): CallOutcomeRow {
+  const sd = (r.structured && typeof r.structured === "object" && !Array.isArray(r.structured)
+    ? r.structured
+    : {}) as Record<string, unknown>
+  const facts = Array.isArray(sd.keyFacts)
+    ? sd.keyFacts.map(f => String(f)).filter(Boolean)
+    : typeof sd.keyFacts === "string" && sd.keyFacts.trim() ? [sd.keyFacts] : []
+  const str = (k: string) => {
+    const v = sd[k]
+    return typeof v === "string" && v.trim() ? v.trim() : null
+  }
+  return {
+    callId: r.call_id,
+    leadId: r.lead_id,
+    campaignId: r.campaign_id,
+    campaignName: r.campaign_name,
+    at: r.started_at ?? r.created_at,
+    phone: r.phone,
+    contactName: str("contactName"),
+    leadName: r.lead_name,
+    durationSeconds: r.duration_seconds,
+    costCents: r.cost_cents,
+    reached: (r.reached as Reached | null) ?? null,
+    ivrSeen: r.ivr_seen,
+    endedReason: r.ended_reason,
+    summary: r.summary,
+    whoAnswered: normWhoAnswered(sd.whoAnswered),
+    reachedDecisionMaker: truthy(sd.reachedDecisionMaker),
+    contactRole: str("contactRole"),
+    interest: normInterest(sd.interestLevel),
+    callbackRequested: truthy(sd.callbackRequested),
+    callbackWhen: str("callbackWhen"),
+    bestNumber: str("bestNumber"),
+    objection: str("objection"),
+    keyFacts: facts,
+    nextAction: normNextAction(sd.nextAction),
+    ivrOutcome: str("ivrOutcome"),
+    transcript: r.transcript,
+  }
 }
 
 /* ── Rollups ───────────────────────────────────────────────────────────── */
 
 export function rollup(rows: CallOutcomeRow[]): Map<string, CampaignOutcomes> {
   const out = new Map<string, CampaignOutcomes>()
+  const peopleBy = new Map<string, Set<string>>()
   for (const r of rows) {
     let o = out.get(r.campaignId)
     if (!o) {
       o = {
         campaignId: r.campaignId, campaignName: r.campaignName, agentName: "",
-        dials: 0, reached: emptyReached(), extracted: 0,
+        dials: 0, peopleReached: 0, reached: emptyReached(), extracted: 0,
         decisionMakers: 0, gatekeepers: 0, interest: emptyInterest(),
         callbacksRequested: 0, nextAction: emptyNext(), ivrSeen: 0,
         costCents: 0, minutes: 0, humanSeconds: 0,
@@ -244,6 +259,12 @@ export function rollup(rows: CallOutcomeRow[]): Map<string, CampaignOutcomes> {
       out.set(r.campaignId, o)
     }
     o.dials++
+    if (r.reached === "HUMAN") {
+      let set = peopleBy.get(r.campaignId)
+      if (!set) { set = new Set(); peopleBy.set(r.campaignId, set) }
+      set.add(r.leadId ?? r.callId)
+      o.peopleReached = set.size
+    }
     if (r.reached) o.reached[r.reached]++
     if (r.ivrSeen) o.ivrSeen++
     o.costCents += r.costCents
@@ -267,7 +288,7 @@ export function total(rows: CallOutcomeRow[]): CampaignOutcomes {
   const all = rollup(rows.map(r => ({ ...r, campaignId: "all", campaignName: "All campaigns" })))
   return all.get("all") ?? {
     campaignId: "all", campaignName: "All campaigns", agentName: "",
-    dials: 0, reached: emptyReached(), extracted: 0,
+    dials: 0, peopleReached: 0, reached: emptyReached(), extracted: 0,
     decisionMakers: 0, gatekeepers: 0, interest: emptyInterest(),
     callbacksRequested: 0, nextAction: emptyNext(), ivrSeen: 0,
     costCents: 0, minutes: 0, humanSeconds: 0,

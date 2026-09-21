@@ -21,6 +21,8 @@
 export type Outcome =
   | "CONNECTED"
   | "VOICEMAIL"
+  /** An automated menu answered and nobody ever spoke. */
+  | "IVR_ONLY"
   | "NO_ANSWER"
   | "BUSY"
   | "INVALID_NUMBER"
@@ -57,6 +59,16 @@ const has = (s: string, ...needles: string[]) => needles.some(n => s.includes(n)
 export function classifyOutcome(a: {
   endedReason: string | null
   durationSeconds: number
+  /**
+   * What actually picked up, from lib/calls/reached.ts, when the caller has
+   * it (the webhook does; the reaper, resolving a lost call from the
+   * provider's record alone, does not). This is what stops a phone menu
+   * being written to the lead as "Spoke to them": ten seconds of audio is
+   * also ten seconds of "press 1 for appointments", and on the first
+   * production campaign 239 of 384 "spoke to" leads had never heard a
+   * person. Absent, the duration rule below applies as before.
+   */
+  reached?: "HUMAN" | "IVR" | "VOICEMAIL" | "NO_ANSWER" | "FAILED" | null
 }): Outcome {
   const r = (a.endedReason ?? "").toLowerCase()
   const d = Math.max(0, a.durationSeconds)
@@ -67,6 +79,13 @@ export function classifyOutcome(a: {
   if (d < CONNECTED_SECONDS && has(r, "manually-canceled", "manually-cancelled")) {
     return "CANCELLED"
   }
+
+  // The transcript-level truth, when we have it. A menu is not a person, a
+  // voicemail greeting is a voicemail whether or not detection fired, and a
+  // person is a person however short the call.
+  if (a.reached === "IVR")       return "IVR_ONLY"
+  if (a.reached === "VOICEMAIL") return "VOICEMAIL"
+  if (a.reached === "HUMAN")     return "CONNECTED"
 
   // Voicemail before the duration override, because a voicemail is *long* and
   // would otherwise be swallowed by it.
@@ -116,6 +135,11 @@ const BACKOFF: Record<string, number[]> = {
   BUSY: [5 * MINUTE, 15 * MINUTE, 45 * MINUTE],
   // A machine picked up. Later today, then tomorrow.
   VOICEMAIL: [4 * HOUR, 20 * HOUR],
+  // A phone menu, and no person. The next attempt is worth making at a
+  // different time of day — a practice's menu at 12:30 is often a
+  // receptionist at 14:00 — and with the keypad on, the agent may get
+  // through where it didn't before.
+  IVR_ONLY: [2 * HOUR, 20 * HOUR],
   // Our side or the provider's. Fast, because it is probably transient.
   PROVIDER_ERROR: [MINUTE, 5 * MINUTE, 15 * MINUTE],
 }
@@ -197,6 +221,12 @@ export function scheduleNext(a: {
         ? { state: "EXHAUSTED", nextAttemptAt: null, consumesAttempt: true,
             note: `Reached voicemail on every one of ${a.maxAttempts} attempts.` }
         : retry("VOICEMAIL", "Reached voicemail — will try again later.")
+
+    case "IVR_ONLY":
+      return spent
+        ? { state: "EXHAUSTED", nextAttemptAt: null, consumesAttempt: true,
+            note: `Only ever reached a phone menu — no person answered on ${a.maxAttempts} attempts.` }
+        : retry("IVR_ONLY", "Reached a phone menu, not a person — will try again at a different time.")
 
     case "INVALID_NUMBER":
       return { state: "FAILED", nextAttemptAt: null, consumesAttempt: true,

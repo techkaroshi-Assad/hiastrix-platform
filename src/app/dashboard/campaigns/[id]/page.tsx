@@ -230,8 +230,11 @@ export default async function CampaignPage({
       <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="People" value={all.toLocaleString()}
                   meta={`${waiting.toLocaleString()} still to call`} />
-        <StatCard label="Spoke to" value={countOf("COMPLETED").toLocaleString()}
-                  meta={all ? `${Math.round((countOf("COMPLETED") / all) * 100)}% of the list` : undefined} />
+        {/* People, not "calls over ten seconds": a lead whose only call hit a
+            phone menu is not somebody we spoke to, whatever the dialer's
+            state says. Counted from calls.reached via the outcomes rollup. */}
+        <StatCard label="Spoke to a person" value={(outcomes?.peopleReached ?? 0).toLocaleString()}
+                  meta={all ? `${Math.round(((outcomes?.peopleReached ?? 0) / all) * 100)}% of the list` : undefined} />
         <StatCard label="On the phone now" value={live.toLocaleString()}
                   meta={campaign.state === "RUNNING" ? "updating live" : "not running"} />
         <StatCard label="Finished" value={`${pct}%`}
@@ -293,6 +296,7 @@ export default async function CampaignPage({
             o={outcomes}
             callbacks={callbacksDue(outcomeRows)}
             reportHref={`/api/reports/campaign?campaignId=${campaign.id}`}
+            pdfHref={`/api/reports/activity?from=${campaign.createdAt.toISOString().slice(0, 10)}&to=${new Date().toISOString().slice(0, 10)}`}
             noExtraction={noExtraction}
             agentHref={`/dashboard/agents/${campaign.agent.id}`}
           />

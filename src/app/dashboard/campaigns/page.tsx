@@ -43,13 +43,31 @@ export default async function CampaignsPage() {
       })
     : []
 
+  /*
+   * "Spoke to" is people a person answered for, from calls.reached — not
+   * leads in COMPLETED, which the dialer sets after ten seconds of audio and
+   * which counted every phone menu as a conversation. One query for every
+   * campaign, distinct by lead.
+   */
+  const talkedRows = campaigns.length
+    ? await prisma.$queryRaw<{ campaign_id: string; people: bigint }[]>`
+        SELECT da.campaign_id, count(DISTINCT da.campaign_lead_id)::bigint AS people
+          FROM dial_attempts da
+          JOIN calls c ON c.vapi_call_id = da.provider_call_id
+         WHERE da.tenant_id = ${tenant.id}::uuid
+           AND c.reached = 'HUMAN'
+         GROUP BY da.campaign_id
+      `
+    : []
+  const talkedBy = new Map(talkedRows.map(r => [r.campaign_id, Number(r.people)]))
+
   const progressOf = (id: string) => {
     const mine = counts.filter(c => c.campaignId === id)
     const total = mine.reduce((n, c) => n + c._count._all, 0)
     const done = mine
       .filter(c => ["COMPLETED", "EXHAUSTED", "FAILED", "SUPPRESSED", "CANCELLED"].includes(c.state))
       .reduce((n, c) => n + c._count._all, 0)
-    const talked = mine.find(c => c.state === "COMPLETED")?._count._all ?? 0
+    const talked = talkedBy.get(id) ?? 0
     return { total, done, talked }
   }
 
