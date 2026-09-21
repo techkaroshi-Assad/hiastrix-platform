@@ -109,7 +109,7 @@ export function CampaignOutcomesSection({
         <StatCard
           label="Reached a person"
           value={pct(humans, o.dials)}
-          meta={`${humans.toLocaleString()} of ${o.dials.toLocaleString()} dials`}
+          meta={`${humans.toLocaleString()} of ${o.dials.toLocaleString()} calls${o.refusedBeforeDial ? ` · ${o.refusedBeforeDial} refused before dialing` : ""}`}
           icon={<IconConnected size={16} />}
         />
         <StatCard
@@ -127,11 +127,7 @@ export function CampaignOutcomesSection({
         <StatCard
           label="Callbacks owed"
           value={o.callbacksRequested.toLocaleString()}
-          meta={
-            o.decisionMakers > 0
-              ? `${usd(Math.round(o.costCents / o.decisionMakers))} per decision-maker reached`
-              : o.costCents > 0 ? `${usd(o.costCents)} charged` : "Inside your allowance"
-          }
+          meta={`${o.minutes.toLocaleString()} minutes on these calls${o.costCents > 0 ? ` · ${usd(o.costCents)} of that was overage` : ""}`}
           icon={<IconGauge size={16} />}
         />
       </div>
@@ -146,6 +142,13 @@ export function CampaignOutcomesSection({
             centreValue={o.dials.toLocaleString()}
             centreLabel="dials"
           />
+          {o.refusedBeforeDial > 0 && (
+            <p className="px-5 pb-2 text-[12px] leading-relaxed text-warning">
+              {o.refusedBeforeDial.toLocaleString()} more attempt{o.refusedBeforeDial === 1 ? "" : "s"} never became a call — the
+              provider refused to start {o.refusedBeforeDial === 1 ? "it" : "them"}
+              {o.refusedReason ? `: "${o.refusedReason}"` : "."} Those people are back in the queue, not counted as reached or failed.
+            </p>
+          )}
           {o.ivrSeen > 0 && (
             <p className="px-5 pb-4 text-[12px] leading-relaxed text-subtle">
               A phone menu answered on {o.ivrSeen} of {answered} answered calls

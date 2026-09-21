@@ -215,6 +215,36 @@ been seen on a live call yet. The pieces, and what to check:
   `+13134584952` to Kaizen and attach it to Nancy so she rotates across
   two purchased numbers.
 
+## Billing bug + provider refusals (2026-09-22, later)
+
+- **Admin package assignment did not reset `minutesUsed`** (the Stripe path
+  does). Kaizen's Basic (900 min) was assigned 8 Sep on top of 219 minutes
+  already paid per-minute, so overage started 219 minutes early: 84 min /
+  $29.40 charged in error on 21 Sep across 48 calls. **Corrected in
+  Supabase**: those calls' `cost_cents` zeroed, `minutes_used` set to 765
+  (minutes since assignment), $29.40 refunded with a REFUND ledger row
+  explaining why, balance now $53.35. Code: `api/admin/tenants/[id]`
+  resets `minutesUsed` when the package *changes*. Check other tenants
+  with an admin-assigned package for the same drift before trusting their
+  overage.
+- **Provider refusals were marked as bad numbers.** 380 of 75-560's 800
+  attempts (and 104 on Kaizen Cold Outreach, 53 on Data Pipeline Run for
+  a negative wallet) were `astrix-rejected` with an account-level message
+  and the leads set FAILED "we couldn't place a call to this number".
+  `accountLevelRefusal()` in `lib/dialer/dial.ts` now recognises the
+  provider's account-wide messages (daily cap, wallet, subscription,
+  concurrency, bad assistant/number id) → `account_blocked` → campaign
+  PAUSED with the provider's words, attempt handed back, lead PENDING.
+  **Corrected in Supabase**: 543 such leads back to PENDING. Refused
+  attempts are now surfaced as "refused before dialing" on the campaign
+  page, Analytics table, Excel summary and the PDF, from
+  `loadRefusedAttempts()`.
+- **Report money**: "Charged" replaced by a Minutes-and-billing section
+  reconciled to the plan (allowance used/left, overage minutes × rate from
+  the ledger, per-minute charges before assignment, refunds, balance).
+  Campaign/agent tables show minutes; only "overage charged" where money
+  moved. Excel and pages relabelled the same way.
+
 ## PDF activity report + honest lead states (2026-09-22)
 
 - **Dialer no longer calls a menu "Spoke to them".** `classifyOutcome()` in

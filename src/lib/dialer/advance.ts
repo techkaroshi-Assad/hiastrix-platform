@@ -395,6 +395,33 @@ export async function advanceCampaign(
           })
           break
 
+        case "account_blocked": {
+          // Not this lead's fault, and not the next lead's either. Give the
+          // attempt back, stop the tick, pause the campaign with the
+          // provider's own words so the operator knows what to fix.
+          abandoned.push(...queue.splice(0).map(l => l.leadId))
+          await prisma.campaignLead.updateMany({
+            where: { id: lead.leadId, state: "DIALING" },
+            data: {
+              state: "PENDING", attemptNo: { decrement: 1 }, leaseExpiresAt: null,
+              nextAttemptAt: now,
+              lastOutcome: "PROVIDER_REFUSED",
+              note: "The call never went out — the provider refused to start it. Back in the queue.",
+            },
+          })
+          await prisma.campaign.updateMany({
+            where: { id: campaignId, state: "RUNNING" },
+            data: {
+              state: "PAUSED",
+              pausedReason:
+                `The calling provider refused to start calls: "${result.reason}" ` +
+                "This affects every call, not just one number, so the campaign has been paused. " +
+                "Fix the cause (attach a purchased number, top up the provider account) and press Resume — nobody on the list has been marked as failed.",
+            },
+          })
+          return
+        }
+
         case "throttled":
           abandoned.push(lead.leadId, ...queue.splice(0).map(l => l.leadId))
           await prisma.campaign.update({

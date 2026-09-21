@@ -74,6 +74,13 @@ export type CampaignOutcomes = {
   dials: number
   /** Distinct people a person answered for — a lead called twice counts once. */
   peopleReached: number
+  /**
+   * Attempts the provider refused before any call existed — a free-number
+   * daily cap, no credit. Not in `dials`, because no call was made, and not
+   * silently absent either: 800 attempts must never read as 420.
+   */
+  refusedBeforeDial: number
+  refusedReason: string | null
   reached: Record<Reached, number>
   /** Calls where the agent reached a person AND the extraction ran. */
   extracted: number
@@ -251,7 +258,8 @@ export function rollup(rows: CallOutcomeRow[]): Map<string, CampaignOutcomes> {
     if (!o) {
       o = {
         campaignId: r.campaignId, campaignName: r.campaignName, agentName: "",
-        dials: 0, peopleReached: 0, reached: emptyReached(), extracted: 0,
+        dials: 0, peopleReached: 0, refusedBeforeDial: 0, refusedReason: null,
+        reached: emptyReached(), extracted: 0,
         decisionMakers: 0, gatekeepers: 0, interest: emptyInterest(),
         callbacksRequested: 0, nextAction: emptyNext(), ivrSeen: 0,
         costCents: 0, minutes: 0, humanSeconds: 0,
@@ -284,15 +292,86 @@ export function rollup(rows: CallOutcomeRow[]): Map<string, CampaignOutcomes> {
 }
 
 /** The whole tenant's campaign activity in one set of numbers. */
-export function total(rows: CallOutcomeRow[]): CampaignOutcomes {
+export function total(rows: CallOutcomeRow[], refused: RefusedRow[] = []): CampaignOutcomes {
   const all = rollup(rows.map(r => ({ ...r, campaignId: "all", campaignName: "All campaigns" })))
-  return all.get("all") ?? {
+  const o = all.get("all") ?? {
     campaignId: "all", campaignName: "All campaigns", agentName: "",
-    dials: 0, peopleReached: 0, reached: emptyReached(), extracted: 0,
+    dials: 0, peopleReached: 0, refusedBeforeDial: 0, refusedReason: null,
+    reached: emptyReached(), extracted: 0,
     decisionMakers: 0, gatekeepers: 0, interest: emptyInterest(),
     callbacksRequested: 0, nextAction: emptyNext(), ivrSeen: 0,
     costCents: 0, minutes: 0, humanSeconds: 0,
   }
+  for (const r of refused) {
+    o.refusedBeforeDial += r.count
+    o.refusedReason ??= r.reason
+  }
+  return o
+}
+
+/* ── Attempts that never became calls ─────────────────────────────────── */
+
+export type RefusedRow = { campaignId: string; campaignName: string; count: number; reason: string | null }
+
+/**
+ * Dial attempts the provider refused at placement (`astrix-rejected`) in
+ * the window, per campaign, with the most common reason. These have no
+ * call record and so are invisible to every call-based query — which is
+ * how 380 of one campaign's 800 attempts went missing from its report.
+ */
+export async function loadRefusedAttempts(a: {
+  tenantId: string
+  campaignId?: string
+  from: Date
+  to: Date
+}): Promise<RefusedRow[]> {
+  const campaignFilter = a.campaignId ? Prisma.sql`AND da.campaign_id = ${a.campaignId}::uuid` : Prisma.empty
+  const rows = await prisma.$queryRaw<{ campaign_id: string; campaign_name: string; n: bigint; reason: string | null }[]>`
+    SELECT da.campaign_id, cp.name AS campaign_name, count(*)::bigint AS n,
+           (SELECT left(d2.error, 200) FROM dial_attempts d2
+             WHERE d2.campaign_id = da.campaign_id AND d2.ended_reason = 'astrix-rejected'
+               AND d2.created_at >= ${a.from} AND d2.created_at <= ${a.to}
+             GROUP BY 1 ORDER BY count(*) DESC LIMIT 1) AS reason
+      FROM dial_attempts da JOIN campaigns cp ON cp.id = da.campaign_id
+     WHERE da.tenant_id = ${a.tenantId}::uuid
+       AND da.ended_reason = 'astrix-rejected'
+       AND da.created_at >= ${a.from} AND da.created_at <= ${a.to}
+       ${campaignFilter}
+     GROUP BY da.campaign_id, cp.name
+  `
+  return rows.map(r => ({
+    campaignId: r.campaign_id,
+    campaignName: r.campaign_name,
+    count: Number(r.n),
+    reason: r.reason ? humanRefusal(r.reason) : null,
+  }))
+}
+
+/** The provider's sentence out of its JSON error, for people to read. */
+function humanRefusal(raw: string): string {
+  const json = /"message"\s*:\s*"([^"]+)"/.exec(raw)
+  return (json?.[1] ?? raw).replace(/\s+/g, " ").trim().slice(0, 200)
+}
+
+/** Merge refused attempts into a rollup, creating an entry for a campaign that has no calls at all. */
+export function applyRefused(map: Map<string, CampaignOutcomes>, refused: RefusedRow[]): Map<string, CampaignOutcomes> {
+  for (const r of refused) {
+    let o = map.get(r.campaignId)
+    if (!o) {
+      o = {
+        campaignId: r.campaignId, campaignName: r.campaignName, agentName: "",
+        dials: 0, peopleReached: 0, refusedBeforeDial: 0, refusedReason: null,
+        reached: emptyReached(), extracted: 0,
+        decisionMakers: 0, gatekeepers: 0, interest: emptyInterest(),
+        callbacksRequested: 0, nextAction: emptyNext(), ivrSeen: 0,
+        costCents: 0, minutes: 0, humanSeconds: 0,
+      }
+      map.set(r.campaignId, o)
+    }
+    o.refusedBeforeDial += r.count
+    o.refusedReason ??= r.reason
+  }
+  return map
 }
 
 /** Calls that asked for a callback, most recent first — the follow-up list. */

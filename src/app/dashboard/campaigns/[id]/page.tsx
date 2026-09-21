@@ -9,7 +9,7 @@ import { campaignReadiness } from "@/lib/dialer/readiness"
 import { whyIdle } from "@/lib/dialer/idle"
 import { CampaignControls, LeadImport, LiveRefresh } from "./campaign-client"
 import { leadTone, LEAD_LABEL } from "../tones"
-import { loadCampaignCallRows, rollup, callbacksDue } from "@/lib/campaigns/insights"
+import { loadCampaignCallRows, loadRefusedAttempts, applyRefused, rollup, callbacksDue } from "@/lib/campaigns/insights"
 import { CampaignOutcomesSection } from "@/components/campaigns/outcomes"
 
 export const metadata: Metadata = { title: "Campaign" }
@@ -46,13 +46,11 @@ export default async function CampaignPage({
    * it the section still shows what picked up, and says why the rest is
    * blank.
    */
-  const outcomeRows = await loadCampaignCallRows({
-    tenantId: tenant.id,
-    campaignId: campaign.id,
-    from: campaign.createdAt,
-    to: new Date(),
-  })
-  const outcomes = rollup(outcomeRows).get(campaign.id)
+  const [outcomeRows, refused] = await Promise.all([
+    loadCampaignCallRows({ tenantId: tenant.id, campaignId: campaign.id, from: campaign.createdAt, to: new Date() }),
+    loadRefusedAttempts({ tenantId: tenant.id, campaignId: campaign.id, from: campaign.createdAt, to: new Date() }),
+  ])
+  const outcomes = applyRefused(rollup(outcomeRows), refused).get(campaign.id)
   const agentSchema = String((campaign.agent.config as { structuredDataSchema?: unknown } | null)?.structuredDataSchema ?? "")
   const noExtraction = !agentSchema.includes("whoAnswered")
 
@@ -290,7 +288,7 @@ export default async function CampaignPage({
         />
       </div>
 
-      {outcomes && outcomes.dials > 0 && (
+      {outcomes && (outcomes.dials > 0 || outcomes.refusedBeforeDial > 0) && (
         <div className="mb-8">
           <CampaignOutcomesSection
             o={outcomes}

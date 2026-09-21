@@ -56,7 +56,7 @@ import {
 import { usd, duration, titleCase } from "@/lib/format"
 import { RangePicker } from "./range"
 import { ReportDownload } from "./report-download"
-import { loadCampaignCallRows, rollup, total, callbacksDue } from "@/lib/campaigns/insights"
+import { loadCampaignCallRows, loadRefusedAttempts, applyRefused, rollup, total, callbacksDue } from "@/lib/campaigns/insights"
 import { CampaignOutcomesSection } from "@/components/campaigns/outcomes"
 import Link from "next/link"
 
@@ -88,12 +88,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   const zone = zoneRow?.timezone ?? "UTC"
 
   const range = rangeFromDays(days)
-  const [a, campaignRows] = await Promise.all([
+  const [a, campaignRows, refused] = await Promise.all([
     loadAnalytics(tenant.id, range, zone),
     loadCampaignCallRows({ tenantId: tenant.id, from: range.from, to: range.to }),
+    loadRefusedAttempts({ tenantId: tenant.id, from: range.from, to: range.to }),
   ])
-  const campaigns = [...rollup(campaignRows).values()].sort((x, y) => y.dials - x.dials)
-  const campaignTotal = total(campaignRows)
+  const campaigns = [...applyRefused(rollup(campaignRows), refused).values()].sort((x, y) => y.dials - x.dials)
+  const campaignTotal = total(campaignRows, refused)
   // "Not recorded" everywhere means no agent on these campaigns has the
   // outbound preset — say so once, at the top of the section.
   const noExtraction =
@@ -251,7 +252,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
           </div>
 
           {/* ── Campaigns ───────────────────────────────────────────── */}
-          {campaignTotal.dials > 0 && (
+          {(campaignTotal.dials > 0 || campaignTotal.refusedBeforeDial > 0) && (
             <div className="mt-8 space-y-5">
               <CampaignOutcomesSection
                 o={campaignTotal}
@@ -277,13 +278,14 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
                     <tr>
                       <TH>Campaign</TH>
                       <TH align="right">Dials</TH>
+                      <TH align="right">Refused</TH>
                       <TH align="right">Reached a person</TH>
                       <TH align="right">Menu only</TH>
                       <TH align="right">Decision-makers</TH>
                       <TH align="right">Interested</TH>
                       <TH align="right">Callbacks</TH>
-                      <TH align="right">Charged</TH>
-                      <TH align="right">Per decision-maker</TH>
+                      <TH align="right">Minutes</TH>
+                      <TH align="right">Overage charged</TH>
                     </tr>
                   </thead>
                   <tbody>
@@ -295,6 +297,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
                           </Link>
                         </TD>
                         <TD align="right">{c.dials.toLocaleString()}</TD>
+                        <TD align="right" muted title={c.refusedReason ?? undefined}>{c.refusedBeforeDial || "—"}</TD>
                         <TD align="right" muted>
                           {c.reached.HUMAN} · {c.dials ? Math.round((c.reached.HUMAN / c.dials) * 100) : 0}%
                         </TD>
@@ -305,10 +308,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
                         </TD>
                         <TD align="right" muted>{c.interest.interested + c.interest.maybe}</TD>
                         <TD align="right" muted>{c.callbacksRequested}</TD>
-                        <TD align="right">{usd(c.costCents)}</TD>
-                        <TD align="right" muted>
-                          {c.decisionMakers ? usd(Math.round(c.costCents / c.decisionMakers)) : "—"}
-                        </TD>
+                        <TD align="right">{c.minutes.toLocaleString()}</TD>
+                        <TD align="right" muted>{c.costCents ? usd(c.costCents) : "—"}</TD>
                       </tr>
                     ))}
                   </tbody>

@@ -17,7 +17,7 @@ import { NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getTenantContext } from "@/lib/tenant"
 import { ERRORS, apiError, sanitiseError } from "@/lib/errors"
-import { loadCampaignCallRows } from "@/lib/campaigns/insights"
+import { loadCampaignCallRows, loadRefusedAttempts } from "@/lib/campaigns/insights"
 import { buildCampaignWorkbook } from "@/lib/campaigns/report"
 
 export const dynamic = "force-dynamic"
@@ -75,12 +75,13 @@ export async function GET(req: NextRequest) {
 
     const withTranscripts = q.get("transcripts") === "1"
 
-    const rows = await loadCampaignCallRows({
-      tenantId, campaignId: campaignId ?? undefined, from, to, withTranscript: withTranscripts,
-    })
+    const [rows, refused] = await Promise.all([
+      loadCampaignCallRows({ tenantId, campaignId: campaignId ?? undefined, from, to, withTranscript: withTranscripts }),
+      loadRefusedAttempts({ tenantId, campaignId: campaignId ?? undefined, from, to }),
+    ])
 
     const title = campaign ? `${campaign.name} — outbound report` : `${ctx.tenant.companyName} — outbound campaigns report`
-    const buffer = buildCampaignWorkbook({ rows, title, from, to, timeZone, withTranscripts })
+    const buffer = buildCampaignWorkbook({ rows, refused, title, from, to, timeZone, withTranscripts })
 
     const stamp = new Date().toISOString().slice(0, 10)
     const base = (campaign?.name ?? "campaigns").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "campaigns"

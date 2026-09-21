@@ -95,10 +95,40 @@ export type DialResult =
   | { kind: "no_number"; why: "none-attached" | "all-capped"; freesAt: Date | null }
   /** The provider refused outright — bad number, bad request. */
   | { kind: "rejected"; reason: string }
+  /**
+   * The provider refused for a reason that has nothing to do with this
+   * lead and would refuse every other lead the same way: daily cap on
+   * free numbers, no credit, frozen subscription. The campaign pauses
+   * with the provider's words; the attempt is handed back.
+   */
+  | { kind: "account_blocked"; reason: string }
   /** Rate limited. The campaign backs off wholesale. */
   | { kind: "throttled"; retryAfterMs: number }
   /** Placed or not — we could not tell. The reaper resolves it. */
   | { kind: "lost"; attemptId: string }
+
+/**
+ * The provider's refusals that are about the account, not the number.
+ *
+ * Returns the human-readable part of the message when it matches, null
+ * when the refusal is genuinely per-lead (bad number, bad request). The
+ * list is the provider's own error vocabulary for account-wide conditions:
+ * free-number daily cap, no credit, subscription frozen, concurrency
+ * ceiling, and a missing/invalid assistant or number id (which would fail
+ * every lead identically).
+ */
+export function accountLevelRefusal(message: string): string | null {
+  const m = message.toLowerCase()
+  const hit =
+    /daily outbound call limit|outbound-daily-limit/.test(m) ||
+    /insufficient (?:credit|balance|funds)|wallet|billing|subscription (?:frozen|inactive|paused)/.test(m) ||
+    /concurrency limit|too many concurrent/.test(m) ||
+    /assistant(?:-| )not(?:-| )(?:found|valid)|phone(?:-| )number(?:-| )not(?:-| )(?:found|valid)|invalid api key|unauthorized/.test(m)
+  if (!hit) return null
+  // Pull the provider's sentence out of the JSON wrapper when there is one.
+  const json = /"message"\s*:\s*"([^"]+)"/.exec(message)
+  return (json?.[1] ?? message).replace(/\s+/g, " ").trim().slice(0, 240)
+}
 
 /** Prisma's unique-violation code, and Postgres's underneath it. */
 function isUniqueViolation(err: unknown): boolean {
@@ -287,6 +317,19 @@ export async function placeCall(
         where: { id: attemptId },
         data:  { state: "ENDED", error: reason.slice(0, 500), endedReason: "astrix-rejected" },
       })
+      /*
+       * Was it this number, or was it us?
+       *
+       * "Couldn't Start Call. Numbers Bought On Vapi Have A Daily Outbound
+       * Call Limit" is not a fact about the lead. Treating it as one wrote
+       * "we couldn't place a call to this number" against 380 perfectly
+       * good numbers in one afternoon and marked them all failed, while
+       * the campaign kept going and did the same to the next lead. An
+       * account-level refusal stops the campaign, hands the attempt back,
+       * and tells the operator the provider's actual words.
+       */
+      const account = accountLevelRefusal(reason)
+      if (account) return { kind: "account_blocked", reason: account }
       return { kind: "rejected", reason }
     }
 

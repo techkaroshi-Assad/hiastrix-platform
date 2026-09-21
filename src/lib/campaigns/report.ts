@@ -21,8 +21,8 @@
 import { buildXlsx, type Sheet, type Cell } from "@/lib/xlsx"
 import { REACHED_LABEL } from "@/lib/calls/reached"
 import {
-  rollup, total, callbacksDue,
-  type CallOutcomeRow, type CampaignOutcomes,
+  rollup, total, callbacksDue, applyRefused,
+  type CallOutcomeRow, type CampaignOutcomes, type RefusedRow,
 } from "@/lib/campaigns/insights"
 
 const money = (cents: number) => Math.round(cents) / 100
@@ -32,6 +32,7 @@ function summaryCells(o: CampaignOutcomes): Cell[] {
   return [
     o.campaignName,
     o.dials,
+    o.refusedBeforeDial,
     humans,
     o.dials ? humans / o.dials : 0,
     o.reached.IVR,
@@ -52,12 +53,13 @@ function summaryCells(o: CampaignOutcomes): Cell[] {
     o.minutes,
     Math.round(o.humanSeconds / 60),
     money(o.costCents),
-    o.decisionMakers ? money(o.costCents / o.decisionMakers) : null,
   ]
 }
 
 export function buildCampaignWorkbook(a: {
   rows: CallOutcomeRow[]
+  /** Attempts the provider refused before dialing, so the summary can show them. */
+  refused?: RefusedRow[]
   title: string
   from: Date
   to: Date
@@ -71,15 +73,15 @@ export function buildCampaignWorkbook(a: {
     }).format(d) : ""
 
   /* ── Summary ─────────────────────────────────────────────────────── */
-  const perCampaign = [...rollup(a.rows).values()].sort((x, y) => y.dials - x.dials)
-  const all = total(a.rows)
+  const perCampaign = [...applyRefused(rollup(a.rows), a.refused ?? []).values()].sort((x, y) => y.dials - x.dials)
+  const all = total(a.rows, a.refused ?? [])
 
   const summaryHeader: Cell[] = [
-    "Campaign", "Dials", "Reached a person", "Reached %", "Phone menu only", "Voicemail", "No answer", "Couldn't connect",
+    "Campaign", "Calls", "Refused before dialing", "Reached a person", "Reached %", "Phone menu only", "Voicemail", "No answer", "Couldn't connect",
     "Menu heard", "Decision-makers", "Decision-maker %", "Stopped at reception",
     "Interested", "Maybe", "Not interested", "Interest not recorded",
     "Callbacks owed", "Send info", "Remove from list",
-    "Minutes billed", "Minutes talking to people", "Charged (USD)", "Cost per decision-maker (USD)",
+    "Minutes billed", "Minutes talking to people", "Overage charged (USD)",
   ]
   const summaryRows: Cell[][] = [
     [a.title],
@@ -97,7 +99,7 @@ export function buildCampaignWorkbook(a: {
     headerRow: 6,
     boldRows: [1, ...(perCampaign.length > 1 ? [summaryRows.length] : [])],
     widths: [34, ...Array(summaryHeader.length - 1).fill(16)],
-    formats: Object.assign(Array(summaryHeader.length).fill(null), { 3: "percent", 10: "percent", 21: "usd", 22: "usd" }),
+    formats: Object.assign(Array(summaryHeader.length).fill(null), { 4: "percent", 11: "percent", 22: "usd" }),
     freezeHeader: false,
   }
 
@@ -106,7 +108,7 @@ export function buildCampaignWorkbook(a: {
     "When", "Campaign", "Phone", "Name on list", "Who we spoke to", "Their role",
     "What picked up", "Menu heard", "Reached decision-maker", "Interest", "Callback requested", "Callback when",
     "Best number", "Objection", "Next action", "Menu outcome", "Key facts", "Summary",
-    "Duration (s)", "Charged (USD)", "Ended because", "Call id",
+    "Duration (s)", "Overage charged (USD)", "Ended because", "Call id",
   ]
   const sorted = [...a.rows].sort((x, y) => (y.at?.getTime() ?? 0) - (x.at?.getTime() ?? 0))
   const calls: Sheet = {

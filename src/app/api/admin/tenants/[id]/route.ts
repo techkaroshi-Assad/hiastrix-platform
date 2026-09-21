@@ -60,7 +60,7 @@ export async function PATCH(
       where:  { id },
       select: {
         id: true, creditBalanceCents: true, status: true,
-        companyName: true, crmLocationId: true, minutesUsed: true,
+        companyName: true, crmLocationId: true, minutesUsed: true, packageId: true,
         package: { select: { minutesIncluded: true, overageRateCents: true } },
       },
     })
@@ -103,9 +103,21 @@ export async function PATCH(
         where: { id },
         data: {
           ...(status !== undefined ? { status } : {}),
-          ...(packageId !== undefined
-            ? { packageId, packageAssignedAt: packageId ? new Date() : null }
-            : {}),
+          /*
+           * A newly assigned package starts its allowance now. Without the
+           * reset, minutes the tenant already paid for per-minute before the
+           * package existed also consumed the allowance — on the first
+           * production tenant that turned 765 minutes of a 900-minute plan
+           * into 84 minutes of "overage" and a $29.40 charge for nothing.
+           * The Stripe path already resets on a new period; this is the
+           * admin path catching up. Re-saving the same package changes
+           * nothing.
+           */
+          ...(packageId !== undefined && packageId !== tenant.packageId
+            ? { packageId, packageAssignedAt: packageId ? new Date() : null, minutesUsed: 0 }
+            : packageId !== undefined
+              ? { packageId, packageAssignedAt: packageId ? new Date() : null }
+              : {}),
           ...(crmLocationId !== undefined ? { crmLocationId } : {}),
         },
       })

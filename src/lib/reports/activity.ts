@@ -13,7 +13,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { loadAnalytics, safeZone, type Range } from "@/lib/analytics"
-import { loadCampaignCallRows, rollup, total, callbacksDue, type CampaignOutcomes, type CallOutcomeRow } from "@/lib/campaigns/insights"
+import { loadCampaignCallRows, loadRefusedAttempts, applyRefused, rollup, total, callbacksDue, type CampaignOutcomes, type CallOutcomeRow } from "@/lib/campaigns/insights"
 import { REACHED_LABEL, type Reached } from "@/lib/calls/reached"
 import { friendlyEndedReason } from "@/lib/calls/reasons"
 import { Pdf, type RGB } from "@/lib/pdf"
@@ -44,6 +44,29 @@ export type ActivityReport = {
   keyFacts: string[]
   /** How many campaign calls had the outbound extraction — the "not recorded" denominator. */
   extractedShare: { extracted: number; humans: number }
+  /**
+   * Money, reconciled against the plan rather than summed off the calls.
+   * A call's cost is only ever its overage portion, so "charged" without
+   * "of which allowance" reads as a per-minute price that doesn't exist.
+   */
+  billing: {
+    packageName: string | null
+    packagePriceCents: number
+    minutesIncluded: number
+    overageRateCents: number
+    assignedAt: Date | null
+    /** Minutes billed for calls inside the report window. */
+    minutesInPeriod: number
+    /** The plan counter as it stands now (resets each period / on assignment). */
+    minutesUsedOfAllowance: number
+    /** Ledger movements dated inside the window. */
+    overageCents: number
+    overageMinutes: number
+    payPerMinuteCents: number
+    creditsAddedCents: number
+    refundsCents: number
+    balanceCents: number
+  }
 }
 
 export async function loadActivityReport(a: {
@@ -54,7 +77,10 @@ export async function loadActivityReport(a: {
 }): Promise<ActivityReport> {
   const tenant = await prisma.tenant.findUniqueOrThrow({
     where: { id: a.tenantId },
-    select: { companyName: true },
+    select: {
+      companyName: true, minutesUsed: true, creditBalanceCents: true, packageAssignedAt: true,
+      package: { select: { name: true, priceCents: true, minutesIncluded: true, overageRateCents: true } },
+    },
   })
   const zoneRow = a.timeZone
     ? null
@@ -64,15 +90,40 @@ export async function loadActivityReport(a: {
   const days = Math.max(1, Math.round((a.to.getTime() - a.from.getTime()) / 86_400_000))
   const range: Range = { from: a.from, to: a.to, days }
 
-  const [an, rows, reachedRows] = await Promise.all([
+  const [an, rows, refused, reachedRows, ledger] = await Promise.all([
     loadAnalytics(a.tenantId, range, timeZone),
     loadCampaignCallRows({ tenantId: a.tenantId, from: a.from, to: a.to }),
+    loadRefusedAttempts({ tenantId: a.tenantId, from: a.from, to: a.to }),
     prisma.$queryRaw<{ reached: string | null; n: bigint }[]>`
       SELECT reached, count(*)::bigint AS n FROM calls
        WHERE tenant_id = ${a.tenantId}::uuid AND created_at >= ${a.from} AND created_at <= ${a.to}
        GROUP BY reached
     `,
+    prisma.$queryRaw<{ type: string; cents: bigint }[]>`
+      SELECT type::text AS type, coalesce(sum(amount_cents), 0)::bigint AS cents FROM credit_ledger
+       WHERE tenant_id = ${a.tenantId}::uuid AND created_at >= ${a.from} AND created_at <= ${a.to}
+       GROUP BY type
+    `,
   ])
+
+  const ledgerBy = (t: string) => Number(ledger.find(l => l.type === t)?.cents ?? 0)
+  const overageRate = tenant.package?.overageRateCents ?? 0
+  const overageCents = -ledgerBy("OVERAGE_CHARGE")
+  const billing: ActivityReport["billing"] = {
+    packageName: tenant.package?.name ?? null,
+    packagePriceCents: tenant.package?.priceCents ?? 0,
+    minutesIncluded: tenant.package?.minutesIncluded ?? 0,
+    overageRateCents: overageRate,
+    assignedAt: tenant.packageAssignedAt,
+    minutesInPeriod: an.totals.minutes,
+    minutesUsedOfAllowance: tenant.minutesUsed,
+    overageCents,
+    overageMinutes: overageRate > 0 ? Math.round(overageCents / overageRate) : 0,
+    payPerMinuteCents: -ledgerBy("CALL_DEDUCTION"),
+    creditsAddedCents: ledgerBy("MANUAL_CREDIT") + ledgerBy("TOP_UP") + ledgerBy("PACKAGE_PURCHASE"),
+    refundsCents: ledgerBy("REFUND"),
+    balanceCents: tenant.creditBalanceCents,
+  }
 
   const reached: Record<Reached, number> = { HUMAN: 0, IVR: 0, VOICEMAIL: 0, NO_ANSWER: 0, FAILED: 0 }
   for (const r of reachedRows) {
@@ -94,8 +145,8 @@ export async function loadActivityReport(a: {
 
   const keyFacts = rows.flatMap(r => r.keyFacts).filter(Boolean).slice(0, 30)
 
-  const campaigns = [...rollup(rows).values()].sort((x, y) => y.dials - x.dials)
-  const campaignTotal = total(rows)
+  const campaigns = [...applyRefused(rollup(rows), refused).values()].sort((x, y) => y.dials - x.dials)
+  const campaignTotal = total(rows, refused)
 
   return {
     tenantName: tenant.companyName,
@@ -122,6 +173,7 @@ export async function loadActivityReport(a: {
     objections,
     keyFacts,
     extractedShare: { extracted: campaignTotal.extracted, humans: campaignTotal.reached.HUMAN },
+    billing,
   }
 }
 
@@ -162,16 +214,18 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
     { label: "Calls", value: r.totals.calls.toLocaleString(), sub: `${r.byDirection.map(d => `${d.calls} ${d.key.toLowerCase()}`).join(" · ")}` },
     { label: "Reached a person", value: pct(r.totals.humans, r.totals.calls), sub: `${r.totals.humans.toLocaleString()} calls a person answered` },
     { label: "Minutes billed", value: r.totals.minutes.toLocaleString(), sub: r.totals.medianHumanSeconds ? `typical conversation ${mmss(r.totals.medianHumanSeconds)}` : undefined },
-    { label: "Charged", value: usd(r.totals.costCents), sub: r.totals.humans ? `${usd(Math.round(r.totals.costCents / r.totals.humans))} per person reached` : undefined },
+    r.billing.packageName
+      ? { label: "Plan allowance", value: `${Math.min(r.billing.minutesUsedOfAllowance, r.billing.minutesIncluded).toLocaleString()} / ${r.billing.minutesIncluded.toLocaleString()} min`, sub: r.billing.minutesUsedOfAllowance > r.billing.minutesIncluded ? `${r.billing.minutesUsedOfAllowance - r.billing.minutesIncluded} min over - see Minutes and billing` : `${r.billing.minutesIncluded - r.billing.minutesUsedOfAllowance} min left on ${r.billing.packageName}` }
+      : { label: "Pay as you go", value: usd(r.billing.payPerMinuteCents), sub: "charged per minute in this period" },
   ])
 
   const ct = r.campaignTotal
   if (ct.dials > 0) {
     pdf.kpis([
-      { label: "Campaign dials", value: ct.dials.toLocaleString(), sub: `${ct.peopleReached} people reached` },
+      { label: "Campaign calls", value: ct.dials.toLocaleString(), sub: ct.refusedBeforeDial ? `${ct.peopleReached} people reached - ${ct.refusedBeforeDial} attempts refused before dialing` : `${ct.peopleReached} people reached` },
       { label: "Decision-makers", value: ct.decisionMakers.toLocaleString(), sub: ct.reached.HUMAN ? `${pct(ct.decisionMakers, ct.reached.HUMAN)} of people reached` : undefined },
       { label: "Interested", value: (ct.interest.interested + ct.interest.maybe).toLocaleString(), sub: `${ct.interest.interested} yes · ${ct.interest.maybe} maybe · ${ct.interest["not-interested"]} no` },
-      { label: "Callbacks owed", value: ct.callbacksRequested.toLocaleString(), sub: ct.decisionMakers ? `${usd(Math.round(ct.costCents / ct.decisionMakers))} per decision-maker` : undefined },
+      { label: "Callbacks owed", value: ct.callbacksRequested.toLocaleString() },
     ])
   }
 
@@ -191,6 +245,14 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
     { label: REACHED_LABEL.FAILED, value: r.reached.FAILED, colour: RED },
   ]
   pdf.bars(reachedRows, { format: v => `${v} (${pct(v, r.totals.calls)})`, max: r.totals.calls })
+  if (ct.refusedBeforeDial > 0) {
+    pdf.paragraph(
+      `${ct.refusedBeforeDial} further attempt${ct.refusedBeforeDial === 1 ? "" : "s"} never became a call: the calling provider refused to start ${ct.refusedBeforeDial === 1 ? "it" : "them"}` +
+      (ct.refusedReason ? ` ("${ct.refusedReason}").` : ".") +
+      " Those people were not reached and were not marked as failed; they remain in the queue.",
+      { size: 8.5, colour: AMBER }
+    )
+  }
   if (ct.ivrSeen > 0) {
     pdf.paragraph(`A phone menu answered on ${ct.ivrSeen} of ${answered} answered campaign calls; ${Math.max(0, ct.ivrSeen - ct.reached.IVR)} of those still got through to a person.`, { size: 8.5, colour: MUTED })
   }
@@ -214,26 +276,27 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
     }
     pdf.table({
       columns: [
-        { header: "Campaign", width: 1.55 },
-        { header: "Dials", width: 0.6, align: "right" },
+        { header: "Campaign", width: 1.3 },
+        { header: "Calls", width: 0.55, align: "right" },
+        { header: "Refused", width: 0.78, align: "right" },
         { header: "People", width: 0.7, align: "right" },
         { header: "Reached", width: 0.75, align: "right" },
         { header: "Menu only", width: 0.8, align: "right" },
         { header: "Voicemail", width: 0.85, align: "right" },
-        { header: "Decision-makers", width: 1.25, align: "right" },
+        { header: "Decision-makers", width: 1.4, align: "right" },
         { header: "Interested", width: 0.9, align: "right" },
         { header: "Callbacks", width: 0.85, align: "right" },
-        { header: "Charged", width: 0.8, align: "right" },
+        { header: "Minutes", width: 0.72, align: "right" },
       ],
       size: 7.5,
       rows: [
         ...r.campaigns.map(c => [
-          c.campaignName, c.dials, c.peopleReached, pct(c.reached.HUMAN, c.dials), c.reached.IVR, c.reached.VOICEMAIL,
-          c.decisionMakers, c.interest.interested + c.interest.maybe, c.callbacksRequested, usd(c.costCents),
+          c.campaignName, c.dials, c.refusedBeforeDial || "", c.peopleReached, pct(c.reached.HUMAN, c.dials), c.reached.IVR, c.reached.VOICEMAIL,
+          c.decisionMakers, c.interest.interested + c.interest.maybe, c.callbacksRequested, c.minutes,
         ]),
         ...(r.campaigns.length > 1
-          ? [["All campaigns", ct.dials, ct.peopleReached, pct(ct.reached.HUMAN, ct.dials), ct.reached.IVR, ct.reached.VOICEMAIL,
-              ct.decisionMakers, ct.interest.interested + ct.interest.maybe, ct.callbacksRequested, usd(ct.costCents)]]
+          ? [["All campaigns", ct.dials, ct.refusedBeforeDial || "", ct.peopleReached, pct(ct.reached.HUMAN, ct.dials), ct.reached.IVR, ct.reached.VOICEMAIL,
+              ct.decisionMakers, ct.interest.interested + ct.interest.maybe, ct.callbacksRequested, ct.minutes]]
           : []),
       ],
       zebra: true,
@@ -297,15 +360,45 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
       { header: "Calls", width: 0.8, align: "right" },
       { header: "Reached a person", width: 1.2, align: "right" },
       { header: "Minutes", width: 0.8, align: "right" },
-      { header: "Charged", width: 0.9, align: "right" },
     ],
-    rows: r.agents.map(ag => [ag.name, ag.calls, `${ag.humans} (${pct(ag.humans, ag.calls)})`, ag.minutes, usd(ag.costCents)]),
+    rows: r.agents.map(ag => [ag.name, ag.calls, `${ag.humans} (${pct(ag.humans, ag.calls)})`, ag.minutes]),
     zebra: true,
   })
 
   if (r.endedReasons.length) {
     pdf.heading("Why calls ended", { size: 12 })
     pdf.bars(r.endedReasons.map(e => ({ label: e.label, value: e.calls, colour: [150, 140, 200] })), { labelWidth: 230, format: v => `${v}` })
+  }
+
+  /* ── Minutes and billing ──────────────────────────────────────────── */
+  const b = r.billing
+  pdf.ensure(170)
+  pdf.heading("Minutes and billing", { size: 12 })
+  if (b.packageName) {
+    const used = b.minutesUsedOfAllowance
+    const left = Math.max(0, b.minutesIncluded - used)
+    const over = Math.max(0, used - b.minutesIncluded)
+    pdf.kpis([
+      { label: "Plan", value: b.packageName, sub: `${b.minutesIncluded.toLocaleString()} min included - ${usd(b.packagePriceCents)}${b.assignedAt ? ` - since ${fmtDay(b.assignedAt)}` : ""}` },
+      { label: "Minutes this period", value: b.minutesInPeriod.toLocaleString(), sub: "billed per started minute" },
+      { label: "Allowance used", value: `${Math.min(used, b.minutesIncluded).toLocaleString()} / ${b.minutesIncluded.toLocaleString()}`, sub: over ? `${over} min over the allowance` : `${left} min left` },
+      { label: "Overage this period", value: usd(b.overageCents), sub: b.overageCents ? `${b.overageMinutes} min x ${usd(b.overageRateCents)}/min` : `none - ${usd(b.overageRateCents)}/min past the allowance` },
+    ])
+    pdf.paragraph(
+      `Minutes inside the plan cost nothing beyond the plan itself. Only minutes past ${b.minutesIncluded.toLocaleString()} are charged, at ${usd(b.overageRateCents)} per minute, from the credit balance. ` +
+      (b.payPerMinuteCents ? `${usd(b.payPerMinuteCents)} of this period's calls were charged per minute before the plan was assigned. ` : "") +
+      (b.refundsCents ? `${usd(b.refundsCents)} was refunded to the balance in this period. ` : "") +
+      (b.creditsAddedCents ? `${usd(b.creditsAddedCents)} of credit was added. ` : "") +
+      `Credit balance now: ${usd(b.balanceCents)}.`,
+      { size: 8.5, colour: MUTED }
+    )
+  } else {
+    pdf.kpis([
+      { label: "Plan", value: "Pay as you go", sub: `${usd(b.overageRateCents)}/min from the credit balance` },
+      { label: "Minutes this period", value: b.minutesInPeriod.toLocaleString(), sub: "billed per started minute" },
+      { label: "Charged this period", value: usd(b.payPerMinuteCents) },
+      { label: "Credit balance", value: usd(b.balanceCents), sub: b.creditsAddedCents ? `${usd(b.creditsAddedCents)} added in period` : undefined },
+    ])
   }
 
   /* ── Method ───────────────────────────────────────────────────────── */
@@ -316,7 +409,7 @@ export function renderActivityPdf(r: ActivityReport): Buffer {
     "Every call is classified at the moment it ends by what actually picked up: a person, an automated phone menu, a voicemail greeting, no answer, or a failure to connect. " +
     "The classification uses the agent's own post-call extraction when available and the transcript otherwise. \"Reached a person\" is that classification, not call length. " +
     "Decision-maker, interest, callback and objection figures come from the agent's post-call extraction and refer to the person who answered, never to the agent. " +
-    "Charges are what Hi-Astrix billed the workspace for these calls; calls inside a plan's included minutes are billed at $0.00.",
+    "Minutes are billed per started minute. A plan's included minutes are used first; only minutes beyond the allowance are charged, at the plan's overage rate, and those are the only call charges that appear on the credit ledger.",
     { size: 7.5, colour: MUTED }
   )
 
