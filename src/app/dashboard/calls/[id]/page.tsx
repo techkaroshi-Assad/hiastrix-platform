@@ -8,6 +8,7 @@ import { Card, Pill, callTone } from "@/components/app/table"
 import { CallActions } from "@/components/app/call-actions"
 import { readConfig } from "@/lib/vapi/config"
 import { readActions, findUnbackedClaims } from "@/lib/calls/actions"
+import { campaignForCall } from "@/lib/calls/campaign-link"
 import { friendlyEndedReason } from "@/lib/calls/reasons"
 import { REACHED_LABEL, type Reached } from "@/lib/calls/reached"
 import { usd, duration, dateTime, titleCase } from "@/lib/format"
@@ -55,8 +56,20 @@ export default async function CallDetailPage({
       phoneNumber: { select: { phoneNumber: true } },
     },
   })
+  // vapiCallId is what dial_attempts joins on, so it has to come back too.
 
   if (!call) notFound()
+
+  /*
+   * Which campaign this call belongs to.
+   *
+   * Opening a call from a campaign used to be a one-way trip: the only way
+   * back was Campaigns → find it in the list again. And once here there was
+   * nothing on the page saying which campaign it had come from, so a call
+   * opened from anywhere else was unattributable. Both are the same missing
+   * fact. See lib/calls/campaign-link.ts for why it needs a lookup.
+   */
+  const campaign = await campaignForCall(tenant.id, call.vapiCallId)
 
   const agentName = call.agent?.name ?? "Agent"
   const turns = turnsFrom(call.messages)
@@ -87,6 +100,24 @@ export default async function CallDetailPage({
   const success = analysis?.successEvaluation ?? null
 
   const facts: [string, React.ReactNode][] = [
+    ...(campaign
+      ? ([[
+          "Campaign",
+          <Link
+            key="campaign"
+            href={`/dashboard/campaigns/${campaign.campaignId}`}
+            className="text-brand-on-tint underline-offset-2 hover:underline"
+          >
+            {campaign.campaignName}
+          </Link>,
+        ]] as [string, React.ReactNode][])
+      : []),
+    ...(campaign && campaign.attemptNo > 1
+      ? ([["Attempt", `${campaign.attemptNo}${campaign.attemptNo === 2 ? "nd" : campaign.attemptNo === 3 ? "rd" : "th"} try`]] as [string, React.ReactNode][])
+      : []),
+    ...(campaign?.leadName
+      ? ([["Name on list", campaign.leadName]] as [string, React.ReactNode][])
+      : []),
     ["Agent",      agentName],
     ["Number",     call.phoneNumber?.phoneNumber ?? "—"],
     [call.direction === "OUTBOUND" ? "Called" : "Caller", call.callerNumber ?? "Web call"],
@@ -112,12 +143,31 @@ export default async function CallDetailPage({
       heading="Call detail"
       description={dateTime(call.startedAt ?? call.createdAt)}
       actions={
-        <Link
-          href="/dashboard/calls"
-          className="inline-flex h-10 items-center rounded-field border border-line-strong bg-field px-4 text-[13px] font-medium transition-colors hover:bg-field-hover"
-        >
-          Back to calls
-        </Link>
+        /*
+         * The campaign gets the prominent button when there is one.
+         *
+         * Most calls are opened from a campaign, and "Back to calls" sent
+         * everyone to a list they hadn't come from — leaving the campaign to
+         * be found again by hand. "All calls" stays available for the people
+         * who did arrive that way.
+         */
+        <div className="flex items-center gap-2">
+          {campaign && (
+            <Link
+              href={`/dashboard/campaigns/${campaign.campaignId}`}
+              className="inline-flex h-10 max-w-[280px] items-center gap-2 rounded-field border border-brand-500/60 bg-brand-500/12 px-4 text-[13px] font-medium text-brand-on-tint transition-colors hover:bg-brand-500/20"
+            >
+              <span aria-hidden>&larr;</span>
+              <span className="truncate">{campaign.campaignName}</span>
+            </Link>
+          )}
+          <Link
+            href="/dashboard/calls"
+            className="inline-flex h-10 items-center rounded-field border border-line-strong bg-field px-4 text-[13px] font-medium transition-colors hover:bg-field-hover"
+          >
+            {campaign ? "All calls" : "Back to calls"}
+          </Link>
+        </div>
       }
     >
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">

@@ -5,8 +5,9 @@ import { requireTenant } from "@/lib/tenant"
 import { Page } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow, callTone } from "@/components/app/table"
 import { usd, duration, dateTime, titleCase } from "@/lib/format"
+import { campaignsForCalls } from "@/lib/calls/campaign-link"
 import { CallFilters } from "./filters"
-import { IconMic, IconTranscript } from "@/components/app/icons"
+import { IconMic, IconTranscript, IconDownload } from "@/components/app/icons"
 
 export const metadata: Metadata = { title: "Calls" }
 export const dynamic = "force-dynamic"
@@ -69,7 +70,32 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
     prisma.call.count({ where: { tenantId: tenant.id } }),
   ])
 
+  /*
+   * Which campaign each call on this page came from.
+   *
+   * One query for the whole page rather than one per row. Without it every
+   * row on this list looks the same — a time, an agent and a number — and a
+   * tenant running four campaigns at once has no way to tell which call
+   * belonged to which. See lib/calls/campaign-link.ts.
+   */
+  const campaignByCallId = await campaignsForCalls(
+    tenant.id,
+    calls.map(c => c.vapiCallId).filter((v): v is string => Boolean(v))
+  )
+
   const filtered = Boolean(sp.agent || sp.status || sp.from || sp.to)
+
+  /* The on-screen filters, minus paging — a file is the whole selection, not
+     one page of it. No dates means the route's own 30-day default. */
+  const exportQs = (() => {
+    const p = new URLSearchParams()
+    if (sp.agent)  p.set("agent", sp.agent)
+    if (sp.status) p.set("status", sp.status)
+    if (sp.from)   p.set("from", sp.from)
+    if (sp.to)     p.set("to", sp.to)
+    if (!sp.from && !sp.to) p.set("days", "365")
+    return p.toString()
+  })()
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -89,8 +115,31 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
       heading="Calls"
       description="Every call your agents have handled."
     >
-      <div className="mb-5">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <CallFilters agents={agents} />
+        {/*
+         * Downloads carry the filters that are on screen.
+         *
+         * A download that quietly ignores the agent and date filters above it
+         * hands somebody a file that disagrees with the page they asked for,
+         * which they only discover after sending it on.
+         */}
+        <div className="flex items-center gap-2">
+          <a
+            href={`/api/reports/calls?format=csv&${exportQs}`}
+            className="inline-flex h-9 items-center gap-2 rounded-field border border-line bg-field px-3.5 text-[12.5px] font-medium text-fg transition-colors hover:border-line-strong hover:bg-field-hover"
+          >
+            <IconDownload size={14} />
+            CSV
+          </a>
+          <a
+            href={`/api/reports/calls?format=pdf&${exportQs}`}
+            className="inline-flex h-9 items-center gap-2 rounded-field border border-brand-500/60 bg-brand-500/12 px-3.5 text-[12.5px] font-medium text-brand-on-tint transition-colors hover:bg-brand-500/20"
+          >
+            <IconDownload size={14} />
+            PDF
+          </a>
+        </div>
       </div>
 
       <Card
@@ -107,6 +156,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
           <thead>
             <tr>
               <TH>When</TH>
+              <TH>Campaign</TH>
               <TH>Agent</TH>
               <TH>From</TH>
               <TH>Direction</TH>
@@ -118,7 +168,7 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
           </thead>
           <tbody>
             {calls.length === 0 ? (
-              <EmptyRow colSpan={8}>
+              <EmptyRow colSpan={9}>
                 {everAny === 0
                   ? "No calls yet. Once an agent answers or places one, it appears here with its recording, transcript and cost."
                   : filtered
@@ -135,6 +185,23 @@ export default async function CallsPage({ searchParams }: { searchParams: Search
                     >
                       {dateTime(call.startedAt ?? call.createdAt)}
                     </Link>
+                  </TD>
+                  {/* Inbound and test calls have no campaign, and an em dash
+                      is the honest answer rather than a blank cell. */}
+                  <TD>
+                    {(() => {
+                      const c = call.vapiCallId ? campaignByCallId.get(call.vapiCallId) : undefined
+                      return c ? (
+                        <Link
+                          href={`/dashboard/campaigns/${c.campaignId}`}
+                          className="text-brand-on-tint underline-offset-2 hover:underline"
+                        >
+                          {c.campaignName}
+                        </Link>
+                      ) : (
+                        <span className="text-subtle">—</span>
+                      )
+                    })()}
                   </TD>
                   <TD muted>{call.agent?.name ?? "—"}</TD>
                   <TD muted>{call.callerNumber ?? "Web"}</TD>

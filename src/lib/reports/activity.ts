@@ -72,6 +72,15 @@ export type ActivityReport = {
 
 export async function loadActivityReport(a: {
   tenantId: string
+  /**
+   * Narrow the whole report to one campaign.
+   *
+   * The campaign page's "PDF report" button linked here without it, so
+   * opening a campaign and pressing download produced a report covering
+   * every campaign in the workspace — the right document, the wrong scope.
+   * Both loaders below have always taken this filter; nothing passed it.
+   */
+  campaignId?: string
   from: Date
   to: Date
   timeZone?: string
@@ -93,8 +102,8 @@ export async function loadActivityReport(a: {
 
   const [an, rows, refused, reachedRows, ledger] = await Promise.all([
     loadAnalytics(a.tenantId, range, timeZone),
-    loadCampaignCallRows({ tenantId: a.tenantId, from: a.from, to: a.to }),
-    loadRefusedAttempts({ tenantId: a.tenantId, from: a.from, to: a.to }),
+    loadCampaignCallRows({ tenantId: a.tenantId, campaignId: a.campaignId, from: a.from, to: a.to }),
+    loadRefusedAttempts({ tenantId: a.tenantId, campaignId: a.campaignId, from: a.from, to: a.to }),
     prisma.$queryRaw<{ reached: string | null; n: bigint }[]>`
       SELECT reached, count(*)::bigint AS n FROM calls
        WHERE tenant_id = ${a.tenantId}::uuid AND created_at >= ${a.from} AND created_at <= ${a.to}

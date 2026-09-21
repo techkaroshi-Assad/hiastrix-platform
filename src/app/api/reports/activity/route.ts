@@ -67,12 +67,37 @@ export async function GET(req: NextRequest) {
     if (to < from || to.getTime() - from.getTime() > MAX_DAYS * DAY) return apiError("That report range isn't valid.", 400)
 
     const audience = q.get("audience") === "internal" ? "internal" : "client"
-    const report = await loadActivityReport({ tenantId, from, to, timeZone })
+
+    /*
+     * Scope to one campaign when asked.
+     *
+     * Checked against this tenant before use — a campaign id is a plain URL
+     * parameter, and without the ownership check it would read another
+     * workspace's calls into a PDF.
+     */
+    const wantCampaign = q.get("campaignId")
+    let campaignId: string | undefined
+    let campaignName: string | undefined
+    if (wantCampaign) {
+      const owned = await prisma.campaign.findFirst({
+        where: { id: wantCampaign, tenantId },
+        select: { id: true, name: true },
+      })
+      if (!owned) return apiError("That campaign isn't available.", 404)
+      campaignId = owned.id
+      campaignName = owned.name
+    }
+
+    const report = await loadActivityReport({ tenantId, campaignId, from, to, timeZone })
     const pdf = renderActivityPdf(report, { audience })
 
     const stamp = (d: Date) => d.toISOString().slice(0, 10)
     const base = ctx.tenant.companyName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "workspace"
-    const filename = `hiastrix-${base}-activity-${stamp(from)}-to-${stamp(to)}${audience === "internal" ? "-internal" : ""}.pdf`
+    // The campaign in the filename, so a folder of these stays sortable and
+    // nobody has to open three PDFs to find the one they meant.
+    const slug = (s: string) => s.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase()
+    const scope = campaignName ? `-${slug(campaignName).slice(0, 40)}` : "-activity"
+    const filename = `hiastrix-${base}${scope}-${stamp(from)}-to-${stamp(to)}${audience === "internal" ? "-internal" : ""}.pdf`
 
     return new Response(new Uint8Array(pdf), {
       status: 200,

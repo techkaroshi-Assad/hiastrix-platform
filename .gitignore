@@ -51,3 +51,6 @@ vs-recheck.ts
 
 # Sandbox typecheck scratch — see AGENTS.md note on sandbox file deletion
 tsconfig.check.json
+
+# Scratch file used to pass long commit messages from the sandbox
+.commit-msg.txt

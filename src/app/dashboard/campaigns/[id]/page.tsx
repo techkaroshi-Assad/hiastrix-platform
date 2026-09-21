@@ -139,6 +139,32 @@ export default async function CampaignPage({
    * by convention. This is the one join that bridges them, done here rather
    * than with a relation so neither model has to know the other exists.
    */
+  /*
+   * What each of the agent's numbers has placed today.
+   *
+   * Counted from dial_attempts in the campaign's own timezone, which is the
+   * same boundary the per-number daily cap uses (lib/dialer/context.ts), so
+   * this figure and the cap that throttles it always agree. Anything else
+   * would show "180 today" beside a cap of 200 while the dialer had already
+   * stopped, which is worse than showing nothing.
+   */
+  const numberUse = (
+    await prisma.$queryRaw<{ phone_number: string; cap: number | null; today: bigint }[]>`
+      SELECT pn.phone_number,
+             pn.daily_call_cap AS cap,
+             count(da.id) FILTER (
+               WHERE (da.created_at AT TIME ZONE ${campaign.timezone})::date
+                   = (now() AT TIME ZONE ${campaign.timezone})::date
+             ) AS today
+        FROM phone_numbers pn
+        LEFT JOIN dial_attempts da ON da.phone_number_id = pn.id
+       WHERE pn.tenant_id = ${campaign.tenantId}::uuid
+         AND pn.agent_id  = ${campaign.agentId}::uuid
+       GROUP BY pn.id, pn.phone_number, pn.daily_call_cap
+       ORDER BY pn.phone_number
+    `
+  ).map(r => ({ phoneNumber: r.phone_number, cap: r.cap, today: Number(r.today) }))
+
   const callIds = leads
     .map(l => l.attempts[0]?.providerCallId)
     .filter((v): v is string => Boolean(v))
@@ -239,18 +265,68 @@ export default async function CampaignPage({
                   meta={`${finished.toLocaleString()} of ${all.toLocaleString()}`} />
       </div>
 
-      {/* Who, not how many. Only while somebody is actually connected. */}
-      {onCall.length > 0 && (
+      {/*
+       * Who, not how many.
+       *
+       * This used to render only while somebody was actually connected, so
+       * the whole panel vanished the moment the dialer went quiet — between
+       * calls, outside the calling window, any pause at all — and a running
+       * campaign looked like it had lost the feature entirely. The panel now
+       * stays for the whole time a campaign is RUNNING and says what is
+       * happening instead of disappearing, including *why* when the answer is
+       * "nothing".
+       */}
+      {(onCall.length > 0 || campaign.state === "RUNNING") && (
         <div className="mb-5 rounded-2xl border border-brand-500/40 bg-brand-500/[0.06] px-5 py-4">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-500 opacity-70" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-500" />
+              {onCall.length > 0 && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-500 opacity-70" />
+              )}
+              <span
+                className={`relative inline-flex h-2 w-2 rounded-full ${
+                  onCall.length > 0 ? "bg-brand-500" : "bg-subtle/50"
+                }`}
+              />
             </span>
             <p className="text-[13px] font-medium text-brand-on-tint">
-              Calling now — {onCall.length}
+              {onCall.length > 0 ? `Calling now — ${onCall.length}` : "Nothing on the phone this second"}
             </p>
           </div>
+
+          {onCall.length === 0 && (
+            <p className="mt-2 text-[12.5px] leading-relaxed text-muted">
+              {/* whyIdle already explains a closed window, a paused agent or
+                  an empty balance in tenant-safe words — repeating it here
+                  saves scrolling up to find out why nothing is happening. */}
+              {idle?.detail ?? "The dialer is between calls. This updates on its own."}
+            </p>
+          )}
+
+          {/*
+           * The numbers in rotation, and what each has actually placed today.
+           *
+           * Assigning a second number to an agent is a throughput decision,
+           * and until now there was no way to confirm it was being honoured
+           * short of a database query. Both counts visible side by side is
+           * the answer to "is it using both of my numbers".
+           */}
+          {numberUse.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-brand-500/20 pt-3">
+              <span className="text-[11.5px] uppercase tracking-[0.08em] text-subtle">
+                Numbers in rotation
+              </span>
+              {numberUse.map(n => (
+                <span key={n.phoneNumber} className="text-[12.5px] tabular-nums text-muted">
+                  {n.phoneNumber}
+                  <span className="text-subtle">
+                    {" "}— {n.today.toLocaleString()} today
+                    {n.cap ? ` of ${n.cap.toLocaleString()}` : ""}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
 
           <ul className="mt-3 space-y-2">
             {onCall.map(lead => {
@@ -294,7 +370,9 @@ export default async function CampaignPage({
             o={outcomes}
             callbacks={callbacksDue(outcomeRows)}
             reportHref={`/api/reports/campaign?campaignId=${campaign.id}`}
-            pdfHref={`/api/reports/activity?from=${campaign.createdAt.toISOString().slice(0, 10)}&to=${new Date().toISOString().slice(0, 10)}`}
+            // Scoped to THIS campaign. Without campaignId this button
+            // produced a PDF covering every campaign in the workspace.
+            pdfHref={`/api/reports/activity?campaignId=${campaign.id}&from=${campaign.createdAt.toISOString().slice(0, 10)}&to=${new Date().toISOString().slice(0, 10)}`}
             noExtraction={noExtraction}
             agentHref={`/dashboard/agents/${campaign.agent.id}`}
           />
