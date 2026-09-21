@@ -34,6 +34,14 @@ export type CallerNumber = {
   /** Calls placed from it in the last 24 hours. */
   dialsToday: number
   /**
+   * This number's own rolling-24h ceiling: its `dailyCallCap` when set,
+   * otherwise the platform default. Resolved once in context.ts so every
+   * comparison here is against one number's real limit rather than a
+   * single platform figure applied to numbers with very different
+   * reputations and owners.
+   */
+  dailyCap: number
+  /**
    * When the oldest of those calls falls out of the 24-hour window — i.e.
    * the earliest moment this number has a slot again. Null when it has no
    * calls in the window at all.
@@ -48,7 +56,9 @@ export type DialContext = {
   /** Null rotates; set pins every call to one caller ID. */
   pinnedNumberId: string | null
   numbers: CallerNumber[]
-  /** platform_settings.number_daily_call_cap */
+  /** platform_settings.number_daily_call_cap — the default for a number
+   *  that has no cap of its own. Kept for reporting; the dial-time check
+   *  uses each number's resolved `dailyCap`. */
   numberDailyCap: number
   /** platform_settings.contact_daily_cap */
   contactDailyCap: number
@@ -157,10 +167,10 @@ export function pickNumber(ctx: DialContext): CallerNumber | null {
     const pinned = ctx.numbers.find(n => n.id === ctx.pinnedNumberId)
     // A pinned number over its cap stops the campaign rather than silently
     // presenting a different caller ID — the tenant pinned it for a reason.
-    return pinned && pinned.dialsToday < ctx.numberDailyCap ? pinned : null
+    return pinned && pinned.dialsToday < pinned.dailyCap ? pinned : null
   }
 
-  const eligible = ctx.numbers.filter(n => n.dialsToday < ctx.numberDailyCap)
+  const eligible = ctx.numbers.filter(n => n.dialsToday < n.dailyCap)
   if (!eligible.length) return null
 
   return eligible.reduce((a, b) => (b.dialsToday < a.dialsToday ? b : a))

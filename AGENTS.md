@@ -215,6 +215,28 @@ been seen on a live call yet. The pieces, and what to check:
   `+13134584952` to Kaizen and attach it to Nancy so she rotates across
   two purchased numbers.
 
+## Per-number daily call cap (2026-09-22, latest)
+
+`phone_numbers.daily_call_cap` (nullable int) — **migration already applied
+to Supabase**; null inherits `platform_settings.number_daily_call_cap`.
+`CallerNumber` now carries a resolved `dailyCap` and `pickNumber()` compares
+each number against its own limit rather than one platform figure.
+Editable inline on super admin → Phone numbers ("Calls per day", blank =
+default), alongside a "Calls today / limit" column counted the same way the
+dialer counts (refused attempts excluded). `whyIdle()` names the number's
+own limit and points at the admin console.
+
+Kaizen's two Twilio numbers were set to 1000/day directly, so they are not
+sitting at 200 while this deploys.
+
+**`npx prisma generate` is required locally after pulling** — the sandbox
+cannot reach Prisma's engine CDN, so `dailyCallCap` does not typecheck here.
+Verified instead by running tsc and confirming the only two errors were the
+missing-field ones in `context.ts`, with dial.ts, idle.ts, the API route and
+the client component all clean. Vercel's postinstall regenerates, so the
+build should pass — **but that is an inference, not a green build**, and two
+builds this session already failed on things local tsc could not see.
+
 ## Client-facing PDF, dialer limits in super admin (2026-09-22, later still)
 
 - The PDF activity report is **client-facing by default**: no prices,

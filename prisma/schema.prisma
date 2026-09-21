@@ -247,6 +247,13 @@ model PhoneNumber {
   /// column exists is so nobody has to remember which numbers those are.
   /// Null only for a row synced before this column existed, until the next sync.
   provider          String?     @map("provider")
+  /// How many calls this number may place in a rolling 24 hours, overriding
+  /// the platform default in `platform_settings.number_daily_call_cap`.
+  /// Null means inherit that default. This exists because the platform
+  /// default is a spam-flagging guard sized for shared numbers, and a
+  /// tenant's own purchased number often warrants a different figure —
+  /// which used to require an operator editing the database by hand.
+  dailyCallCap      Int?        @map("daily_call_cap")
   createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
 
   tenant            Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)

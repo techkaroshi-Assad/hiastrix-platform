@@ -1,5 +1,6 @@
 /**
- * PATCH /api/admin/numbers/[id] — allocate a number to a tenant, or release it.
+ * PATCH /api/admin/numbers/[id] — allocate a number to a tenant, release it,
+ * or set how many calls it may place in a day.
  *
  * Reallocating away from a tenant also detaches the number from whatever agent
  * was answering on it, both locally and upstream, so a number can never keep
@@ -14,8 +15,12 @@ import { vapiPhoneNumbers } from "@/lib/vapi/client"
 import { ERRORS, sanitiseError, apiError } from "@/lib/errors"
 
 const BodySchema = z.object({
-  tenantId: z.string().uuid().nullable(),
+  // Optional now that this route does more than allocate: a request that
+  // only changes the daily cap must not clear the tenant.
+  tenantId: z.string().uuid().nullable().optional(),
   status:   z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  /** Null restores the platform default. */
+  dailyCallCap: z.number().int().min(1).max(5_000).nullable().optional(),
 })
 
 export async function PATCH(
@@ -34,7 +39,10 @@ export async function PATCH(
     const parsed = BodySchema.safeParse(await request.json())
     if (!parsed.success) return apiError(ERRORS.FALLBACK)
 
-    const { tenantId, status } = parsed.data
+    const { status, dailyCallCap } = parsed.data
+    // Distinguish "not mentioned" from "explicitly cleared".
+    const changingTenant = "tenantId" in parsed.data
+    const tenantId = changingTenant ? parsed.data.tenantId ?? null : number.tenantId
 
     if (tenantId) {
       const tenant = await prisma.tenant.findUnique({
@@ -44,7 +52,7 @@ export async function PATCH(
       if (!tenant) return apiError(ERRORS.NOT_FOUND, 404)
     }
 
-    const movingTenant = number.tenantId !== tenantId
+    const movingTenant = changingTenant && number.tenantId !== tenantId
 
     // Detach the answering agent whenever the number changes hands.
     if (movingTenant && number.agentId) {
@@ -58,9 +66,10 @@ export async function PATCH(
     await prisma.phoneNumber.update({
       where: { id },
       data: {
-        tenantId,
+        ...(changingTenant ? { tenantId } : {}),
         ...(movingTenant ? { agentId: null } : {}),
         ...(status ? { status } : {}),
+        ...("dailyCallCap" in parsed.data ? { dailyCallCap } : {}),
       },
     })
 

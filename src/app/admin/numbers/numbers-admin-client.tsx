@@ -48,6 +48,83 @@ export function SyncButton() {
   )
 }
 
+/**
+ * How many calls this number may place in a rolling 24 hours.
+ *
+ * Blank means "use the platform default", which is the honest way to say
+ * it: most numbers should inherit, and only the ones with a reason — a
+ * tenant's own purchased number, a number being warmed up — carry a figure
+ * of their own. Saves on blur or Enter rather than per keystroke.
+ */
+export function DailyCapInput({
+  numberId,
+  value,
+  platformDefault,
+}: {
+  numberId: string
+  value: number | null
+  platformDefault: number
+}) {
+  const router = useRouter()
+  const [, startTransition] = useTransition()
+  const [text, setText] = useState(value === null ? "" : String(value))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(false)
+
+  async function save() {
+    const trimmed = text.trim()
+    const next = trimmed === "" ? null : Math.round(Number(trimmed))
+    if (next !== null && (!Number.isFinite(next) || next < 1 || next > 5000)) {
+      setError(true)
+      return
+    }
+    if (next === value) return
+    setError(false)
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/admin/numbers/${numberId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dailyCallCap: next }),
+      })
+      if (!res.ok) {
+        setError(true)
+        return
+      }
+      startTransition(() => router.refresh())
+    } catch {
+      setError(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <input
+      type="number"
+      min={1}
+      max={5000}
+      inputMode="numeric"
+      aria-label="Calls per day for this number"
+      placeholder={String(platformDefault)}
+      disabled={busy}
+      value={text}
+      onChange={e => setText(e.target.value)}
+      onBlur={save}
+      onKeyDown={e => {
+        if (e.key === "Enter") e.currentTarget.blur()
+        if (e.key === "Escape") setText(value === null ? "" : String(value))
+      }}
+      className={cn(
+        "h-9 w-[92px] rounded-field border bg-field px-2.5 text-right text-[12.5px] tabular-nums text-fg",
+        "outline-none transition-colors focus:border-brand-500/65",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        error ? "border-danger" : "border-line-strong hover:border-line-strong"
+      )}
+    />
+  )
+}
+
 export function AllocateSelect({
   numberId,
   tenantId,

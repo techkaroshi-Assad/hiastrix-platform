@@ -130,29 +130,28 @@ export async function whyIdle(campaignId: string): Promise<IdleReason | null> {
    * cap.
    */
   {
-    const cap = settings?.numberDailyCallCap ?? 200
     const ctx = await loadCampaignContext(campaign.id)
     const pool = ctx
       ? (ctx.dial.pinnedNumberId
           ? ctx.dial.numbers.filter(n => n.id === ctx.dial.pinnedNumberId)
           : ctx.dial.numbers)
       : []
-    if (pool.length && pool.every(n => n.dialsToday >= cap)) {
+    if (pool.length && pool.every(n => n.dialsToday >= n.dailyCap)) {
       const frees = pool
         .map(n => n.capFreesAt)
         .filter((d): d is Date => d instanceof Date)
         .sort((x, y) => x.getTime() - y.getTime())[0]
       const which = pool.length === 1
-        ? `${pool[0]!.phoneNumber} has`
-        : `All ${pool.length} of ${campaign.agent.name}'s numbers have`
+        ? `${pool[0]!.phoneNumber} has placed its daily limit of ${pool[0]!.dailyCap} calls`
+        : `All ${pool.length} of ${campaign.agent.name}'s numbers have reached their daily call limit`
       return {
         label: "Daily limit reached",
         detail:
-          `${which} placed ${cap} calls in the last 24 hours, which is the per-number limit Hi-Astrix sets to keep caller IDs from being flagged as spam. ` +
+          `${which} in the last 24 hours. This limit is set per number in Hi-Astrix, to keep caller IDs from being flagged as spam. ` +
           (frees
             ? `Calling resumes on its own at ${whenPhrase(frees, campaign.timezone)} as the oldest calls age out. `
             : "Calling resumes on its own as the oldest calls age out. ") +
-          "To keep going sooner, attach another number to the agent — the campaign rotates across all of them.",
+          "To keep going sooner, raise the limit on the number in the admin console, or attach another number to the agent — the campaign rotates across all of them.",
         normal: true,
       }
     }

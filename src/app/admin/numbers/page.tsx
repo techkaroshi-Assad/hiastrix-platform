@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/admin"
 import { Page } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
-import { SyncButton, AllocateSelect } from "./numbers-admin-client"
+import { SyncButton, AllocateSelect, DailyCapInput } from "./numbers-admin-client"
 
 export const metadata: Metadata = { title: "Phone numbers" }
 export const dynamic = "force-dynamic"
@@ -41,7 +41,7 @@ function providerInfo(provider: string | null) {
 export default async function AdminNumbersPage() {
   const admin = await requireAdmin()
 
-  const [numbers, tenants] = await Promise.all([
+  const [numbers, tenants, settings] = await Promise.all([
     prisma.phoneNumber.findMany({
       orderBy: { phoneNumber: "asc" },
       include: {
@@ -53,7 +53,37 @@ export default async function AdminNumbersPage() {
       orderBy: { companyName: "asc" },
       select:  { id: true, companyName: true },
     }),
+    prisma.platformSettings.findFirst({ where: { id: true }, select: { numberDailyCallCap: true } }),
   ])
+
+  const platformCap = settings?.numberDailyCallCap ?? 200
+
+  /*
+   * Calls placed from each number in the last 24 hours, counted the same way
+   * the dialer counts them (attempts the provider refused before dialling
+   * never reached a carrier, so they do not spend the cap). Shown next to
+   * the limit so the figure being edited has context.
+   */
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const usedRows = numbers.length
+    ? await prisma.dialAttempt.groupBy({
+        by: ["phoneNumberId"],
+        where: {
+          phoneNumberId: { in: numbers.map(n => n.id) },
+          createdAt: { gte: since },
+          NOT: [
+            { endedReason: "astrix-rejected" },
+            { endedReason: { startsWith: "call.start.error" } },
+          ],
+        },
+        _count: { _all: true },
+      })
+    : []
+  const usedBy = new Map(
+    usedRows
+      .filter(u => u.phoneNumberId)
+      .map(u => [u.phoneNumberId as string, u._count._all])
+  )
 
   const unallocated = numbers.filter(n => !n.tenantId).length
   const freeCount = numbers.filter(n => n.provider === "vapi").length
@@ -96,12 +126,14 @@ export default async function AdminNumbersPage() {
               <TH>Type</TH>
               <TH>Status</TH>
               <TH>Answering agent</TH>
+              <TH align="right">Calls today</TH>
+              <TH align="right">Calls per day</TH>
               <TH align="right">Allocated to</TH>
             </tr>
           </thead>
           <tbody>
             {numbers.length === 0 ? (
-              <EmptyRow colSpan={5}>
+              <EmptyRow colSpan={7}>
                 No numbers yet. Use “Sync inventory” to pull them in.
               </EmptyRow>
             ) : (
@@ -119,6 +151,18 @@ export default async function AdminNumbersPage() {
                       </Pill>
                     </TD>
                     <TD muted>{n.agent?.name ?? "—"}</TD>
+                    <TD align="right" muted className="tabular-nums">
+                      {(usedBy.get(n.id) ?? 0).toLocaleString()} / {(n.dailyCallCap ?? platformCap).toLocaleString()}
+                    </TD>
+                    <TD align="right">
+                      <div className="flex justify-end">
+                        <DailyCapInput
+                          numberId={n.id}
+                          value={n.dailyCallCap}
+                          platformDefault={platformCap}
+                        />
+                      </div>
+                    </TD>
                     <TD align="right">
                       <div className="flex justify-end">
                         <AllocateSelect
@@ -134,6 +178,16 @@ export default async function AdminNumbersPage() {
             )}
           </tbody>
         </Table>
+        <p className="border-t border-line px-5 py-4 text-[12.5px] leading-relaxed text-subtle">
+          <strong className="font-medium text-muted">Calls per day</strong> is this
+          number&rsquo;s own limit over a rolling 24 hours. Leave it blank to use the
+          platform default of {platformCap.toLocaleString()}, which you can change under
+          Settings &rarr; Outbound dialer. The limit is ours, not the carrier&rsquo;s: it
+          exists so a single caller ID doesn&rsquo;t dial all day and get flagged as spam.
+          A purchased number on a warmed-up reputation can safely run higher. Campaigns
+          rotate across every number attached to their agent, so two numbers at 200 give
+          the agent 400 calls a day.
+        </p>
       </Card>
     </Page>
   )

@@ -52,7 +52,7 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
    */
   const numbers = await prisma.phoneNumber.findMany({
     where:  { agentId: campaign.agentId, tenantId: campaign.tenantId, status: "ACTIVE" },
-    select: { id: true, vapiPhoneNumberId: true, phoneNumber: true },
+    select: { id: true, vapiPhoneNumberId: true, phoneNumber: true, dailyCallCap: true },
   })
 
   const WINDOW_MS = 24 * 60 * 60 * 1000
@@ -91,6 +91,8 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
       .map(u => [u.phoneNumberId as string, { count: u._count._all, oldest: u._min.createdAt }])
   )
 
+  const platformCap = settings?.numberDailyCallCap ?? 200
+
   const callerNumbers: CallerNumber[] = numbers.map(n => {
     const u = usedBy.get(n.id)
     return {
@@ -98,6 +100,8 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
       vapiPhoneNumberId: n.vapiPhoneNumberId,
       phoneNumber: n.phoneNumber,
       dialsToday: u?.count ?? 0,
+      // The number's own cap wins; null inherits the platform default.
+      dailyCap: n.dailyCallCap ?? platformCap,
       capFreesAt: u?.oldest ? new Date(u.oldest.getTime() + WINDOW_MS) : null,
     }
   })
@@ -124,7 +128,7 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
       vapiAssistantId: campaign.agent.vapiAssistantId,
       pinnedNumberId: campaign.phoneNumberId,
       numbers:        callerNumbers,
-      numberDailyCap: settings?.numberDailyCallCap ?? 200,
+      numberDailyCap: platformCap,
       contactDailyCap: settings?.contactDailyCap ?? 2,
       campaignName:   campaign.name,
       /** Null when the tenant has no CRM connected — the pre-dial lookup is
