@@ -55,6 +55,7 @@ import {
 } from "@/lib/analytics"
 import { usd, duration, titleCase } from "@/lib/format"
 import { readAllowance, minutesLabel } from "@/lib/billing/allowance"
+import { hasOutboundFields } from "@/lib/agents/extraction-presets"
 import { MinutesBreakdown } from "@/components/billing/minutes"
 import { RangePicker } from "./range"
 import { ReportDownload } from "./report-download"
@@ -101,6 +102,25 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   // outbound preset — say so once, at the top of the section.
   const noExtraction =
     campaignTotal.reached.HUMAN > 0 && campaignTotal.extracted === 0
+
+  /*
+   * Is ANY agent set up for the outbound fields?
+   *
+   * Without this the banner below blamed the setup for every empty window,
+   * including the window right after a tenant had set the fields up
+   * correctly. "No data on these calls" and "not configured" need different
+   * sentences. See lib/agents/extraction-presets.ts for why the check is
+   * key-presence rather than schema equality.
+   */
+  const agentConfigs = await prisma.agent.findMany({
+    where: { tenantId: tenant.id },
+    select: { config: true },
+  })
+  const extractionConfigured = agentConfigs.some(a =>
+    hasOutboundFields(
+      String((a.config as { structuredDataSchema?: unknown } | null)?.structuredDataSchema ?? "")
+    )
+  )
 
   const t = a.totals
   const p = a.previous
@@ -317,6 +337,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
                 callbacks={callbacksDue(campaignRows)}
                 reportHref={`/api/reports/campaign?days=${days}`}
                 noExtraction={noExtraction}
+                extractionConfigured={extractionConfigured}
               />
 
               <Card

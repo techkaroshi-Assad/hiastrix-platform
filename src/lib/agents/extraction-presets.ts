@@ -152,6 +152,65 @@ for (const f of OUTBOUND_PRESET_FIELDS) {
   }
 }
 
+/**
+ * Does this schema carry the outbound fields?
+ *
+ * ── WHY NOT STRING EQUALITY ───────────────────────────────────────────
+ *
+ * Both the "Using: Outbound cold call" button state and the warning beside
+ * it used to compare the tenant's whole schema to `OUTBOUND_PRESET_SCHEMA`
+ * with `===`. That is wrong in the most annoying possible way: the banner
+ * says "start from that preset (you can add to it)" and then flags you the
+ * instant you do, because one extra field — or a different key order, or the
+ * schema builder re-serialising with different whitespace — makes the
+ * strings differ while the fields it actually needs are all still there.
+ *
+ * Kaizen hit exactly that. Nancy's schema has all twelve keys and 3,016
+ * characters of it, and the agent screen still said it was not set up, on
+ * every save, forever.
+ *
+ * What analytics and the reports actually require is that the keys they read
+ * exist. So that is what this checks — presence, not sameness. Extra fields
+ * are the tenant's business.
+ */
+export function outboundKeysIn(schema: string): { present: string[]; missing: string[] } {
+  const wanted = Object.values(OUTBOUND_KEYS) as string[]
+  let props: Record<string, unknown> = {}
+  try {
+    const parsed = JSON.parse(schema) as { properties?: Record<string, unknown> }
+    props = parsed?.properties ?? {}
+  } catch {
+    // Unparseable means nothing is readable from it — every key is missing.
+    return { present: [], missing: wanted }
+  }
+  const have = new Set(Object.keys(props))
+  return {
+    present: wanted.filter(k => have.has(k)),
+    missing: wanted.filter(k => !have.has(k)),
+  }
+}
+
+/**
+ * The single question every caller is really asking: can the outbound
+ * figures be filled in from this agent's extraction?
+ *
+ * The four that campaign analytics and the PDF read directly. An agent
+ * missing only `objection` still produces a usable report; one missing
+ * `whoAnswered` does not.
+ */
+const OUTBOUND_REQUIRED = [
+  OUTBOUND_KEYS.whoAnswered,
+  OUTBOUND_KEYS.reachedDecisionMaker,
+  OUTBOUND_KEYS.interestLevel,
+  OUTBOUND_KEYS.callbackRequested,
+] as string[]
+
+export function hasOutboundFields(schema: string | null | undefined): boolean {
+  if (!schema?.trim()) return false
+  const { missing } = outboundKeysIn(schema)
+  return OUTBOUND_REQUIRED.every(k => !missing.includes(k))
+}
+
 export type ExtractionPresetId = "outbound-cold-call"
 
 export const EXTRACTION_PRESETS: {

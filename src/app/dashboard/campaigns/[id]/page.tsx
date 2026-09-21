@@ -7,6 +7,7 @@ import { Page, StatCard } from "@/components/app/app-shell"
 import { Card, Table, TH, TD, Pill, EmptyRow } from "@/components/app/table"
 import { campaignReadiness } from "@/lib/dialer/readiness"
 import { whyIdle } from "@/lib/dialer/idle"
+import { hasOutboundFields } from "@/lib/agents/extraction-presets"
 import { CampaignControls, LeadImport, LiveRefresh } from "./campaign-client"
 import { leadTone, LEAD_LABEL } from "../tones"
 import { loadCampaignCallRows, loadRefusedAttempts, applyRefused, rollup, callbacksDue } from "@/lib/campaigns/insights"
@@ -51,8 +52,19 @@ export default async function CampaignPage({
     loadRefusedAttempts({ tenantId: tenant.id, campaignId: campaign.id, from: campaign.createdAt, to: new Date() }),
   ])
   const outcomes = applyRefused(rollup(outcomeRows), refused).get(campaign.id)
+  /*
+   * Two separate facts, deliberately not one.
+   *
+   * `extractionConfigured` — does the agent have the outbound fields now?
+   * `noExtraction`         — did any call in this campaign actually carry them?
+   *
+   * An agent set up this afternoon answers yes to the first and no to the
+   * second, and that is not a misconfiguration: the next call records it.
+   * Collapsing the two told Kaizen their correct setup was broken.
+   */
   const agentSchema = String((campaign.agent.config as { structuredDataSchema?: unknown } | null)?.structuredDataSchema ?? "")
-  const noExtraction = !agentSchema.includes("whoAnswered")
+  const extractionConfigured = hasOutboundFields(agentSchema)
+  const noExtraction = outcomeRows.every(r => r.interest === "unknown" && !r.reachedDecisionMaker)
 
   const page = Math.max(1, Number(sp.page ?? "1") || 1)
 
@@ -374,6 +386,7 @@ export default async function CampaignPage({
             // produced a PDF covering every campaign in the workspace.
             pdfHref={`/api/reports/activity?campaignId=${campaign.id}&from=${campaign.createdAt.toISOString().slice(0, 10)}&to=${new Date().toISOString().slice(0, 10)}`}
             noExtraction={noExtraction}
+            extractionConfigured={extractionConfigured}
             agentHref={`/dashboard/agents/${campaign.agent.id}`}
           />
         </div>

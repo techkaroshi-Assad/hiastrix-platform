@@ -43,8 +43,16 @@ export function CampaignOutcomesSection({
   callbacks,
   reportHref,
   pdfHref,
-  /** True when the agent behind these calls doesn't use the outbound preset. */
+  /** True when no call in this range carried the outbound fields. */
   noExtraction,
+  /**
+   * True when the agent DOES have the outbound fields configured.
+   *
+   * Separate from `noExtraction` on purpose: "no data in this window" and
+   * "not set up" are different problems with different answers, and
+   * conflating them told a tenant their correct configuration was wrong.
+   */
+  extractionConfigured = false,
   agentHref,
 }: {
   o: CampaignOutcomes
@@ -53,6 +61,7 @@ export function CampaignOutcomesSection({
   /** The PDF activity report over the same window, when the page has one. */
   pdfHref?: string
   noExtraction: boolean
+  extractionConfigured?: boolean
   agentHref?: string
 }) {
   const humans = o.reached.HUMAN
@@ -87,22 +96,44 @@ export function CampaignOutcomesSection({
         </div>
       </div>
 
+      {/*
+        * Two different situations, and telling them apart matters.
+        *
+        * This banner used to fire on one condition — no extracted data in the
+        * window — and always blamed the setup. But an agent configured today
+        * has no extracted data on calls placed yesterday, and there is
+        * nothing to fix: the next call records it. Kaizen saw "the agent
+        * isn't pulling out the outbound fields" three hours after setting up
+        * the fields correctly, which reads as the platform ignoring the work
+        * they had just done.
+        */}
       {noExtraction && humans > 0 && (
-        <div className="rounded-2xl border border-warning/30 bg-warning/[0.06] px-5 py-4">
-          <p className="text-[13px] font-medium text-warning">Interest and callbacks aren&rsquo;t being recorded</p>
-          <p className="mt-1 text-[13px] leading-relaxed text-muted">
-            The agent isn&rsquo;t pulling out the outbound fields after each call, so
-            decision-maker, interest and callback figures below show as &ldquo;not
-            recorded&rdquo;. Open the agent &rarr; After the call &rarr; Pull out specific
-            details, and start from the <strong>Outbound cold call</strong> preset.
-            {agentHref && (
-              <>
-                {" "}
-                <Link href={agentHref} className="underline decoration-warning/50 underline-offset-2">Open the agent</Link>.
-              </>
-            )}
-          </p>
-        </div>
+        extractionConfigured ? (
+          <div className="rounded-2xl border border-line bg-field-soft px-5 py-4">
+            <p className="text-[13px] font-medium">Nothing recorded on these calls yet</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-muted">
+              The outbound fields are set up on this agent, but every call in this
+              range was placed before that. Decision-maker, interest and callback
+              figures fill in from the next call onwards — there is nothing to fix.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-warning/30 bg-warning/[0.06] px-5 py-4">
+            <p className="text-[13px] font-medium text-warning">Interest and callbacks aren&rsquo;t being recorded</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-muted">
+              The agent isn&rsquo;t pulling out the outbound fields after each call, so
+              decision-maker, interest and callback figures below show as &ldquo;not
+              recorded&rdquo;. Open the agent &rarr; After the call &rarr; Pull out specific
+              details, and start from the <strong>Outbound cold call</strong> preset.
+              {agentHref && (
+                <>
+                  {" "}
+                  <Link href={agentHref} className="underline decoration-warning/50 underline-offset-2">Open the agent</Link>.
+                </>
+              )}
+            </p>
+          </div>
+        )
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

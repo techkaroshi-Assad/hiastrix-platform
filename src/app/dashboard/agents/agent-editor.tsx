@@ -46,7 +46,7 @@ import { ToolsEditor } from "@/components/agents/tools-editor"
 import { KnowledgeEditor } from "@/components/agents/knowledge-editor"
 import { JsonEditor } from "@/components/agents/json-editor"
 import { SchemaBuilder } from "@/components/agents/schema-builder"
-import { EXTRACTION_PRESETS, OUTBOUND_PRESET_SCHEMA } from "@/lib/agents/extraction-presets"
+import { EXTRACTION_PRESETS, hasOutboundFields, outboundKeysIn } from "@/lib/agents/extraction-presets"
 import {
   checkAgent, countBySeverity, checkerSummary,
   type Finding, type FieldTarget,
@@ -959,7 +959,11 @@ export function AgentEditor({
                       </p>
                       <div className="flex flex-wrap items-center gap-2">
                         {EXTRACTION_PRESETS.map(p => {
-                          const active = c.structuredDataSchema.trim() === p.schema.trim()
+                          /* "Using" means the preset's fields are in there,
+                             not that the JSON is byte-identical to it —
+                             adding one field of your own should not turn the
+                             button back into "Start from". */
+                          const active = hasOutboundFields(c.structuredDataSchema)
                           return (
                             <SecondaryButton
                               key={p.id}
@@ -978,7 +982,14 @@ export function AgentEditor({
                         })}
                       </div>
                     </div>
-                    {usedForOutbound && c.structuredDataSchema.trim() !== OUTBOUND_PRESET_SCHEMA.trim() && (
+                    {/*
+                      * Fires on MISSING FIELDS, not on "your JSON differs
+                      * from ours". The old check was `!== OUTBOUND_PRESET_SCHEMA`,
+                      * which meant the warning it showed — "start from that
+                      * preset, you can add to it" — became permanent the
+                      * moment anyone took that advice.
+                      */}
+                    {usedForOutbound && !hasOutboundFields(c.structuredDataSchema) && (
                       <p className="flex items-start gap-2 rounded-field border border-warning/30 bg-warning/[0.08] px-3.5 py-2.5 text-[12.5px] font-light leading-relaxed text-muted">
                         <IconWarning size={14} className="mt-0.5 shrink-0 text-warning" />
                         <span>
@@ -987,6 +998,14 @@ export function AgentEditor({
                           answered, decision-maker reached, interest, callbacks. Start from
                           that preset (you can add to it) or those figures will show as
                           &ldquo;not recorded&rdquo;.
+                          {(() => {
+                            const missing = outboundKeysIn(c.structuredDataSchema).missing
+                            return missing.length > 0 && missing.length < 12 ? (
+                              <>
+                                {" "}Missing: <strong>{missing.join(", ")}</strong>.
+                              </>
+                            ) : null
+                          })()}
                         </span>
                       </p>
                     )}
