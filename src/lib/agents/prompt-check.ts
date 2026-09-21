@@ -87,6 +87,7 @@ export type FieldTarget =
   | "voicemail-message"
   | "structured-schema"
   | "lead-contact-relationship"
+  | "ivr-navigation"
 
 export type CheckInput = {
   systemPrompt: string
@@ -100,6 +101,7 @@ export type CheckInput = {
     successEvaluationEnabled?: boolean
     maxTokens?: number
     endCallPhrases?: string[]
+    ivrNavigationEnabled?: boolean
   }
   /** True when this agent is attached to at least one outbound campaign. */
   usedForOutbound?: boolean
@@ -380,6 +382,18 @@ export function checkAgent(input: CheckInput): Finding[] {
         "It will hold a full conversation with an answerphone, and that gets recorded as somebody you spoke to. Your campaign results will look better than they are.",
       where: "conversation",
       field: "voicemail-detect",
+    })
+  }
+
+  if (input.usedForOutbound && !input.config.ivrNavigationEnabled) {
+    findings.push({
+      id: "outbound:no-ivr",
+      severity: "problem",
+      title: "This agent runs campaigns but can't press keys on a phone menu",
+      detail:
+        "Businesses answer with \"press 1 for…\" far more often than with a person. Without a keypad the agent will say \"pressing 2\", nothing will happen, and the call runs until the silence limit — every one of those is billed and counts as connected.",
+      where: "conversation",
+      field: "ivr-navigation",
     })
   }
 

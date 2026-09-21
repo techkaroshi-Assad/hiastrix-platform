@@ -175,6 +175,22 @@ export const AgentConfigSchema = z.object({
    */
   leadContactRelationship: z.enum(["direct", "front-desk"]).default("direct"),
 
+  /**
+   * Phone menus (IVR) on outbound calls.
+   *
+   * Off by default, and off means the agent has no keypad at all. What that
+   * looks like in practice, from 291 real campaign calls: the agent says
+   * "Pressing 4 for billing", nothing is sent, the menu repeats, it says
+   * "Pressing 4 again", and the call runs to the silence timeout — up to
+   * seven minutes of billed audio that reached nobody. Switching this on
+   * attaches Vapi's built-in `dtmf` tool and the rules for using it; the
+   * two text fields are what the agent is told to steer the menu towards
+   * and how many menu rounds it gets before it gives up and hangs up.
+   */
+  ivrNavigationEnabled: z.boolean().default(false),
+  ivrTarget: z.string().max(200).default("the billing department, the office manager, or a live operator"),
+  ivrMaxAttempts: z.number().int().min(1).max(6).default(3),
+
   /* Analysis */
   summaryEnabled: z.boolean().default(true),
   successEvaluationEnabled: z.boolean().default(false),

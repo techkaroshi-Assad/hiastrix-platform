@@ -14,7 +14,7 @@
 import { splitOption } from "./options"
 import { transcriberPayload } from "./catalog"
 import { crmToolParameters } from "@/lib/crm/tool-schema"
-import { enforcedRules } from "@/lib/crm/guidance"
+import { enforcedRules, ivrRulesFrom } from "@/lib/crm/guidance"
 import type { AgentConfig } from "./config"
 import type { AgentTool } from "./tools"
 
@@ -151,6 +151,16 @@ const toolName = (t: Record<string, unknown>) =>
 const END_CALL_TOOL = { type: "endCall" } as const
 
 /**
+ * The provider's keypad. Unlike endCall this one is a tenant setting
+ * (`ivrNavigationEnabled`), because it only makes sense on an agent that
+ * dials out into businesses with phone menus — an inbound receptionist agent
+ * with a keypad it never needs is just one more tool for the model to
+ * misfire. Same capability/behaviour split as endCall: this attaches the
+ * function, enforcedRules() says when and how to use it.
+ */
+const DTMF_TOOL = { type: "dtmf" } as const
+
+/**
  * Structured tools first, then any un-migrated legacy JSON, de-duped by name.
  *
  * Emitting both is what makes the one-off migration safe: an agent's effective
@@ -189,8 +199,14 @@ export function toolsPayload(config: AgentConfig): Record<string, unknown>[] {
   // entry, rather than sending the provider two tools of the same built-in
   // type — which it rejects outright.
   const hasEndCall = [...structured, ...rest].some(t => t.type === "endCall")
+  const hasDtmf    = [...structured, ...rest].some(t => t.type === "dtmf")
 
-  return [...structured, ...rest, ...(hasEndCall ? [] : [END_CALL_TOOL])]
+  return [
+    ...structured,
+    ...rest,
+    ...(hasEndCall ? [] : [END_CALL_TOOL]),
+    ...(config.ivrNavigationEnabled && !hasDtmf ? [DTMF_TOOL] : []),
+  ]
 }
 
 export type AgentCore = {
@@ -276,7 +292,7 @@ export function buildAssistantPayload(
           role: "system",
           content:
             core.systemPrompt +
-            enforcedRules(config.tools, { timeZone: effectiveTimeZone(config) }) +
+            enforcedRules(config.tools, { timeZone: effectiveTimeZone(config), ivr: ivrRulesFrom(config) }) +
             /*
              * A knowledge tool being attached is a capability, not a
              * behaviour — the same gap enforcedRules exists to close for CRM

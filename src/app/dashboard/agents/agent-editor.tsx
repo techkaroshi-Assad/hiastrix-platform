@@ -54,7 +54,7 @@ import {
   promptContains, tidyPrompt, approxTokens, templateOverwrites,
   type TidyResult, type Overwrite,
 } from "@/lib/agents/prompt-structure"
-import { enforcedRules } from "@/lib/crm/guidance"
+import { enforcedRules, ivrRulesFrom } from "@/lib/crm/guidance"
 import {
   AGENT_TEMPLATES, JOB_LABEL, JOB_ORDER, DIRECTION_LABEL, INDUSTRY_LABEL,
   INDUSTRIES_PRESENT, filterTemplates,
@@ -215,6 +215,7 @@ export function AgentEditor({
       config: {
         voicemailDetectionEnabled: c.voicemailDetectionEnabled,
         voicemailMessage: c.voicemailMessage,
+        ivrNavigationEnabled: c.ivrNavigationEnabled,
         structuredDataEnabled: c.structuredDataEnabled,
         structuredDataSchema: c.structuredDataSchema,
         successEvaluationEnabled: c.successEvaluationEnabled,
@@ -233,8 +234,8 @@ export function AgentEditor({
   /* The prompt as the model actually receives it — theirs, plus everything we
    * append at dial time. */
   const assembledPrompt = useMemo(
-    () => draft.systemPrompt + enforcedRules(c.tools, { timeZone: previewTimeZone(c.tools) }),
-    [draft.systemPrompt, c.tools]
+    () => draft.systemPrompt + enforcedRules(c.tools, { timeZone: previewTimeZone(c.tools), ivr: ivrRulesFrom(c) }),
+    [draft.systemPrompt, c]
   )
 
   /**
@@ -816,6 +817,52 @@ export function AgentEditor({
                     hint="Blank means hang up without leaving one, which is a perfectly reasonable choice."
                   />
                 </Target>
+              )}
+            </Block>
+
+            <Block
+              title="Phone menus"
+              description="Only matters on outbound calls. What the agent does when a business's automated menu answers instead of a person."
+            >
+              <Target id="ivr-navigation" flash={flash}>
+                <Toggle
+                  label="Navigate phone menus"
+                  help={
+                    <>
+                      Gives the agent a real keypad and the rules for using it:
+                      listen to the whole menu, press the option that leads to
+                      the person you want, retry slower if the tone is missed,
+                      fall back to the operator, and hang up after a set number
+                      of rounds instead of sitting through a loop. Without
+                      this the agent has no keypad at all — it will say
+                      &ldquo;pressing 2&rdquo;, nothing happens, and the call
+                      runs until the silence limit. That was 43% of one
+                      tenant&rsquo;s campaign calls.
+                    </>
+                  }
+                  helpHref="/dashboard/help#campaigns"
+                  description="Off means the agent can't press keys. On a cold-calling list of businesses, leave this on."
+                  checked={c.ivrNavigationEnabled}
+                  onChange={v => setConfig({ ivrNavigationEnabled: v })}
+                />
+              </Target>
+              {c.ivrNavigationEnabled && (
+                <>
+                  <Field
+                    label="Steer the menu towards"
+                    value={c.ivrTarget}
+                    onChange={e => setConfig({ ivrTarget: e.target.value.slice(0, 200) })}
+                    placeholder="the billing department, the office manager, or a live operator"
+                    hint="Plain words, in order of preference. The agent picks whichever option on the menu matches this best, and falls back to the operator if nothing does."
+                  />
+                  <Field
+                    label="Menu rounds before giving up"
+                    type="number" min={1} max={6}
+                    value={String(c.ivrMaxAttempts)}
+                    onChange={e => setConfig({ ivrMaxAttempts: Math.max(1, Math.min(6, Number(e.target.value) || 1)) })}
+                    hint="Each round is one full play of a menu. After this many without reaching a person, the agent hangs up rather than waiting for the silence limit. 3 is a sensible default; every round costs roughly 20–30 seconds of billed audio."
+                  />
+                </>
               )}
             </Block>
 

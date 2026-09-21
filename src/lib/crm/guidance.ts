@@ -100,6 +100,51 @@ const CONVERSATION_LINES = [
   "Answer the question the caller actually just asked before you ask them anything of your own. If you don't have the information to answer it, say so plainly rather than steering back to what you wanted to ask.",
 ]
 
+/* ── Phone menus ────────────────────────────────────────────────────────── */
+
+/**
+ * What the agent is told when it has a keypad (`ivrNavigationEnabled`).
+ *
+ * The failure this exists for, from Kaizen's campaign transcripts: with no
+ * keypad the model said "Pressing 4 for billing", the menu replayed, it said
+ * "Pressing 4 again", "Pressing 8 once more", "Pressing 0" — nothing was ever
+ * sent, and 44 of those calls ran to the silence timeout. The dtmf tool fixes
+ * the capability; these lines fix the behaviour, and every one of them maps
+ * to something Vapi's own IVR guide recommends: wait for the whole menu,
+ * stay silent while waiting, put pauses between digits, slow down on retry,
+ * escalate to an operator, and give up after a bounded number of rounds
+ * rather than sitting through a loop.
+ *
+ * The target and attempt count are the tenant's, not ours — a billing
+ * company wants "billing", a recruiter wants "HR", and how patient to be is
+ * a cost decision.
+ */
+export type IvrRules = { target: string; maxAttempts: number }
+
+/** The one place the config's three IVR fields become an `ivr` option. */
+export function ivrRulesFrom(config: {
+  ivrNavigationEnabled: boolean
+  ivrTarget: string
+  ivrMaxAttempts: number
+}): IvrRules | null {
+  return config.ivrNavigationEnabled
+    ? { target: config.ivrTarget, maxAttempts: config.ivrMaxAttempts }
+    : null
+}
+
+function ivrLines(ivr: IvrRules): string[] {
+  const target = ivr.target.trim() || "a live operator"
+  const n = Math.max(1, Math.min(6, Math.round(ivr.maxAttempts)))
+  return [
+    `You have a dtmf function that presses keypad digits. Saying "pressing 2" out loud does nothing — if you want to press a key, you must call dtmf. Never say the words "pressing" or "press" to a phone menu.`,
+    `If an automated phone menu answers instead of a person, stop your opening pitch and listen. Wait until every option has been read out before choosing — do not respond partway through. While you are listening, reply with a single space so nothing is spoken.`,
+    `Choose the option that gets you to ${target}. If none of the options fit, press 0 or the option for the operator, front desk, or "all other calls". Send the digit with dtmf using a leading pause, e.g. keys "w2".`,
+    `If the same menu plays again after you pressed, the tone was missed. Press the same option once more, slower: "W2". If it plays a third time, try 0. If a menu says "press 1 or stay on the line", stay on the line — reply with a space and wait.`,
+    `You get at most ${n} rounds of menu before you give up. If you still have not reached a person by then, or the menu is clearly looping, say nothing further and call endCall. Do not wait for silence — hanging up is the correct outcome.`,
+    `The moment a real person answers, continue with your normal conversation from your greeting onward. Never mention that you navigated a menu or pressed anything.`,
+  ]
+}
+
 /* ── The non-negotiable part ───────────────────────────────────────────── */
 
 /**
@@ -109,7 +154,7 @@ const CONVERSATION_LINES = [
  */
 export function enforcedRules(
   tools: AgentTool[],
-  opts: { timeZone?: string } = {}
+  opts: { timeZone?: string; ivr?: IvrRules | null } = {}
 ): string {
   const timeZone = opts.timeZone?.trim() || "UTC"
 
@@ -127,7 +172,14 @@ export function enforcedRules(
   // what it's connected to.
   const conversation = `\n\n---\nStaying on track (set by Hi-Astrix):\n${CONVERSATION_LINES.map(l => `- ${l}`).join("\n")}`
 
-  if (!anyCrm(tools)) return context + callControl + conversation
+  // Only when the keypad is actually attached — telling a model to call a
+  // function it does not have is exactly the narrated-but-not-done failure
+  // this whole block exists to prevent.
+  const ivr = opts.ivr
+    ? `\n\n---\nPhone menus (set by Hi-Astrix):\n${ivrLines(opts.ivr).map(l => `- ${l}`).join("\n")}`
+    : ""
+
+  if (!anyCrm(tools)) return context + callControl + conversation + ivr
 
   const lines: string[] = []
 
@@ -181,7 +233,7 @@ export function enforcedRules(
 
   lines.push("Never read an id, a reference or a system message aloud to the caller.")
 
-  return `${context}${callControl}${conversation}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
+  return `${context}${callControl}${conversation}${ivr}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
 }
 
 /* ── The editable draft ────────────────────────────────────────────────── */

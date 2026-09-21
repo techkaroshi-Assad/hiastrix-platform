@@ -26,7 +26,7 @@
  */
 
 import { splitOption } from "@/lib/vapi/options"
-import { enforcedRules } from "@/lib/crm/guidance"
+import { enforcedRules, ivrRulesFrom } from "@/lib/crm/guidance"
 import { readConfig } from "@/lib/vapi/config"
 import { effectiveTimeZone, toolsPayload } from "@/lib/vapi/payload"
 import { formatLeadContext, type LeadContext } from "@/lib/crm/lead-context"
@@ -55,7 +55,7 @@ export function campaignSystemPrompt(a: {
   // calendar, which is exactly the class of bug the date block exists to
   // prevent in the first place.
   const base = (a.agentSystemPrompt ?? "").trim()
-    + enforcedRules(config.tools, { timeZone: effectiveTimeZone(config) })
+    + enforcedRules(config.tools, { timeZone: effectiveTimeZone(config), ivr: ivrRulesFrom(config) })
 
   const { promptBlock } = formatLeadContext(a.leadContext)
 

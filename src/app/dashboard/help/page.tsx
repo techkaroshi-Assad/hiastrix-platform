@@ -278,6 +278,29 @@ export default async function HelpPage() {
                 spoke to. Your results look better than they are.
               </p>
             </Q>
+            <Q q="Phone menus">
+              <p>
+                Most businesses answer with &ldquo;press 1 for&hellip;&rdquo; before any
+                person picks up. <strong>Navigate phone menus</strong> (under Call control)
+                gives the agent a keypad and the rules for using it: listen to the whole
+                menu, press the option that leads to who you asked for, retry slower if the
+                tone is missed, fall back to the operator, and hang up after a set number of
+                rounds instead of sitting through a loop.
+              </p>
+              <p>
+                Leave it off and the agent has no keys at all. It will say
+                &ldquo;pressing 2&rdquo;, nothing will happen, the menu will repeat, and the
+                call runs until the silence limit &mdash; billed the whole way, and counted
+                as connected. On a list of businesses, turn it on.
+              </p>
+              <p>
+                <strong>Steer the menu towards</strong> is who you want the agent to reach,
+                in plain words &mdash; a billing company writes &ldquo;the billing
+                department or the office manager&rdquo;, a recruiter writes &ldquo;HR&rdquo;.
+                <strong>Menu rounds before giving up</strong> caps how long it will try: each
+                round is roughly 20&ndash;30 seconds of audio.
+              </p>
+            </Q>
           </Topic>
 
           <Topic id="actions-vs-extraction" title="Actions vs. what's pulled out" summary="Two things that sound alike and do opposite jobs." icon={<IconChecklist size={17} />}>

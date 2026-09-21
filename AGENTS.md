@@ -124,6 +124,38 @@ prompt fix (in the tenant's own systemPrompt, not platform code) if it comes
 up again: a receptionist saying "no, not me" should prompt "who is, then?",
 not an immediate close.
 
+## Phone menus (IVR) — the agent had no keypad (2026-09-21)
+
+Read Kaizen's production data directly: 291 of 672 outbound calls (43%) hit
+an IVR. Transcripts show the agent saying "Pressing 4 for billing", the menu
+replaying, "Pressing 4 again", "Pressing 0" — and the tool log for those
+calls shows **zero** keypad calls, because no `dtmf` tool was ever attached
+(`keypadInputEnabled` is Vapi's plan for *receiving* digits on inbound, not
+sending). 44 of those calls ran to `silence-timed-out`, up to 7 minutes each,
+all billed and all counted as "connected".
+
+Built, per the user's "must be a visible control on the agent": three
+config fields (`ivrNavigationEnabled`, `ivrTarget`, `ivrMaxAttempts` in
+`lib/vapi/config.ts`), a "Phone menus" block under Call control in
+`agent-editor.tsx`, the `{ type: "dtmf" }` tool attached in `toolsPayload()`
+only when enabled (so campaign overrides get it too), and a "Phone menus"
+rules block in `lib/crm/guidance.ts` (`ivrLines`) written against Vapi's own
+IVR guide: wait for the full menu, reply with " " while listening, leading
+`w` pause on digits, retry slower with `W`, escalate to 0, bounded rounds
+then `endCall`. Prompt-check now flags an outbound agent without it. All
+outbound templates default it on; existing agents default **off** until the
+tenant flips it. **Untested on a live call** — Kaizen's Nancy needs the
+toggle switched on, then a campaign call into a practice with a menu, and
+the call detail should show "Pressed keys on a phone menu · pressed: 4"
+in the action log. Watch for: Vapi rejecting `dtmf` alongside `endCall`
+in `model.tools` (both built-in; shouldn't conflict but unverified), and
+the model still narrating "pressing" despite the rule.
+
+Still open from the same review, not yet built: outbound-oriented extracted
+data (who answered / decision-maker reached / interest / callback), per-
+campaign analytics that don't count IVR-only calls as connected, and a
+downloadable report over a date range.
+
 ## Super admin — phone number type tagging (2026-08-27)
 
 After a campaign hit `call.start.error-vapi-number-outbound-daily-limit`

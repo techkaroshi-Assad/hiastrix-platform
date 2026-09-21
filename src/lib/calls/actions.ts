@@ -297,7 +297,7 @@ const BUILTIN_LABEL: Record<string, string> = {
   endCall:      "Ended the call",
   transferCall: "Transferred the call",
   sms:          "Sent a text",
-  dtmf:         "Entered keypad digits",
+  dtmf:         "Pressed keys on a phone menu",
   apiRequest:   "Called an external API",
 }
 
@@ -316,6 +316,13 @@ export function labelFor(action: CallAction): string {
 export function argsSummary(action: CallAction): string {
   const a = action.args
   const parts: string[] = []
+
+  // `keys` is the dtmf tool's argument — shown with the provider's pause
+  // characters stripped ("w2W2" → "2, 2") so it reads as what was pressed.
+  if (typeof a.keys === "string" && a.keys.trim()) {
+    const pressed = a.keys.replace(/[wWp]/g, "").split("").join(", ")
+    parts.push(`pressed: ${pressed || a.keys}`)
+  }
 
   for (const k of ["query", "tag", "firstName", "lastName", "phone", "email", "startDate", "endDate", "startTime", "note", "title", "value", "stage"]) {
     const v = a[k]
