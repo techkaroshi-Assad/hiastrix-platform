@@ -151,10 +151,69 @@ in the action log. Watch for: Vapi rejecting `dtmf` alongside `endCall`
 in `model.tools` (both built-in; shouldn't conflict but unverified), and
 the model still narrating "pressing" despite the rule.
 
-Still open from the same review, not yet built: outbound-oriented extracted
-data (who answered / decision-maker reached / interest / callback), per-
-campaign analytics that don't count IVR-only calls as connected, and a
-downloadable report over a date range.
+**Deployed** (f67d981) — still needs the toggle switched on for Nancy and a
+live menu call to confirm.
+
+## Outbound outcomes: extraction, honest analytics, report (2026-09-21)
+
+All built in one pass from the same production review. None of it has
+been seen on a live call yet. The pieces, and what to check:
+
+- **Outbound extraction preset** — `lib/agents/extraction-presets.ts`
+  (`OUTBOUND_PRESET_FIELDS`, keys in `OUTBOUND_KEYS`), offered as a
+  "Start from: Outbound cold call" button next to "What to pull out" in the
+  agent editor, with a warning when a campaign agent isn't using it. Plain
+  text fields with "exactly one of" in the description, because the schema
+  form has no enums. `lib/vapi/analysis.ts` now writes every analysisPlan
+  with a who-is-who system message (`{{schema}}`/`{{transcript}}` are
+  Vapi's template variables — **unverified** that `{{schema}}` is
+  substituted in `structuredDataPlan.messages`; if extraction comes back
+  empty after this deploy, that's the first suspect: drop `{{schema}}`
+  from the message and rely on `structuredDataPlan.schema`). Campaign
+  calls override `analysisPlan` per call with the outbound framing in
+  `campaignOverrides()` — **unverified** that `assistantOverrides`
+  accepts `analysisPlan`; if a campaign call 400s after deploy, remove
+  that key first. **Action for the user**: open Nancy → After the call →
+  Pull out specific details → "Start from: Outbound cold call" → save,
+  then check a campaign call's Extracted data shows whoAnswered /
+  interestLevel about the *other* party, not Nancy.
+- **`calls.reached` + `calls.ivr_seen`** — migration applied directly to
+  Supabase (columns + index `calls_tenant_reached_idx`); all existing rows
+  backfilled with a SQL port of `lib/calls/reached.ts`. Kaizen's real
+  numbers: 243 HUMAN / 239 IVR / 129 VOICEMAIL / 52 NO_ANSWER / 9 FAILED
+  of 672 — 36% reached a person, vs 92% "connected" before. The heuristic
+  is a transcript pattern match (menus say "press 1", people say "yes /
+  speaking / hold on"); the agent's own `whoAnswered` takes precedence
+  when present. Spot-checked three times against random samples; expect
+  a few percent of residual error on calls with no extraction. Set in the
+  Vapi webhook at end-of-call. **Local dev needs `npx prisma generate`**
+  after pulling — the sandbox cannot reach Prisma's engine CDN, so the
+  client wasn't regenerated here; Vercel's postinstall does it.
+- **Analytics** (`lib/analytics.ts`) — "Connected" is now
+  `COALESCE(reached = 'HUMAN', duration_seconds >= 10)` everywhere,
+  labelled "Reached a person". New `lib/campaigns/insights.ts` joins
+  `dial_attempts.provider_call_id = calls.vapi_call_id` and unpacks the
+  extraction; `components/campaigns/outcomes.tsx` renders it on each
+  campaign page and on Analytics (with a per-campaign table).
+- **Report** — `GET /api/reports/campaign?campaignId=|days=|from=&to=&transcripts=1`
+  streams an .xlsx built by `lib/xlsx.ts`, a dependency-free writer
+  (exceljs was tried; its install did not finish in the sandbox and a
+  half-installed `node_modules/exceljs` may be left on disk — it is
+  gitignored and safe to delete). Validated with openpyxl: zip integrity,
+  both sheets, formats, bold, freeze, autofilter, escaping. **Untested in
+  a browser**: click "Download report (Excel)" on a campaign page and open
+  it in Excel.
+- **Campaign "no phone number" pause** — root cause was Hi-Astrix's own
+  `number_daily_call_cap` (200/24h per number) counting every attempt,
+  including the 190 `call.start.error` ones that never rang. Now:
+  attempts with `astrix-rejected` or `call.start.error*` don't count;
+  "all numbers capped" throttles until the oldest call ages out
+  (`throttledUntil`) instead of pausing, and `whyIdle()` says "Daily
+  limit reached … resumes at HH:MM" instead of "no phone number";
+  only "no number attached at all" still pauses. **Action for the user**:
+  Resume the Kaizen campaign after deploy; allocate the new Twilio
+  `+13134584952` to Kaizen and attach it to Nancy so she rotates across
+  two purchased numbers.
 
 ## Super admin — phone number type tagging (2026-08-27)
 

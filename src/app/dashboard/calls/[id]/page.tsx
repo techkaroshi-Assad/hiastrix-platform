@@ -9,6 +9,7 @@ import { CallActions } from "@/components/app/call-actions"
 import { readConfig } from "@/lib/vapi/config"
 import { readActions, findUnbackedClaims } from "@/lib/calls/actions"
 import { friendlyEndedReason } from "@/lib/calls/reasons"
+import { REACHED_LABEL, type Reached } from "@/lib/calls/reached"
 import { usd, duration, dateTime, titleCase } from "@/lib/format"
 
 export const metadata: Metadata = { title: "Call detail" }
@@ -88,8 +89,14 @@ export default async function CallDetailPage({
   const facts: [string, React.ReactNode][] = [
     ["Agent",      agentName],
     ["Number",     call.phoneNumber?.phoneNumber ?? "—"],
-    ["Caller",     call.callerNumber ?? "Web call"],
+    [call.direction === "OUTBOUND" ? "Called" : "Caller", call.callerNumber ?? "Web call"],
     ["Direction",  titleCase(call.direction)],
+    ...(call.reached
+      ? ([[
+          "Who picked up",
+          `${REACHED_LABEL[call.reached as Reached] ?? call.reached}${call.ivrSeen && call.reached !== "IVR" ? " (after a phone menu)" : ""}`,
+        ]] as [string, React.ReactNode][])
+      : []),
     ["Started",    dateTime(call.startedAt)],
     ["Ended",      dateTime(call.endedAt)],
     ["Duration",   duration(call.durationSeconds)],

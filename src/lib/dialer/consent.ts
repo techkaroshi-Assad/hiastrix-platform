@@ -27,6 +27,7 @@
 
 import { splitOption } from "@/lib/vapi/options"
 import { enforcedRules, ivrRulesFrom } from "@/lib/crm/guidance"
+import { analysisPlanPayload } from "@/lib/vapi/analysis"
 import { readConfig } from "@/lib/vapi/config"
 import { effectiveTimeZone, toolsPayload } from "@/lib/vapi/payload"
 import { formatLeadContext, type LeadContext } from "@/lib/crm/lead-context"
@@ -158,6 +159,14 @@ export function campaignOverrides(a: {
       ...variableValues,
       campaign: a.campaignName,
     },
+    /*
+     * A campaign call is outbound by definition, and the post-call extractor
+     * needs to be told so: left with the base assistant's neutral framing
+     * it reported the agent's own name as "caller name" on every call of
+     * the first production campaign. Same schema as the base assistant,
+     * different framing. See lib/vapi/analysis.ts.
+     */
+    analysisPlan: analysisPlanPayload(config, { perspective: "outbound" }),
   }
 
   if (a.voicemailMessage?.trim()) {

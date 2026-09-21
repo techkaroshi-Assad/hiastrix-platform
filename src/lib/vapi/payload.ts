@@ -15,6 +15,7 @@ import { splitOption } from "./options"
 import { transcriberPayload } from "./catalog"
 import { crmToolParameters } from "@/lib/crm/tool-schema"
 import { enforcedRules, ivrRulesFrom } from "@/lib/crm/guidance"
+import { analysisPlanPayload } from "@/lib/vapi/analysis"
 import type { AgentConfig } from "./config"
 import type { AgentTool } from "./tools"
 
@@ -347,20 +348,10 @@ export function buildAssistantPayload(
       transcriptPlan:    { enabled: core.transcriptionEnabled },
     },
 
-    analysisPlan: {
-      ...(config.summaryEnabled ? { summaryPlan: { enabled: true } } : {}),
-      ...(config.successEvaluationEnabled
-        ? { successEvaluationPlan: { enabled: true } }
-        : {}),
-      ...(config.structuredDataEnabled && config.structuredDataSchema.trim()
-        ? {
-            structuredDataPlan: {
-              enabled: true,
-              schema: JSON.parse(config.structuredDataSchema),
-            },
-          }
-        : {}),
-    },
+    // The base assistant does not know which way a call went — the same one
+    // answers inbound and dials campaigns — so it gets the neutral who-is-who
+    // framing. Campaign calls override this per call; see consent.ts.
+    analysisPlan: analysisPlanPayload(config, { perspective: "unknown" }),
 
 
     // Which events reach our webhook. Billing depends on end-of-call-report.

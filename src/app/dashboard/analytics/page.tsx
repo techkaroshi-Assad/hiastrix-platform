@@ -55,6 +55,9 @@ import {
 } from "@/lib/analytics"
 import { usd, duration, titleCase } from "@/lib/format"
 import { RangePicker } from "./range"
+import { loadCampaignCallRows, rollup, total, callbacksDue } from "@/lib/campaigns/insights"
+import { CampaignOutcomesSection } from "@/components/campaigns/outcomes"
+import Link from "next/link"
 
 export const metadata: Metadata = { title: "Analytics" }
 export const dynamic = "force-dynamic"
@@ -84,7 +87,16 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   const zone = zoneRow?.timezone ?? "UTC"
 
   const range = rangeFromDays(days)
-  const a = await loadAnalytics(tenant.id, range, zone)
+  const [a, campaignRows] = await Promise.all([
+    loadAnalytics(tenant.id, range, zone),
+    loadCampaignCallRows({ tenantId: tenant.id, from: range.from, to: range.to }),
+  ])
+  const campaigns = [...rollup(campaignRows).values()].sort((x, y) => y.dials - x.dials)
+  const campaignTotal = total(campaignRows)
+  // "Not recorded" everywhere means no agent on these campaigns has the
+  // outbound preset — say so once, at the top of the section.
+  const noExtraction =
+    campaignTotal.reached.HUMAN > 0 && campaignTotal.extracted === 0
 
   const t = a.totals
   const p = a.previous
@@ -157,9 +169,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
               spark={<Sparkline values={a.series.map(s => s.calls)} label="Calls per day" />}
             />
             <StatCard
-              label="Connected"
+              label="Reached a person"
               value={`${rate.toFixed(rate < 10 ? 1 : 0)}%`}
-              meta={`${t.connected.toLocaleString()} of ${t.calls.toLocaleString()} reached a person`}
+              meta={`${t.connected.toLocaleString()} of ${t.calls.toLocaleString()} — a menu or voicemail doesn't count`}
               icon={<IconConnected size={16} />}
               trend={trend(rate, prevRate)}
               spark={
@@ -167,7 +179,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
               }
             />
             <StatCard
-              label="Cost per connect"
+              label="Cost per person reached"
               value={t.connected > 0 ? usd(Math.round(perConnect)) : "—"}
               // Not "spend". Inside an allowance this is legitimately zero, and
               // a tenant seeing "$0.00" after 200 calls assumes it is broken.
@@ -236,6 +248,73 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
             </Card>
           </div>
 
+          {/* ── Campaigns ───────────────────────────────────────────── */}
+          {campaignTotal.dials > 0 && (
+            <div className="mt-8 space-y-5">
+              <CampaignOutcomesSection
+                o={campaignTotal}
+                callbacks={callbacksDue(campaignRows)}
+                reportHref={`/api/reports/campaign?days=${days}`}
+                noExtraction={noExtraction}
+              />
+
+              <Card
+                title="By campaign"
+                note={`Last ${days} days`}
+                action={
+                  <Link
+                    href={`/api/reports/campaign?days=${days}&transcripts=1`}
+                    className="text-[12.5px] text-brand-on-tint underline-offset-2 hover:underline"
+                  >
+                    Download with transcripts
+                  </Link>
+                }
+              >
+                <Table>
+                  <thead>
+                    <tr>
+                      <TH>Campaign</TH>
+                      <TH align="right">Dials</TH>
+                      <TH align="right">Reached a person</TH>
+                      <TH align="right">Menu only</TH>
+                      <TH align="right">Decision-makers</TH>
+                      <TH align="right">Interested</TH>
+                      <TH align="right">Callbacks</TH>
+                      <TH align="right">Charged</TH>
+                      <TH align="right">Per decision-maker</TH>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {campaigns.map(c => (
+                      <tr key={c.campaignId} className="transition-colors hover:bg-field-soft">
+                        <TD className="font-medium">
+                          <Link href={`/dashboard/campaigns/${c.campaignId}`} className="hover:underline">
+                            {c.campaignName}
+                          </Link>
+                        </TD>
+                        <TD align="right">{c.dials.toLocaleString()}</TD>
+                        <TD align="right" muted>
+                          {c.reached.HUMAN} · {c.dials ? Math.round((c.reached.HUMAN / c.dials) * 100) : 0}%
+                        </TD>
+                        <TD align="right" muted>{c.reached.IVR}</TD>
+                        <TD align="right" muted>
+                          {c.decisionMakers}
+                          {c.reached.HUMAN ? ` · ${Math.round((c.decisionMakers / c.reached.HUMAN) * 100)}%` : ""}
+                        </TD>
+                        <TD align="right" muted>{c.interest.interested + c.interest.maybe}</TD>
+                        <TD align="right" muted>{c.callbacksRequested}</TD>
+                        <TD align="right">{usd(c.costCents)}</TD>
+                        <TD align="right" muted>
+                          {c.decisionMakers ? usd(Math.round(c.costCents / c.decisionMakers)) : "—"}
+                        </TD>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </Card>
+            </div>
+          )}
+
           {/* ── Outcomes ────────────────────────────────────────────── */}
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
             <Card title="What happened to the calls" icon={<IconGauge size={15} />}>
@@ -267,7 +346,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
                   <tr>
                     <TH>Agent</TH>
                     <TH align="right">Calls</TH>
-                    <TH align="right">Connected</TH>
+                    <TH align="right">Reached a person</TH>
                     <TH align="right">Minutes</TH>
                     <TH align="right">Avg</TH>
                     <TH align="right">Charged</TH>

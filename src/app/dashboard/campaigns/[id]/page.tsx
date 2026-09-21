@@ -9,6 +9,8 @@ import { campaignReadiness } from "@/lib/dialer/readiness"
 import { whyIdle } from "@/lib/dialer/idle"
 import { CampaignControls, LeadImport, LiveRefresh } from "./campaign-client"
 import { leadTone, LEAD_LABEL } from "../tones"
+import { loadCampaignCallRows, rollup, callbacksDue } from "@/lib/campaigns/insights"
+import { CampaignOutcomesSection } from "@/components/campaigns/outcomes"
 
 export const metadata: Metadata = { title: "Campaign" }
 export const dynamic = "force-dynamic"
@@ -31,11 +33,28 @@ export default async function CampaignPage({
   const campaign = await prisma.campaign.findFirst({
     where:   { id, tenantId: tenant.id },
     include: {
-      agent:       { select: { id: true, name: true, status: true } },
+      agent:       { select: { id: true, name: true, status: true, config: true } },
       phoneNumber: { select: { phoneNumber: true } },
     },
   })
   if (!campaign) notFound()
+
+  /*
+   * What the calls produced. All of the campaign's calls, not a window —
+   * a campaign is its own window. `noExtraction` is whether the agent is
+   * set up to record who answered / interest / callbacks at all; without
+   * it the section still shows what picked up, and says why the rest is
+   * blank.
+   */
+  const outcomeRows = await loadCampaignCallRows({
+    tenantId: tenant.id,
+    campaignId: campaign.id,
+    from: campaign.createdAt,
+    to: new Date(),
+  })
+  const outcomes = rollup(outcomeRows).get(campaign.id)
+  const agentSchema = String((campaign.agent.config as { structuredDataSchema?: unknown } | null)?.structuredDataSchema ?? "")
+  const noExtraction = !agentSchema.includes("whoAnswered")
 
   const page = Math.max(1, Number(sp.page ?? "1") || 1)
 
@@ -267,6 +286,18 @@ export default async function CampaignPage({
           style={{ width: `${pct}%` }}
         />
       </div>
+
+      {outcomes && outcomes.dials > 0 && (
+        <div className="mb-8">
+          <CampaignOutcomesSection
+            o={outcomes}
+            callbacks={callbacksDue(outcomeRows)}
+            reportHref={`/api/reports/campaign?campaignId=${campaign.id}`}
+            noExtraction={noExtraction}
+            agentHref={`/dashboard/agents/${campaign.agent.id}`}
+          />
+        </div>
+      )}
 
       {all === 0 ? (
         <Card title="Add the people to call">

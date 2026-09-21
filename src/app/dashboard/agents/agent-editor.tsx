@@ -46,6 +46,7 @@ import { ToolsEditor } from "@/components/agents/tools-editor"
 import { KnowledgeEditor } from "@/components/agents/knowledge-editor"
 import { JsonEditor } from "@/components/agents/json-editor"
 import { SchemaBuilder } from "@/components/agents/schema-builder"
+import { EXTRACTION_PRESETS, OUTBOUND_PRESET_SCHEMA } from "@/lib/agents/extraction-presets"
 import {
   checkAgent, countBySeverity, checkerSummary,
   type Finding, type FieldTarget,
@@ -952,9 +953,43 @@ export function AgentEditor({
               {c.structuredDataEnabled && (
                 <Target id="structured-schema" flash={flash}>
                   <div className="space-y-2">
-                    <p className="text-xs font-medium tracking-[0.01em] text-muted">
-                      What to pull out
-                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-medium tracking-[0.01em] text-muted">
+                        What to pull out
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {EXTRACTION_PRESETS.map(p => {
+                          const active = c.structuredDataSchema.trim() === p.schema.trim()
+                          return (
+                            <SecondaryButton
+                              key={p.id}
+                              type="button"
+                              title={p.description}
+                              disabled={active}
+                              onClick={() => {
+                                const existing = c.structuredDataSchema.trim()
+                                if (existing && !window.confirm(`Replace the current fields with the "${p.label}" preset? You can edit them afterwards.`)) return
+                                setConfig({ structuredDataSchema: p.schema })
+                              }}
+                            >
+                              {active ? `Using: ${p.label}` : `Start from: ${p.label}`}
+                            </SecondaryButton>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    {usedForOutbound && c.structuredDataSchema.trim() !== OUTBOUND_PRESET_SCHEMA.trim() && (
+                      <p className="flex items-start gap-2 rounded-field border border-warning/30 bg-warning/[0.08] px-3.5 py-2.5 text-[12.5px] font-light leading-relaxed text-muted">
+                        <IconWarning size={14} className="mt-0.5 shrink-0 text-warning" />
+                        <span>
+                          This agent runs campaigns. Campaign analytics and the downloadable
+                          report read the <strong>Outbound cold call</strong> fields — who
+                          answered, decision-maker reached, interest, callbacks. Start from
+                          that preset (you can add to it) or those figures will show as
+                          &ldquo;not recorded&rdquo;.
+                        </span>
+                      </p>
+                    )}
                     <SchemaBuilder
                       value={c.structuredDataSchema}
                       onChange={next => setConfig({ structuredDataSchema: next })}

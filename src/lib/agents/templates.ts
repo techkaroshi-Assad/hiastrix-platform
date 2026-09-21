@@ -53,6 +53,7 @@
 
 import type { AgentToolType } from "@/lib/vapi/tools"
 import { INDUSTRY_TEMPLATES } from "./templates-industry"
+import { OUTBOUND_PRESET_SCHEMA } from "./extraction-presets"
 
 /** What the call is for. The grouping people browse by. */
 export type TemplateJob =
@@ -535,8 +536,11 @@ Never claim they enquired, never claim we have spoken before, never say they wer
       maxDurationSeconds: 360,
       voicemailDetectionEnabled: true,
       ivrNavigationEnabled: true,
+      leadContactRelationship: "front-desk",
       summaryEnabled: true,
       successEvaluationEnabled: true,
+      structuredDataEnabled: true,
+      structuredDataSchema: OUTBOUND_PRESET_SCHEMA,
     },
     requires: [
       NEEDS_CALENDAR,

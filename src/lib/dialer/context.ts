@@ -55,27 +55,52 @@ export async function loadCampaignContext(campaignId: string): Promise<CampaignC
     select: { id: true, vapiPhoneNumberId: true, phoneNumber: true },
   })
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const WINDOW_MS = 24 * 60 * 60 * 1000
+  const since = new Date(Date.now() - WINDOW_MS)
+
+  /*
+   * What counts against a number's daily volume.
+   *
+   * The cap exists because carriers spam-label a caller ID that dials all
+   * day — so it should count calls the carrier saw. An attempt the provider
+   * refused before it rang (`astrix-rejected`, or any `call.start.error-*`
+   * such as the account-wide daily limit on free numbers) never reached a
+   * carrier, and counting it is how a number "used up" its 200 calls in an
+   * afternoon of failures without a single phone ringing, and then paused
+   * the campaign for a day.
+   */
   const used = numbers.length
     ? await prisma.dialAttempt.groupBy({
         by:    ["phoneNumberId"],
-        where: { phoneNumberId: { in: numbers.map(n => n.id) }, createdAt: { gte: since } },
+        where: {
+          phoneNumberId: { in: numbers.map(n => n.id) },
+          createdAt: { gte: since },
+          NOT: [
+            { endedReason: "astrix-rejected" },
+            { endedReason: { startsWith: "call.start.error" } },
+          ],
+        },
         _count: { _all: true },
+        _min:   { createdAt: true },
       })
     : []
 
-  const usedBy = new Map<string, number>(
-    (used as { phoneNumberId: string | null; _count: { _all: number } }[])
+  const usedBy = new Map<string, { count: number; oldest: Date | null }>(
+    (used as { phoneNumberId: string | null; _count: { _all: number }; _min: { createdAt: Date | null } }[])
       .filter(u => u.phoneNumberId)
-      .map(u => [u.phoneNumberId as string, u._count._all])
+      .map(u => [u.phoneNumberId as string, { count: u._count._all, oldest: u._min.createdAt }])
   )
 
-  const callerNumbers: CallerNumber[] = numbers.map(n => ({
-    id: n.id,
-    vapiPhoneNumberId: n.vapiPhoneNumberId,
-    phoneNumber: n.phoneNumber,
-    dialsToday: usedBy.get(n.id) ?? 0,
-  }))
+  const callerNumbers: CallerNumber[] = numbers.map(n => {
+    const u = usedBy.get(n.id)
+    return {
+      id: n.id,
+      vapiPhoneNumberId: n.vapiPhoneNumberId,
+      phoneNumber: n.phoneNumber,
+      dialsToday: u?.count ?? 0,
+      capFreesAt: u?.oldest ? new Date(u.oldest.getTime() + WINDOW_MS) : null,
+    }
+  })
 
   const platformMax = settings?.maxConcurrentCalls ?? 40
   const tenantDefault = settings?.tenantMaxConcurrent ?? 10

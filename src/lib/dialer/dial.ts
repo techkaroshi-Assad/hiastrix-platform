@@ -33,6 +33,12 @@ export type CallerNumber = {
   phoneNumber: string
   /** Calls placed from it in the last 24 hours. */
   dialsToday: number
+  /**
+   * When the oldest of those calls falls out of the 24-hour window — i.e.
+   * the earliest moment this number has a slot again. Null when it has no
+   * calls in the window at all.
+   */
+  capFreesAt: Date | null
 }
 
 export type DialContext = {
@@ -77,8 +83,16 @@ export type DialResult =
   | { kind: "suppressed" }
   /** Dialled too many times in 24h, across every campaign. */
   | { kind: "contact_capped" }
-  /** Every caller ID has hit its daily volume, or the agent has none. */
-  | { kind: "no_number" }
+  /**
+   * No caller ID can be used right now. Two very different situations, and
+   * the first production campaign taught us the difference matters: "the
+   * agent has no numbers" needs a person to fix it; "every number is at its
+   * daily cap" fixes itself in a few hours, and pausing a campaign for it
+   * with a message saying no number is available sent the operator to check
+   * their inventory, where the numbers were sitting exactly where they'd
+   * left them.
+   */
+  | { kind: "no_number"; why: "none-attached" | "all-capped"; freesAt: Date | null }
   /** The provider refused outright — bad number, bad request. */
   | { kind: "rejected"; reason: string }
   /** Rate limited. The campaign backs off wholesale. */
@@ -148,7 +162,18 @@ export async function placeCall(
   if (recent >= ctx.contactDailyCap) return { kind: "contact_capped" }
 
   const number = pickNumber(ctx)
-  if (!number) return { kind: "no_number" }
+  if (!number) {
+    const pool = ctx.pinnedNumberId
+      ? ctx.numbers.filter(n => n.id === ctx.pinnedNumberId)
+      : ctx.numbers
+    if (!pool.length) return { kind: "no_number", why: "none-attached", freesAt: null }
+    // The earliest moment any number in the pool has a slot again.
+    const frees = pool
+      .map(n => n.capFreesAt)
+      .filter((d): d is Date => d instanceof Date)
+      .sort((x, y) => x.getTime() - y.getTime())[0] ?? null
+    return { kind: "no_number", why: "all-capped", freesAt: frees }
+  }
 
   /*
    * Who is this, really — asked once, before the ledger row even exists.

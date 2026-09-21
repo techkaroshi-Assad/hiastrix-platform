@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma"
 import { processCallEnded } from "@/lib/billing/cap-enforcement"
 import { authorisedByVapiSecret as authorised } from "@/lib/vapi/webhook-auth"
 import { releaseAttempt, markAttemptConnected, advanceCampaign } from "@/lib/dialer/advance"
+import { classifyReached } from "@/lib/calls/reached"
 
 export const dynamic = "force-dynamic"
 
@@ -183,6 +184,15 @@ export async function POST(request: NextRequest) {
 
         const status = mapStatus(endedReason ?? undefined)
 
+        // What actually picked up, for reporting. See lib/calls/reached.ts
+        // for why this is not the same as "connected".
+        const { reached, ivrSeen } = classifyReached({
+          endedReason,
+          durationSeconds,
+          transcript,
+          structuredData: analysis.structuredData,
+        })
+
         const record = await prisma.call.upsert({
           where: { vapiCallId },
           create: {
@@ -198,6 +208,8 @@ export async function POST(request: NextRequest) {
             transcript,
             summary,
             endedReason,
+            reached,
+            ivrSeen,
             ...(analysisPayload ? { analysis: analysisPayload } : {}),
             ...(messages ? { messages } : {}),
             startedAt: call.startedAt ? new Date(call.startedAt) : null,
@@ -210,6 +222,8 @@ export async function POST(request: NextRequest) {
             transcript,
             summary,
             endedReason,
+            reached,
+            ivrSeen,
             ...(analysisPayload ? { analysis: analysisPayload } : {}),
             ...(messages ? { messages } : {}),
             endedAt: call.endedAt ? new Date(call.endedAt) : new Date(),

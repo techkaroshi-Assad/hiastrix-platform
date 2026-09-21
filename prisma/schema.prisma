@@ -289,6 +289,14 @@ model Call {
   analysis        Json?
   /// Turn-by-turn transcript with roles and timings.
   messages        Json?
+  /// What actually picked up — HUMAN, IVR, VOICEMAIL, NO_ANSWER, FAILED.
+  /// Set at end-of-call by lib/calls/reached.ts so analytics can GROUP BY
+  /// it instead of scanning transcripts. Distinct from the dialer's
+  /// "connected" (≥10s of audio), which counts a phone menu as reached.
+  reached         String?
+  /// True if an automated menu was heard at any point, even if a person
+  /// answered afterwards.
+  ivrSeen         Boolean       @default(false) @map("ivr_seen")
   startedAt       DateTime?     @map("started_at") @db.Timestamptz(6)
   endedAt         DateTime?     @map("ended_at") @db.Timestamptz(6)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)

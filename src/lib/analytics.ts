@@ -148,6 +148,19 @@ export type Analytics = {
  * The same threshold is used by the dialer's own outcome classifier, and the
  * two must not drift — a campaign page and an analytics page disagreeing about
  * how many calls connected is a support ticket every time.
+ *
+ * ── AND THEN IT WAS WRONG ANYWAY ──────────────────────────────────────
+ *
+ * Ten seconds of audio is also a phone menu. On the first production
+ * campaign 43% of "connected" calls were "press 1 for…" with no person on
+ * the line, and this page reported 92% connected against a true figure
+ * around 36%. Every query here now reads `calls.reached` (set at end of
+ * call by lib/calls/reached.ts: HUMAN / IVR / VOICEMAIL / NO_ANSWER /
+ * FAILED) and counts a call as connected only when a person spoke. The
+ * duration rule survives as the fallback for a row that predates the
+ * column — `COALESCE(reached = 'HUMAN', duration_seconds >= 10)` — and as
+ * the dialer's retry rule, where a menu that answers *is* a number that
+ * answers.
  */
 export const CONNECTED_SECONDS = 10
 
@@ -183,7 +196,7 @@ export async function loadAnalytics(
      * worth opening for five lines of arithmetic. */
     prisma.$queryRaw<TotalsRow[]>`
       SELECT count(*)::bigint                                        AS calls,
-             count(*) FILTER (WHERE duration_seconds >= ${CONNECTED_SECONDS})::bigint AS connected,
+             count(*) FILTER (WHERE COALESCE(reached = 'HUMAN', duration_seconds >= ${CONNECTED_SECONDS}))::bigint AS connected,
              COALESCE(sum(minutes_billed), 0)::bigint                AS minutes,
              COALESCE(sum(cost_cents), 0)::bigint                    AS cost,
              COALESCE(sum(duration_seconds), 0)::bigint              AS talk
@@ -194,7 +207,7 @@ export async function loadAnalytics(
 
     prisma.$queryRaw<TotalsRow[]>`
       SELECT count(*)::bigint                                        AS calls,
-             count(*) FILTER (WHERE duration_seconds >= ${CONNECTED_SECONDS})::bigint AS connected,
+             count(*) FILTER (WHERE COALESCE(reached = 'HUMAN', duration_seconds >= ${CONNECTED_SECONDS}))::bigint AS connected,
              COALESCE(sum(minutes_billed), 0)::bigint                AS minutes,
              COALESCE(sum(cost_cents), 0)::bigint                    AS cost,
              COALESCE(sum(duration_seconds), 0)::bigint              AS talk
@@ -214,7 +227,7 @@ export async function loadAnalytics(
         FROM calls
        WHERE tenant_id = ${tenantId}::uuid
          AND created_at >= ${range.from} AND created_at <= ${range.to}
-         AND duration_seconds >= ${CONNECTED_SECONDS}
+         AND COALESCE(reached = 'HUMAN', duration_seconds >= ${CONNECTED_SECONDS})
     `,
 
     prisma.call.groupBy({ by: ["status"], where, _count: { _all: true } }),
@@ -233,10 +246,10 @@ export async function loadAnalytics(
     }>>`
       SELECT agent_id,
              count(*)::bigint                                            AS calls,
-             count(*) FILTER (WHERE duration_seconds >= ${CONNECTED_SECONDS})::bigint AS connected,
+             count(*) FILTER (WHERE COALESCE(reached = 'HUMAN', duration_seconds >= ${CONNECTED_SECONDS}))::bigint AS connected,
              COALESCE(sum(minutes_billed), 0)::bigint                    AS minutes,
              COALESCE(sum(cost_cents), 0)::bigint                        AS cost,
-             avg(duration_seconds) FILTER (WHERE duration_seconds >= ${CONNECTED_SECONDS}) AS avg
+             avg(duration_seconds) FILTER (WHERE COALESCE(reached = 'HUMAN', duration_seconds >= ${CONNECTED_SECONDS})) AS avg
         FROM calls
        WHERE tenant_id = ${tenantId}::uuid
          AND created_at >= ${range.from} AND created_at <= ${range.to}
@@ -250,7 +263,7 @@ export async function loadAnalytics(
     }>>`
       SELECT to_char(date_trunc('day', created_at AT TIME ZONE ${zone}), 'YYYY-MM-DD') AS day,
              count(*)::bigint                                        AS calls,
-             count(*) FILTER (WHERE duration_seconds >= ${CONNECTED_SECONDS})::bigint AS connected,
+             count(*) FILTER (WHERE COALESCE(reached = 'HUMAN', duration_seconds >= ${CONNECTED_SECONDS}))::bigint AS connected,
              COALESCE(sum(minutes_billed), 0)::bigint                AS minutes,
              COALESCE(sum(cost_cents), 0)::bigint                    AS cost
         FROM calls
@@ -450,7 +463,7 @@ export function outcomeMix(a: Analytics): { label: string; value: number }[] {
   const short = Math.max(0, total - a.totals.connected - noAnswer - busy - failed - live)
 
   return [
-    { label: "Connected",   value: a.totals.connected },
+    { label: "Reached a person", value: a.totals.connected },
     { label: "Too short",   value: short },
     { label: "No answer",   value: noAnswer },
     { label: "Busy",        value: busy },

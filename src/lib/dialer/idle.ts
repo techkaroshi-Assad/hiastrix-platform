@@ -21,6 +21,7 @@
 import { prisma } from "@/lib/prisma"
 import { verdictFor } from "@/lib/billing/can-call"
 import { withinWindow, nextWindowOpen } from "@/lib/dialer/outcome"
+import { loadCampaignContext } from "@/lib/dialer/context"
 
 export type IdleReason = {
   /** Short label for a pill. */
@@ -115,6 +116,45 @@ export async function whyIdle(campaignId: string): Promise<IdleReason | null> {
       label: "No number",
       detail: `${campaign.agent.name} has no phone number attached, and an outbound call needs one to show as the caller.`,
       normal: false,
+    }
+  }
+
+  /* ── Every number at its daily volume ──────────────────────────────── */
+
+  /*
+   * Checked before the generic throttle message because it is the same
+   * `throttledUntil` mechanism with a completely different cause, and the
+   * generic wording ("after some didn't connect") sent an operator looking
+   * for a fault. Same counting rule as lib/dialer/context.ts: attempts the
+   * provider refused before dialling do not count against the carrier-facing
+   * cap.
+   */
+  {
+    const cap = settings?.numberDailyCallCap ?? 200
+    const ctx = await loadCampaignContext(campaign.id)
+    const pool = ctx
+      ? (ctx.dial.pinnedNumberId
+          ? ctx.dial.numbers.filter(n => n.id === ctx.dial.pinnedNumberId)
+          : ctx.dial.numbers)
+      : []
+    if (pool.length && pool.every(n => n.dialsToday >= cap)) {
+      const frees = pool
+        .map(n => n.capFreesAt)
+        .filter((d): d is Date => d instanceof Date)
+        .sort((x, y) => x.getTime() - y.getTime())[0]
+      const which = pool.length === 1
+        ? `${pool[0]!.phoneNumber} has`
+        : `All ${pool.length} of ${campaign.agent.name}'s numbers have`
+      return {
+        label: "Daily limit reached",
+        detail:
+          `${which} placed ${cap} calls in the last 24 hours, which is the per-number limit Hi-Astrix sets to keep caller IDs from being flagged as spam. ` +
+          (frees
+            ? `Calling resumes on its own at ${whenPhrase(frees, campaign.timezone)} as the oldest calls age out. `
+            : "Calling resumes on its own as the oldest calls age out. ") +
+          "To keep going sooner, attach another number to the agent — the campaign rotates across all of them.",
+        normal: true,
+      }
     }
   }
 

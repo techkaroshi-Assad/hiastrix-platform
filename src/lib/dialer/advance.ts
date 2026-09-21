@@ -342,18 +342,45 @@ export async function advanceCampaign(
           })
           break
 
-        case "no_number":
-          // The campaign cannot dial anybody, so stop it rather than churning
-          // through the whole list marking leads as failures.
+        case "no_number": {
+          // The campaign cannot dial anybody right now, so stop the tick
+          // rather than churning through the whole list marking leads as
+          // failures. What happens next depends on why.
           abandoned.push(lead.leadId, ...queue.splice(0).map(l => l.leadId))
+
+          if (result.why === "none-attached") {
+            // Genuinely nothing to dial from. Needs a person.
+            await prisma.campaign.updateMany({
+              where: { id: campaignId, state: "RUNNING" },
+              data: {
+                state: "PAUSED",
+                pausedReason:
+                  "This campaign's agent has no phone number attached. Attach one under Phone numbers, then resume.",
+              },
+            })
+            return
+          }
+
+          /*
+           * Every number is at its daily volume. That is the cap doing its
+           * job, not a fault, and it clears on its own as the oldest calls
+           * age out of the 24-hour window — so the campaign waits, and
+           * resumes itself. Previously this PAUSED with "no phone number is
+           * available", which is what an operator reads as "my numbers are
+           * gone", and then requires a manual Resume that would only hit
+           * the same wall until tomorrow.
+           */
+          const fallback = new Date(now.getTime() + 30 * 60_000)
+          const until = result.freesAt && result.freesAt > now ? result.freesAt : fallback
           await prisma.campaign.updateMany({
             where: { id: campaignId, state: "RUNNING" },
             data: {
-              state: "PAUSED",
-              pausedReason: "No phone number is available for this campaign right now.",
+              throttledUntil: until,
+              pausedReason: null,
             },
           })
           return
+        }
 
         case "rejected":
           await prisma.campaignLead.updateMany({
