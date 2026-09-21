@@ -89,8 +89,19 @@ export function campaignSystemPrompt(a: {
         ? `You have a name on file for this call — ${a.leadContext.name}. This is a business line, so whoever answers first is usually reception or other staff, not ${a.leadContext.name} — don't assume they are. Ask for ${a.leadContext.name} by name, or whoever handles this, rather than guessing who's on the line.`
         : `Address them by name — ${a.leadContext.name} — starting with your first sentence, rather than asking who they are.`
       : "You have not been given a name for this call. Ask who you're speaking with naturally rather than guessing one.",
-    "If they ask not to be contacted again, say you will take them off the list, use the opt-out tool if you have it, and use your endCall function to end the call politely — right away, not after another push. Do not try to keep them talking.",
-    "If they are busy or it is a bad time, offer to call back, then use your endCall function to end the call."
+    /*
+     * Phrased as "hang up", not as "use your endCall function".
+     *
+     * Every place that names a function in second person puts that name into
+     * the agent's speaking vocabulary, and on live Kaizen calls it came back
+     * out of the loudspeaker: "Using the end call function now. Thanks for
+     * your time." The capability is introduced once, in
+     * lib/crm/guidance.ts, together with the rule never to mention it. Here
+     * — where the instruction is about what to do socially rather than
+     * mechanically — plain English is both clearer and safer.
+     */
+    "If they ask not to be contacted again, say you will take them off the list, use the opt-out tool if you have it, and hang up politely — right away, not after another push. Do not try to keep them talking.",
+    "If they are busy or it is a bad time, offer to call back, then hang up. Say goodbye like a person would and end the call without commenting on it."
   )
 
   return `${base}\n\n${promptBlock}\n\n${obligations.map(o => `- ${o}`).join("\n")}`

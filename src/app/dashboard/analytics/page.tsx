@@ -54,6 +54,8 @@ import {
   changePct, connectionRate, costPerConnect, avgHandleSeconds,
 } from "@/lib/analytics"
 import { usd, duration, titleCase } from "@/lib/format"
+import { readAllowance, minutesLabel } from "@/lib/billing/allowance"
+import { MinutesBreakdown } from "@/components/billing/minutes"
 import { RangePicker } from "./range"
 import { ReportDownload } from "./report-download"
 import { loadCampaignCallRows, loadRefusedAttempts, applyRefused, rollup, total, callbacksDue } from "@/lib/campaigns/insights"
@@ -103,6 +105,21 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
   const t = a.totals
   const p = a.previous
 
+  /*
+   * The same allowance the billing page reads, from the same function.
+   *
+   * Analytics had no idea a plan existed, so it reported a rolling window's
+   * money as though it were the current bill. Reading readAllowance() here
+   * means the two pages are quoting one source, and the breakdown below can
+   * say plainly that the window and the billing month are different periods.
+   */
+  const allowance = readAllowance({
+    includedMinutes:  tenant.package?.minutesIncluded ?? 0,
+    overageRateCents: tenant.package?.overageRateCents ?? 0,
+    minutesUsed:      tenant.minutesUsed,
+    balanceCents:     tenant.creditBalanceCents,
+  })
+
   const rate     = connectionRate(t)
   const prevRate = connectionRate(p)
   const perConnect     = costPerConnect(t)
@@ -129,7 +146,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
     cost: {
       points: a.series.map(s => ({ day: s.day, value: s.costCents })),
       format: (v: number) => usd(v),
-      label:  "Charged per day",
+      label:  "Charged to your balance per day",
     },
   }[metric]
 
@@ -181,19 +198,50 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
                 <Sparkline values={a.series.map(s => s.connected)} colour={1} label="Connected per day" />
               }
             />
-            <StatCard
-              label="Cost per person reached"
-              value={t.connected > 0 ? usd(Math.round(perConnect)) : "—"}
-              // Not "spend". Inside an allowance this is legitimately zero, and
-              // a tenant seeing "$0.00" after 200 calls assumes it is broken.
-              meta={
-                t.costCents === 0
-                  ? "Everything so far is inside your allowance"
-                  : `${usd(t.costCents)} charged in total`
-              }
-              icon={<IconCost size={16} />}
-              trend={trend(perConnect, prevPerConnect, false)}
-            />
+            {/*
+              * Under a plan, the currency is minutes, not dollars.
+              *
+              * This card used to read "$0.29 · $76.65 charged in total" while
+              * Billing said "within allowance" on the same day. Both were
+              * right and together they were nonsense: every cent of that
+              * $76.65 was pay-as-you-go spend from before the plan started,
+              * caught by a rolling 30-day window that reaches back past it,
+              * and "charged in total" claimed it as current.
+              *
+              * A tenant on an allowance does not spend money per call — they
+              * spend allowance. So that is what this measures, and the money,
+              * with the period it belongs to, is explained once in the minutes
+              * breakdown below rather than asserted in four words here.
+              */}
+            {allowance.includedMinutes > 0 ? (
+              <StatCard
+                label="Minutes per person reached"
+                value={t.connected > 0 ? (t.minutes / t.connected).toFixed(1) : "—"}
+                meta={
+                  allowance.overageMinutes > 0
+                    ? `${minutesLabel(allowance.overageMinutes)} beyond your plan this month · ${usd(allowance.overageCents)}`
+                    : `${minutesLabel(allowance.minutesRemaining)} still included this month`
+                }
+                icon={<IconCost size={16} />}
+                trend={trend(
+                  t.connected > 0 ? t.minutes / t.connected : 0,
+                  p.connected > 0 ? p.minutes / p.connected : 0,
+                  false,
+                )}
+              />
+            ) : (
+              <StatCard
+                label="Cost per person reached"
+                value={t.connected > 0 ? usd(Math.round(perConnect)) : "—"}
+                meta={
+                  t.costCents === 0
+                    ? "Nothing charged in this window"
+                    : `${usd(t.costCents)} charged over these ${days} days`
+                }
+                icon={<IconCost size={16} />}
+                trend={trend(perConnect, prevPerConnect, false)}
+              />
+            )}
             <StatCard
               label="Typical call"
               value={a.medianSeconds > 0 ? duration(a.medianSeconds) : "—"}
@@ -204,6 +252,16 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
               }
               icon={<IconDuration size={16} />}
               trend={trend(aht, prevAht)}
+            />
+          </div>
+
+          {/* ── Where the minutes actually stand ────────────────────── */}
+          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
+            <MinutesBreakdown
+              a={allowance}
+              windowMinutes={t.minutes}
+              windowDays={days}
+              windowChargedCents={t.costCents}
             />
           </div>
 
@@ -285,7 +343,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
                       <TH align="right">Interested</TH>
                       <TH align="right">Callbacks</TH>
                       <TH align="right">Minutes</TH>
-                      <TH align="right">Overage charged</TH>
+                      {/* Not "overage" — a call's cost is whatever came out of
+                          the balance, which under pay-as-you-go is every call
+                          and under a plan is only the ones past the allowance.
+                          Calling all of it overage was wrong on both. */}
+                      <TH align="right">Charged to balance</TH>
                     </tr>
                   </thead>
                   <tbody>
@@ -352,7 +414,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Se
                     <TH align="right">Reached a person</TH>
                     <TH align="right">Minutes</TH>
                     <TH align="right">Avg</TH>
-                    <TH align="right">Charged</TH>
+                    <TH align="right">Charged to balance</TH>
                   </tr>
                 </thead>
                 <tbody>

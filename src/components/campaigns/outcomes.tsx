@@ -127,7 +127,7 @@ export function CampaignOutcomesSection({
         <StatCard
           label="Callbacks owed"
           value={o.callbacksRequested.toLocaleString()}
-          meta={`${o.minutes.toLocaleString()} minutes on these calls${o.costCents > 0 ? ` · ${usd(o.costCents)} of that was overage` : ""}`}
+          meta={`${o.minutes.toLocaleString()} minutes on these calls${o.costCents > 0 ? ` · ${usd(o.costCents)} charged to your balance` : ""}`}
           icon={<IconGauge size={16} />}
         />
       </div>

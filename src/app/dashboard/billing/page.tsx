@@ -8,6 +8,7 @@ import { usd, dateTime, dateOnly, titleCase } from "@/lib/format"
 import { stripeConfigured } from "@/lib/stripe"
 import { readAllowance, minutesLabel } from "@/lib/billing/allowance"
 import { subscriptionIsLive } from "@/lib/billing/subscription"
+import { MinutesBreakdown } from "@/components/billing/minutes"
 import { TopUp } from "./topup"
 import { Plans } from "./plans"
 import { SubscriptionControls } from "./subscription-card"
@@ -55,7 +56,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
     minutesUsed:      tenant.minutesUsed,
     balanceCents:     tenant.creditBalanceCents,
   })
-  const overageCost = a.overageMinutes * a.overageRateCents
 
   /*
    * A subscription is *how the plan is paid for*, never *whether there is a
@@ -191,22 +191,30 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                   : `${minutesLabel(a.includedMinutes)} included`
           }
         />
+        {/* "Used" without the denominator is what made 766 and 985 look like a
+            contradiction — one of them was a billing month and nothing said so. */}
         <StatCard
-          label="Minutes used"
-          value={a.minutesUsed.toLocaleString()}
+          label="Included minutes used"
+          value={
+            a.includedMinutes > 0
+              ? `${Math.min(a.minutesUsed, a.includedMinutes).toLocaleString()} of ${a.includedMinutes.toLocaleString()}`
+              : a.minutesUsed.toLocaleString()
+          }
           meta={
             a.includedMinutes > 0
-              ? `${a.usedPct}% of this month · ${minutesLabel(a.minutesRemaining)} left`
-              : "No allowance set"
+              ? `${a.usedPct}% of this billing month · ${minutesLabel(a.minutesRemaining)} still included`
+              : "No plan — every minute comes out of your balance"
           }
         />
         <StatCard
-          label="Overage"
-          value={a.overageMinutes > 0 ? minutesLabel(a.overageMinutes) : "—"}
+          label="Beyond the allowance"
+          value={a.overageMinutes > 0 ? minutesLabel(a.overageMinutes) : "None"}
           meta={
             a.overageMinutes > 0
-              ? `${usd(overageCost)} at ${usd(a.overageRateCents)}/min`
-              : "Within allowance"
+              ? `${usd(a.overageCents)} at ${usd(a.overageRateCents)} a minute`
+              : a.includedMinutes > 0
+                ? "Nothing charged beyond your plan this month"
+                : "No allowance to exceed"
           }
         />
         {/* Money and minutes together — "$1.30" alone tells nobody whether that
@@ -222,6 +230,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
         />
       </div>
 
+      {/* The arithmetic behind the four cards above, because the cards alone
+          left a reader to work out why two "minutes left" figures differed. */}
+      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
+        <MinutesBreakdown a={a} />
+      </div>
+
       <div className="mt-5">
         <Card
           title="Plans"
@@ -233,8 +247,20 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
                 canManage={live && stripeConfigured()}
               />
             ) : a.totalMinutesLeft > 0 ? (
+              /*
+               * Spelled out as a sum, never as a bare total.
+               *
+               * "286 minutes left in total" sat directly under a card reading
+               * "134 minutes left" and read as a straight contradiction. It
+               * wasn't — the other 152 are what the credit balance buys at the
+               * overage rate, which is a different kind of minute and only
+               * reachable once the included ones are gone. Showing the parts
+               * costs a few words and removes the whole question.
+               */
               <span className="text-[12px] text-subtle">
-                {minutesLabel(a.totalMinutesLeft)} left in total
+                {a.balanceMinutes > 0 && a.includedMinutes > 0
+                  ? `${minutesLabel(a.minutesRemaining)} included + ${a.balanceMinutes.toLocaleString()} from your balance`
+                  : `${minutesLabel(a.totalMinutesLeft)} left`}
               </span>
             ) : undefined
           }

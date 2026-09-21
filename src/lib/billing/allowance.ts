@@ -25,6 +25,15 @@ export type AllowanceView = {
   minutesRemaining: number
   /** Minutes already taken beyond the allowance. */
   overageMinutes: number
+  /**
+   * What those overage minutes cost.
+   *
+   * Derived here rather than at each call site. Both billing screens used to
+   * multiply this out themselves, which is how one page can say "within
+   * allowance" while another says a number — the arithmetic was fine, but it
+   * lived in two places and only one of them knew the allowance.
+   */
+  overageCents: number
   overageRateCents: number
   balanceCents: number
   /** What the balance is worth in minutes, once the allowance is gone. */
@@ -69,6 +78,7 @@ export function readAllowance(a: Allowance): AllowanceView {
     minutesUsed,
     minutesRemaining,
     overageMinutes,
+    overageCents: overageMinutes * overageRateCents,
     overageRateCents,
     balanceCents,
     balanceMinutes,

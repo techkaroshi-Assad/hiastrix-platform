@@ -48,3 +48,6 @@ next-env.d.ts
 # scratch verification script; delete it
 vs-check.ts
 vs-recheck.ts
+
+# Sandbox typecheck scratch — see AGENTS.md note on sandbox file deletion
+tsconfig.check.json

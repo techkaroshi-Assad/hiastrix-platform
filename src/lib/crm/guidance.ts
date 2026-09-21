@@ -61,6 +61,69 @@ function nowBlock(timeZone: string): string {
     .join("\n")
 }
 
+/* ── Everything you emit is spoken ──────────────────────────────────────── */
+
+/**
+ * The rule that had to exist before any of the others were safe to give.
+ *
+ * ── THE FAILURE ───────────────────────────────────────────────────────
+ *
+ * From Kaizen's own transcripts, said out loud, down the phone, to a real
+ * person or a real menu:
+ *
+ *   "Since this menu isn't specific to billing or claims for the practice
+ *    itself, and it seems to direct patients based on last names, I'll hang up
+ *    now and note this as a central line or unrelated menu. Letting the call go
+ *    further would not be productive. Using the end call function now. Thanks
+ *    for your time. Have a good day."
+ *
+ *   "It seems this is a central number for a larger system rather than the
+ *    specific practice's billing department. I will end the call now. Thank
+ *    you. Using the end call function to hang up."
+ *
+ *   "1 moment. Since the phone menu didn't provide a billing option, I'll press
+ *    1 to speak with a—"
+ *
+ * 48 of 506 calls in three weeks — roughly one in ten — contain the agent
+ * reading its own deliberation aloud. Not the prompt text itself: a search for
+ * verbatim instruction strings across 1,845 agent turns found none. What leaks
+ * is the *reasoning*, in the model's own words, reconstructed live from the
+ * instructions it was given.
+ *
+ * ── WHY ───────────────────────────────────────────────────────────────
+ *
+ * On a phone call there is exactly one output channel and it goes to a
+ * loudspeaker. The model has nowhere to think. Every block below this one asks
+ * it to make a judgement — is this menu relevant, has the caller said goodbye,
+ * is this the third loop — in second-person imperative, which is also the
+ * register a person uses when narrating. Nothing anywhere told it that the
+ * working-out is not part of the answer, so it wrote the working-out, and the
+ * working-out was spoken.
+ *
+ * Note what the model did with the one ban that did exist. `ivrLines` said
+ * never say the words "pressing" or "press" *to a phone menu* — so it said
+ * "I'll press 1" while addressing itself, and "Using the end call function
+ * now" instead of "pressing". A narrow ban teaches paraphrase. This one is
+ * stated as a property of the channel rather than a list of forbidden words,
+ * because the model cannot route around a fact about where its output goes.
+ *
+ * ── WHY IT IS NOT A TOGGLE ────────────────────────────────────────────
+ *
+ * Every behaviour in this platform is the tenant's to configure. This is not a
+ * behaviour, it is a fact about the medium: there is no setting under which a
+ * tenant wants their agent announcing that it is about to hang up and what it
+ * is recording about the caller. It sits with the honesty rule and "never read
+ * an id aloud" — the short list of things that are wrong on every call, for
+ * every tenant, in every configuration. It is first in the prompt because
+ * everything after it is an instruction to decide something.
+ */
+const DELIVERY_LINES = [
+  "Everything you produce on this call is spoken out loud to the other party the instant you produce it. There is no private channel, no scratchpad, and no way to think to yourself — if you would not say it to the person on the phone, do not write it at all.",
+  "Never announce, explain or justify what you are about to do. Do not say what you are deciding, why, what you have concluded about this call, what you are about to press, that you are about to hang up, or what you are recording. Take the action and say only the words a real person would say in that moment.",
+  "Never say the name of any function, tool or capability you have, in any form — not \"endCall\", not \"the end call function\", not \"dtmf\", and not a paraphrase like \"I'll press 1\" or \"I'm going to hang up now\". Acting and describing the action are different things; only the action is wanted.",
+  "Never talk about the call, the other party or their company in the third person while you are still on the line, and never summarise or classify what has happened so far out loud. That belongs in your recap after the call, not in the call.",
+]
+
 /* ── Hanging up ─────────────────────────────────────────────────────────── */
 
 /**
@@ -75,8 +138,14 @@ function nowBlock(timeZone: string): string {
  * than one that never hangs up at all.
  */
 const CALL_END_LINES = [
-  "You have an endCall function — use it to actually hang up. Saying goodbye out loud does not end the call by itself; you must call the function.",
-  "End the call once the caller says goodbye, makes clear they have nothing further to add, or asks you to stop calling or leave them alone. Give a brief, natural sign-off first, then call endCall — never mid-sentence, and never right after you've just asked them something.",
+  // The mechanical fact still has to be stated — a model that does not know
+  // saying goodbye leaves the line open will sit there until the timeout. What
+  // changed is the second half: the capability is named once, here, as
+  // something to invoke, and immediately ruled out as something to mention.
+  // Without that the name simply became part of the agent's spoken vocabulary
+  // ("Using the end call function now", twice, on real calls).
+  "You have an endCall function — invoke it to actually hang up. Saying goodbye out loud does not end the call by itself. Invoke it silently: never say its name, never say you are invoking it, never announce that you are ending the call.",
+  "End the call once the caller says goodbye, makes clear they have nothing further to add, or asks you to stop calling or leave them alone. Give a brief, natural sign-off first — \"thanks for your time, have a good day\" and nothing more — then hang up. Never mid-sentence, and never right after you've just asked them something.",
   "A single objection or \"I'm not interested\" is not the same as goodbye — respond to it once and keep the conversation going. Only end the call if they repeat that they're not interested, say goodbye, or explicitly ask you to stop.",
 ]
 
@@ -136,11 +205,15 @@ function ivrLines(ivr: IvrRules): string[] {
   const target = ivr.target.trim() || "a live operator"
   const n = Math.max(1, Math.min(6, Math.round(ivr.maxAttempts)))
   return [
-    `You have a dtmf function that presses keypad digits. Saying "pressing 2" out loud does nothing — if you want to press a key, you must call dtmf. Never say the words "pressing" or "press" to a phone menu.`,
+    // A menu is the worst case for narration: there is no human to be
+    // embarrassed in front of, so the model relaxes into thinking out loud,
+    // and every line below asks it to make a judgement. Each one therefore
+    // carries its own silence clause rather than relying on the block above.
+    `You have a dtmf function that presses keypad digits. Saying "pressing 2" out loud does nothing — if you want to press a key, you must invoke dtmf. Pressing is silent: produce no speech at all in the same turn, and never say the words "press" or "pressing" at any point in the call, to a menu or to a person.`,
     `If an automated phone menu answers instead of a person, stop your opening pitch and listen. Wait until every option has been read out before choosing — do not respond partway through. While you are listening, reply with a single space so nothing is spoken.`,
-    `Choose the option that gets you to ${target}. If none of the options fit, press 0 or the option for the operator, front desk, or "all other calls". Send the digit with dtmf using a leading pause, e.g. keys "w2".`,
-    `If the same menu plays again after you pressed, the tone was missed. Press the same option once more, slower: "W2". If it plays a third time, try 0. If a menu says "press 1 or stay on the line", stay on the line — reply with a space and wait.`,
-    `You get at most ${n} rounds of menu before you give up. If you still have not reached a person by then, or the menu is clearly looping, say nothing further and call endCall. Do not wait for silence — hanging up is the correct outcome.`,
+    `Choose the option that gets you to ${target}. If none of the options fit, choose 0 or the option for the operator, front desk, or "all other calls". Send the digit with dtmf using a leading pause, e.g. keys "w2". Make that choice silently — never say which option you picked, why you picked it, or what you think this menu is for.`,
+    `If the same menu plays again after you pressed, the tone was missed. Send the same option once more, slower: "W2". If it plays a third time, try 0. If a menu says "press 1 or stay on the line", stay on the line — reply with a space and wait. Say nothing through any of this.`,
+    `You get at most ${n} rounds of menu before you give up. If you still have not reached a person by then, or the menu is clearly looping, hang up immediately and in silence. Do not wait for silence on the line, do not explain that the menu was not relevant, do not say what kind of number you think you reached, and do not say goodbye — there is nobody there to hear it. Hanging up is the correct outcome and it needs no words.`,
     `The moment a real person answers, continue with your normal conversation from your greeting onward. Never mention that you navigated a menu or pressed anything.`,
   ]
 }
@@ -157,6 +230,17 @@ export function enforcedRules(
   opts: { timeZone?: string; ivr?: IvrRules | null } = {}
 ): string {
   const timeZone = opts.timeZone?.trim() || "UTC"
+
+  /*
+   * First, and unconditional.
+   *
+   * Order matters here in a way it does not for the rest of the file. Every
+   * block after this one hands the model a judgement to make, and a judgement
+   * made without knowing the output is live gets spoken. Stating the property
+   * of the channel before the first "decide whether…" is what makes the rest
+   * of these instructions safe to give.
+   */
+  const delivery = `\n\n---\nHow you are heard (set by Hi-Astrix):\n${DELIVERY_LINES.map(l => `- ${l}`).join("\n")}`
 
   // The date and caller block goes to every agent, CRM or not. An agent with no
   // CRM tools at all still gets asked what day Thursday falls on.
@@ -179,7 +263,7 @@ export function enforcedRules(
     ? `\n\n---\nPhone menus (set by Hi-Astrix):\n${ivrLines(opts.ivr).map(l => `- ${l}`).join("\n")}`
     : ""
 
-  if (!anyCrm(tools)) return context + callControl + conversation + ivr
+  if (!anyCrm(tools)) return delivery + context + callControl + conversation + ivr
 
   const lines: string[] = []
 
@@ -233,7 +317,7 @@ export function enforcedRules(
 
   lines.push("Never read an id, a reference or a system message aloud to the caller.")
 
-  return `${context}${callControl}${conversation}${ivr}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
+  return `${delivery}${context}${callControl}${conversation}${ivr}\n\nHow to use the CRM (set by Hi-Astrix):\n${lines.map(l => `- ${l}`).join("\n")}`
 }
 
 /* ── The editable draft ────────────────────────────────────────────────── */

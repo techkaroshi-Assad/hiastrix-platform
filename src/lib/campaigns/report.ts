@@ -82,7 +82,7 @@ export function buildCampaignWorkbook(a: {
     "Menu heard", "Decision-makers", "Decision-maker %", "Stopped at reception",
     "Interested", "Maybe", "Not interested", "Interest not recorded",
     "Callbacks owed", "Send info", "Remove from list",
-    "Minutes billed", "Minutes talking to people", "Overage charged (USD)",
+    "Minutes billed", "Minutes talking to people", "Charged to balance (USD)",
   ]
   const summaryRows: Cell[][] = [
     [a.title],
@@ -109,7 +109,7 @@ export function buildCampaignWorkbook(a: {
     "When", "Campaign", "Phone", "Name on list", "Who we spoke to", "Their role",
     "What picked up", "Menu heard", "Reached decision-maker", "Interest", "Callback requested", "Callback when",
     "Best number", "Objection", "Next action", "Menu outcome", "Key facts", "Summary",
-    "Duration (s)", "Overage charged (USD)", "Ended because", "Call id",
+    "Duration (s)", "Charged to balance (USD)", "Ended because", "Call id",
   ]
   const sorted = [...a.rows].sort((x, y) => (y.at?.getTime() ?? 0) - (x.at?.getTime() ?? 0))
   const calls: Sheet = {
